@@ -1,33 +1,34 @@
 import type { Handle } from '@sveltejs/kit';
-import { Database } from '$lib/server/db';
-import { AuthService } from '$lib/server/auth';
+import { createAuth } from '$lib/server/better-auth';
 
 export const handle: Handle = async ({ event, resolve }) => {
 	// Initialize locals
 	event.locals.user = null;
-	event.locals.sessionId = null;
+	event.locals.session = null;
 
-	// Get session cookie
-	const sessionId = event.cookies.get('session');
+	if (!event.platform?.env?.DB) {
+		return resolve(event);
+	}
 
-	if (sessionId && event.platform?.env?.DB) {
-		try {
-			const db = new Database(event.platform.env.DB);
-			const authService = new AuthService(db);
+	try {
+		// Create Better Auth instance
+		const auth = createAuth(event.platform.env.DB, {
+			GOOGLE_CLIENT_ID: event.platform.env.GOOGLE_CLIENT_ID,
+			GOOGLE_CLIENT_SECRET: event.platform.env.GOOGLE_CLIENT_SECRET,
+			GOOGLE_REDIRECT_URI: event.platform.env.GOOGLE_REDIRECT_URI
+		});
 
-			// Validate session and get user
-			const user = await authService.validateSession(sessionId);
-			if (user) {
-				event.locals.user = user;
-				event.locals.sessionId = sessionId;
-			} else {
-				// Invalid session, clear cookie
-				event.cookies.delete('session', { path: '/' });
-			}
-		} catch (error) {
-			console.error('Error validating session:', error);
-			event.cookies.delete('session', { path: '/' });
+		// Get session from Better Auth
+		const session = await auth.api.getSession({
+			headers: event.request.headers
+		});
+
+		if (session) {
+			event.locals.user = session.user;
+			event.locals.session = session.session;
 		}
+	} catch (error) {
+		console.error('Error validating session:', error);
 	}
 
 	const response = await resolve(event);

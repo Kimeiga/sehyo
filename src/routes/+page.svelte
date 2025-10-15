@@ -2,9 +2,23 @@
 	import type { PageProps } from './$types';
 	import PostCreator from '$lib/components/PostCreator.svelte';
 	import Post from '$lib/components/Post.svelte';
+	import { signIn } from '$lib/auth-client';
+	import { Button } from '$lib/components/ui/button';
 
 	let { data }: PageProps = $props();
+
+	async function handleGoogleSignIn() {
+		await signIn.social({
+			provider: 'google',
+			callbackURL: '/'
+		});
+	}
 </script>
+
+<svelte:head>
+	<!-- Google One-Tap Sign-In -->
+	<script src="https://accounts.google.com/gsi/client" async defer></script>
+</svelte:head>
 
 <div class="container mx-auto px-4 py-8">
 	{#if !data.user}
@@ -14,12 +28,12 @@
 			<p class="text-xl text-muted-foreground mb-8">
 				Connect with friends, share moments, and stay in touch with the people who matter most.
 			</p>
-			<a
-				href="/auth/login"
-				class="inline-block bg-primary text-primary-foreground px-8 py-3 rounded-lg font-semibold hover:opacity-90 transition"
+			<Button
+				onclick={handleGoogleSignIn}
+				class="bg-primary text-primary-foreground px-8 py-3 text-lg font-semibold hover:opacity-90"
 			>
 				Sign in with Google
-			</a>
+			</Button>
 		</div>
 	{:else}
 		<!-- Feed for authenticated users -->
