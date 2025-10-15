@@ -22,10 +22,13 @@
 					console.log('Calling authClient.signIn.anonymous()');
 					const result = await authClient.signIn.anonymous();
 					console.log('Anonymous login result:', result);
-					window.location.href = '/';
+					alert('Anonymous login successful! Check console for result. Will redirect in 5 seconds.');
+					setTimeout(() => {
+						window.location.href = '/';
+					}, 5000);
 				} catch (error) {
 					console.error('Anonymous login error:', error);
-					alert('Failed to sign in anonymously. Please try again.');
+					alert('Failed to sign in anonymously. Error: ' + error.message);
 					loading = false;
 				}
 			});
