@@ -1,0 +1,295 @@
+<script lang="ts">
+	import type { PageProps } from './$types';
+	import { invalidateAll } from '$app/navigation';
+
+	let { data }: PageProps = $props();
+
+	let searchQuery = $state('');
+	let searchResults = $state<any[]>([]);
+	let isSearching = $state(false);
+	let activeTab = $state<'friends' | 'requests'>('friends');
+
+	async function searchUsers() {
+		if (searchQuery.trim().length === 0) {
+			searchResults = [];
+			return;
+		}
+
+		isSearching = true;
+		try {
+			const response = await fetch(`/api/users/search?q=${encodeURIComponent(searchQuery)}`);
+			const result = await response.json();
+			searchResults = result.users || [];
+		} catch (error) {
+			console.error('Error searching users:', error);
+		} finally {
+			isSearching = false;
+		}
+	}
+
+	async function sendFriendRequest(userId: string) {
+		try {
+			const response = await fetch('/api/friends', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ friend_id: userId })
+			});
+
+			if (response.ok) {
+				// Remove from search results
+				searchResults = searchResults.filter((u) => u.id !== userId);
+			} else {
+				const error = await response.json();
+				alert(error.message || 'Failed to send friend request');
+			}
+		} catch (error) {
+			console.error('Error sending friend request:', error);
+			alert('Failed to send friend request');
+		}
+	}
+
+	async function acceptRequest(friendshipId: string) {
+		try {
+			const response = await fetch(`/api/friends/${friendshipId}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'accept' })
+			});
+
+			if (response.ok) {
+				await invalidateAll();
+			}
+		} catch (error) {
+			console.error('Error accepting request:', error);
+		}
+	}
+
+	async function rejectRequest(friendshipId: string) {
+		try {
+			const response = await fetch(`/api/friends/${friendshipId}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action: 'reject' })
+			});
+
+			if (response.ok) {
+				await invalidateAll();
+			}
+		} catch (error) {
+			console.error('Error rejecting request:', error);
+		}
+	}
+
+	async function removeFriend(friendshipId: string) {
+		if (!confirm('Are you sure you want to remove this friend?')) {
+			return;
+		}
+
+		try {
+			const response = await fetch(`/api/friends/${friendshipId}`, {
+				method: 'DELETE'
+			});
+
+			if (response.ok) {
+				await invalidateAll();
+			}
+		} catch (error) {
+			console.error('Error removing friend:', error);
+		}
+	}
+
+	// Debounce search
+	let searchTimeout: number;
+	$effect(() => {
+		clearTimeout(searchTimeout);
+		if (searchQuery.trim().length > 0) {
+			searchTimeout = setTimeout(searchUsers, 300) as unknown as number;
+		} else {
+			searchResults = [];
+		}
+	});
+</script>
+
+<div class="container mx-auto px-4 py-8 max-w-4xl">
+	<h1 class="text-3xl font-bold mb-6">Friends</h1>
+
+	<!-- Search Section -->
+	<div class="bg-white rounded-lg shadow p-6 mb-6">
+		<h2 class="text-xl font-semibold mb-4">Find Friends</h2>
+		<input
+			type="text"
+			bind:value={searchQuery}
+			placeholder="Search by name or username..."
+			class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+		/>
+
+		{#if isSearching}
+			<p class="text-gray-500 mt-4">Searching...</p>
+		{:else if searchResults.length > 0}
+			<div class="mt-4 space-y-3">
+				{#each searchResults as user}
+					<div class="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg">
+						<a href="/profile/{user.id}" class="flex items-center gap-3 flex-1">
+							{#if user.profile_picture_url}
+								<img
+									src={user.profile_picture_url}
+									alt={user.display_name}
+									class="w-12 h-12 rounded-full"
+								/>
+							{:else}
+								<div class="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center">
+									<span class="text-gray-600 font-semibold">
+										{user.display_name?.charAt(0).toUpperCase() || '?'}
+									</span>
+								</div>
+							{/if}
+							<div>
+								<p class="font-semibold">{user.display_name}</p>
+								{#if user.username}
+									<p class="text-sm text-gray-500">@{user.username}</p>
+								{/if}
+								{#if user.bio}
+									<p class="text-sm text-gray-600 line-clamp-1">{user.bio}</p>
+								{/if}
+							</div>
+						</a>
+						<button
+							onclick={() => sendFriendRequest(user.id)}
+							class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold"
+						>
+							Add Friend
+						</button>
+					</div>
+				{/each}
+			</div>
+		{:else if searchQuery.trim().length > 0}
+			<p class="text-gray-500 mt-4">No users found</p>
+		{/if}
+	</div>
+
+	<!-- Tabs -->
+	<div class="flex gap-4 mb-6 border-b">
+		<button
+			onclick={() => (activeTab = 'friends')}
+			class="px-4 py-2 font-semibold {activeTab === 'friends'
+				? 'text-blue-600 border-b-2 border-blue-600'
+				: 'text-gray-600 hover:text-gray-800'}"
+		>
+			Friends ({data.friends.length})
+		</button>
+		<button
+			onclick={() => (activeTab = 'requests')}
+			class="px-4 py-2 font-semibold {activeTab === 'requests'
+				? 'text-blue-600 border-b-2 border-blue-600'
+				: 'text-gray-600 hover:text-gray-800'}"
+		>
+			Requests ({data.requests.length})
+		</button>
+	</div>
+
+	<!-- Friends List -->
+	{#if activeTab === 'friends'}
+		<div class="bg-white rounded-lg shadow">
+			{#if data.friends.length === 0}
+				<div class="p-8 text-center text-gray-500">
+					<p class="text-lg mb-2">No friends yet</p>
+					<p class="text-sm">Search for people to add as friends!</p>
+				</div>
+			{:else}
+				<div class="divide-y">
+					{#each data.friends as friend}
+						<div class="p-4 flex items-center justify-between hover:bg-gray-50">
+							<a href="/profile/{friend.friend_id}" class="flex items-center gap-3 flex-1">
+								{#if friend.profile_picture_url}
+									<img
+										src={friend.profile_picture_url}
+										alt={friend.display_name}
+										class="w-12 h-12 rounded-full"
+									/>
+								{:else}
+									<div class="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center">
+										<span class="text-gray-600 font-semibold">
+											{friend.display_name?.charAt(0).toUpperCase() || '?'}
+										</span>
+									</div>
+								{/if}
+								<div>
+									<p class="font-semibold">{friend.display_name}</p>
+									{#if friend.username}
+										<p class="text-sm text-gray-500">@{friend.username}</p>
+									{/if}
+									{#if friend.bio}
+										<p class="text-sm text-gray-600 line-clamp-1">{friend.bio}</p>
+									{/if}
+								</div>
+							</a>
+							<button
+								onclick={() => removeFriend(friend.id)}
+								class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm font-semibold"
+							>
+								Unfriend
+							</button>
+						</div>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	{/if}
+
+	<!-- Friend Requests -->
+	{#if activeTab === 'requests'}
+		<div class="bg-white rounded-lg shadow">
+			{#if data.requests.length === 0}
+				<div class="p-8 text-center text-gray-500">
+					<p class="text-lg mb-2">No pending requests</p>
+					<p class="text-sm">You'll see friend requests here</p>
+				</div>
+			{:else}
+				<div class="divide-y">
+					{#each data.requests as request}
+						<div class="p-4 flex items-center justify-between hover:bg-gray-50">
+							<a href="/profile/{request.requester_id}" class="flex items-center gap-3 flex-1">
+								{#if request.profile_picture_url}
+									<img
+										src={request.profile_picture_url}
+										alt={request.display_name}
+										class="w-12 h-12 rounded-full"
+									/>
+								{:else}
+									<div class="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center">
+										<span class="text-gray-600 font-semibold">
+											{request.display_name?.charAt(0).toUpperCase() || '?'}
+										</span>
+									</div>
+								{/if}
+								<div>
+									<p class="font-semibold">{request.display_name}</p>
+									{#if request.username}
+										<p class="text-sm text-gray-500">@{request.username}</p>
+									{/if}
+									{#if request.bio}
+										<p class="text-sm text-gray-600 line-clamp-1">{request.bio}</p>
+									{/if}
+								</div>
+							</a>
+							<div class="flex gap-2">
+								<button
+									onclick={() => acceptRequest(request.id)}
+									class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold"
+								>
+									Accept
+								</button>
+								<button
+									onclick={() => rejectRequest(request.id)}
+									class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm font-semibold"
+								>
+									Reject
+								</button>
+							</div>
+						</div>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	{/if}
+</div>

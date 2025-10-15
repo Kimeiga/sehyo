@@ -1,0 +1,53 @@
+name = "portfolio-facebook"
+compatibility_date = "2024-01-01"
+pages_build_output_dir = ".svelte-kit/cloudflare"
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "portfolio-facebook-db"
+database_id = "d827cbae-592f-41b5-80e8-e06ccb610bee"
+
+# R2 Bucket binding for image uploads
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "portfolio-facebook-images"
+
+# KV namespace for sessions (optional, can use D1 instead)
+# KV namespace for sessions
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "bc491214935341a9b88984146caebddb" # Will be filled after creating the namespace
+
+[vars]
+# Public environment variables
+PUBLIC_APP_NAME = "Portfolio Facebook"
+
+# Bot Runner Worker Configuration
+# This worker runs on a schedule to make bots post and interact
+
+[[workers]]
+name = "bot-runner"
+main = "src/workers/bot-runner.ts"
+compatibility_date = "2024-01-01"
+
+# Cron triggers for bot runner
+# Runs every hour to check if bots should post
+[workers.triggers]
+crons = ["0 * * * *"]  # Every hour at minute 0
+
+# Bind D1 database to bot runner
+[[workers.d1_databases]]
+binding = "DB"
+database_name = "portfolio-facebook-db"
+database_id = "d827cbae-592f-41b5-80e8-e06ccb610bee"
+
+# Bind AI to bot runner
+[workers.ai]
+binding = "AI"
+
+# Bot runner environment variables
+[workers.vars]
+API_BASE_URL = "http://localhost:5174"  # Change to production URL when deploying
+BOT_SECRET = "dev_bot_secret_12345"  # Change in production!
+
