@@ -8,12 +8,36 @@
 
 	let { open = false }: { open?: boolean } = $props();
 
+	let loading = $state(false);
+
 	// Close modal by removing query parameter
 	function closeModal() {
 		if (browser) {
 			const url = new URL(window.location.href);
 			url.searchParams.delete('modal');
 			goto(url.toString(), { replaceState: true });
+		}
+	}
+
+	async function handleAnonymousLogin() {
+		loading = true;
+		try {
+			const response = await fetch('/api/auth/anonymous', {
+				method: 'POST'
+			});
+
+			if (response.ok) {
+				closeModal();
+				window.location.reload();
+			} else {
+				console.error('Anonymous login failed');
+				alert('Failed to sign in anonymously. Please try again.');
+			}
+		} catch (error) {
+			console.error('Anonymous login error:', error);
+			alert('Failed to sign in anonymously. Please try again.');
+		} finally {
+			loading = false;
 		}
 	}
 </script>
@@ -32,8 +56,8 @@
 			</CardHeader>
 			<CardContent class="space-y-4">
 				<!-- Google Sign In -->
-				<a href="/api/auth/sign-in/social?provider=google&callbackURL={encodeURIComponent(browser ? window.location.pathname : '/')}" class="block">
-					<Button class="w-full" size="lg">
+				<form action="/auth/login/google" method="GET">
+					<Button type="submit" class="w-full" size="lg">
 						<svg class="w-5 h-5 mr-2" viewBox="0 0 24 24">
 							<path
 								fill="currentColor"
@@ -54,7 +78,7 @@
 						</svg>
 						Continue with Google
 					</Button>
-				</a>
+				</form>
 
 				<div class="relative">
 					<div class="absolute inset-0 flex items-center">
@@ -65,20 +89,21 @@
 					</div>
 				</div>
 
-				<!-- Browse as Guest -->
+				<!-- Anonymous Sign In -->
 				<Button
 					variant="outline"
 					class="w-full"
 					size="lg"
-					onclick={closeModal}
+					onclick={handleAnonymousLogin}
+					disabled={loading}
 				>
-					Continue Browsing
+					{loading ? 'Signing in...' : 'Continue as Guest'}
 				</Button>
 
 				<p class="text-xs text-center text-muted-foreground">
-					You can browse posts without signing in.
+					Guest accounts are temporary and will expire after 24 hours.
 					<br />
-					Sign in with Google to create posts and interact.
+					Sign in with Google to save your data permanently.
 				</p>
 			</CardContent>
 		</Card>

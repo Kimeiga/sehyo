@@ -1,7 +1,9 @@
 // Anonymous login endpoint
 // Creates a temporary anonymous user for browsing
+// Uses Better Auth's user and session tables
 
 import { json, error } from '@sveltejs/kit';
+import { dev } from '$app/environment';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ platform, cookies }) => {
@@ -15,32 +17,35 @@ export const POST: RequestHandler = async ({ platform, cookies }) => {
 		const userId = crypto.randomUUID();
 		const anonymousId = `anon_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 		const displayName = `Guest${Math.floor(Math.random() * 10000)}`;
+		const email = `${anonymousId}@anonymous.local`;
+		const now = new Date().toISOString();
+
+		// Insert into Better Auth's user table
+		await db
+			.prepare(
+				`INSERT INTO user (id, email, emailVerified, name, image, createdAt, updatedAt)
+				 VALUES (?, ?, ?, ?, ?, ?, ?)`
+			)
+			.bind(userId, email, 0, displayName, null, now, now)
+			.run();
+
+		// Create session in Better Auth's session table
+		const sessionToken = crypto.randomUUID();
+		const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
 		await db
 			.prepare(
-				`INSERT INTO users (id, google_id, email, username, display_name, created_at, updated_at)
-				 VALUES (?, ?, ?, ?, ?, unixepoch(), unixepoch())`
+				`INSERT INTO session (id, userId, expiresAt, ipAddress, userAgent)
+				 VALUES (?, ?, ?, ?, ?)`
 			)
-			.bind(userId, anonymousId, `${anonymousId}@anonymous.local`, null, displayName)
+			.bind(sessionToken, userId, expiresAt.toISOString(), null, null)
 			.run();
 
-		// Create session
-		const sessionId = crypto.randomUUID();
-		const expiresAt = Math.floor(Date.now() / 1000) + 24 * 60 * 60; // 24 hours for anonymous
-
-		await db
-			.prepare(
-				`INSERT INTO sessions (id, user_id, expires_at, created_at)
-				 VALUES (?, ?, ?, unixepoch())`
-			)
-			.bind(sessionId, userId, expiresAt)
-			.run();
-
-		// Set session cookie
-		cookies.set('session', sessionId, {
+		// Set Better Auth session cookie
+		cookies.set('better-auth.session_token', sessionToken, {
 			path: '/',
 			httpOnly: true,
-			secure: !platform?.env?.DEV,
+			secure: !dev,
 			sameSite: 'lax',
 			maxAge: 60 * 60 * 24 // 24 hours
 		});
@@ -49,7 +54,8 @@ export const POST: RequestHandler = async ({ platform, cookies }) => {
 			success: true,
 			user: {
 				id: userId,
-				display_name: displayName,
+				name: displayName,
+				email: email,
 				is_anonymous: true
 			}
 		});
