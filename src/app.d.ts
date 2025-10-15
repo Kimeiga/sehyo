@@ -10,8 +10,8 @@ declare global {
 			code?: string;
 		}
 		interface Locals {
-			user: User | null;
-			sessionId: string | null;
+			user: any | null; // Better Auth user type
+			session: any | null; // Better Auth session type
 		}
 		// interface PageData {}
 		// interface PageState {}

@@ -21,10 +21,15 @@
 
 	async function handleLogout() {
 		try {
-			await fetch('/auth/logout', {
-				method: 'POST'
+			// Use Better Auth sign out
+			const res = await fetch('/api/auth/sign-out', {
+				method: 'POST',
+				credentials: 'include'
 			});
-			window.location.href = '/';
+
+			if (res.ok) {
+				window.location.href = '/';
+			}
 		} catch (err) {
 			console.error('Logout failed:', err);
 		}
