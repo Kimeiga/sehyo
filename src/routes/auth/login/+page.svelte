@@ -9,31 +9,37 @@
 	let guestButtonRef: HTMLButtonElement;
 
 	onMount(() => {
-		console.log('onMount called, guestButtonRef:', guestButtonRef);
 		// Attach the click handler after the component is mounted
 		if (guestButtonRef) {
-			console.log('Attaching click handler to guest button');
 			guestButtonRef.addEventListener('click', async (e) => {
-				console.log('Guest button clicked!');
 				e.preventDefault();
 				e.stopPropagation();
-				loading = true;
+
 				try {
-					console.log('Calling authClient.signIn.anonymous()');
-					const result = await authClient.signIn.anonymous();
-					console.log('Anonymous login result:', result);
-					alert('Anonymous login successful! Check console for result. Will redirect in 5 seconds.');
-					setTimeout(() => {
-						window.location.href = '/';
-					}, 5000);
+					await authClient.signIn.anonymous({
+						fetchOptions: {
+							onRequest: () => {
+								loading = true;
+							},
+							onResponse: () => {
+								loading = false;
+							},
+							onSuccess: () => {
+								window.location.href = '/';
+							},
+							onError: (ctx) => {
+								console.error('Anonymous login error:', ctx.error);
+								alert(`Failed to sign in anonymously: ${ctx.error.message || 'Unknown error'}`);
+								loading = false;
+							}
+						}
+					});
 				} catch (error) {
-					console.error('Anonymous login error:', error);
-					alert('Failed to sign in anonymously. Error: ' + error.message);
+					console.error('Anonymous login exception:', error);
+					alert('Failed to sign in anonymously. Please try again.');
 					loading = false;
 				}
 			});
-		} else {
-			console.error('guestButtonRef is null!');
 		}
 	});
 </script>
