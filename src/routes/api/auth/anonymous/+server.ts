@@ -32,13 +32,15 @@ export const POST: RequestHandler = async ({ platform, cookies }) => {
 		// Create session in Better Auth's session table
 		const sessionToken = crypto.randomUUID();
 		const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+		const createdAt = now;
+		const updatedAt = now;
 
 		await db
 			.prepare(
-				`INSERT INTO session (id, userId, expiresAt, ipAddress, userAgent)
-				 VALUES (?, ?, ?, ?, ?)`
+				`INSERT INTO session (id, userId, expiresAt, ipAddress, userAgent, createdAt, updatedAt)
+				 VALUES (?, ?, ?, ?, ?, ?, ?)`
 			)
-			.bind(sessionToken, userId, expiresAt.toISOString(), null, null)
+			.bind(sessionToken, userId, expiresAt.toISOString(), null, null, createdAt, updatedAt)
 			.run();
 
 		// Set Better Auth session cookie
