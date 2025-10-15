@@ -2,29 +2,9 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Separator } from '$lib/components/ui/separator';
+	import { enhance } from '$app/forms';
 
 	let loading = $state(false);
-
-	async function handleAnonymousLogin() {
-		loading = true;
-		try {
-			const response = await fetch('/api/auth/anonymous', {
-				method: 'POST'
-			});
-
-			if (response.ok) {
-				window.location.href = '/';
-			} else {
-				console.error('Anonymous login failed');
-				alert('Failed to sign in anonymously. Please try again.');
-			}
-		} catch (error) {
-			console.error('Anonymous login error:', error);
-			alert('Failed to sign in anonymously. Please try again.');
-		} finally {
-			loading = false;
-		}
-	}
 </script>
 
 <div class="min-h-screen flex items-center justify-center bg-background px-4">
@@ -74,15 +54,29 @@
 			</div>
 
 			<!-- Anonymous Sign In -->
-			<Button
-				variant="outline"
-				class="w-full"
-				size="lg"
-				onclick={handleAnonymousLogin}
-				disabled={loading}
+			<form
+				action="/api/auth/sign-in/anonymous"
+				method="POST"
+				use:enhance={() => {
+					console.log('Form submit with enhance');
+					loading = true;
+					return async ({ result }) => {
+						console.log('Form result:', result);
+						if (result.type === 'redirect') {
+							window.location.href = result.location;
+						}
+						loading = false;
+					};
+				}}
 			>
-				{loading ? 'Signing in...' : 'Continue as Guest'}
-			</Button>
+				<button
+					type="submit"
+					class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-10 px-6 w-full"
+					disabled={loading}
+				>
+					{loading ? 'Signing in...' : 'Continue as Guest'}
+				</button>
+			</form>
 
 			<p class="text-xs text-center text-muted-foreground">
 				Guest accounts are temporary and will expire after 24 hours.

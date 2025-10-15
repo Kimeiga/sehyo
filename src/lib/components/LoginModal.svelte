@@ -5,7 +5,6 @@
 	import { Dialog, DialogContent } from '$lib/components/ui/dialog';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
-	import { authClient } from '$lib/auth-client';
 
 	let { open = false }: { open?: boolean } = $props();
 
@@ -17,24 +16,6 @@
 			const url = new URL(window.location.href);
 			url.searchParams.delete('modal');
 			goto(url.toString(), { replaceState: true });
-		}
-	}
-
-	async function handleAnonymousLogin() {
-		console.log('Anonymous login clicked - function called');
-		loading = true;
-		try {
-			console.log('Calling authClient.signIn.anonymous()...');
-			// Use Better Auth's built-in anonymous sign-in
-			const result = await authClient.signIn.anonymous();
-			console.log('Anonymous login result:', result);
-
-			// Redirect to home page without modal query parameter
-			window.location.href = '/';
-		} catch (error) {
-			console.error('Anonymous login error:', error);
-			alert('Failed to sign in anonymously. Please try again.');
-			loading = false;
 		}
 	}
 </script>
@@ -87,15 +68,17 @@
 				</div>
 
 				<!-- Anonymous Sign In -->
-				<Button
-					variant="outline"
-					class="w-full"
-					size="lg"
-					onclick={() => handleAnonymousLogin()}
-					disabled={loading}
-				>
-					{loading ? 'Signing in...' : 'Continue as Guest'}
-				</Button>
+				<form action="/api/auth/sign-in/anonymous" method="POST">
+					<Button
+						type="submit"
+						variant="outline"
+						class="w-full"
+						size="lg"
+						disabled={loading}
+					>
+						{loading ? 'Signing in...' : 'Continue as Guest'}
+					</Button>
+				</form>
 
 				<p class="text-xs text-center text-muted-foreground">
 					Guest accounts are temporary and will expire after 24 hours.
