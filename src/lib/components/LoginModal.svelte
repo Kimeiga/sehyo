@@ -21,10 +21,13 @@
 	}
 
 	async function handleAnonymousLogin() {
+		console.log('Anonymous login clicked - function called');
 		loading = true;
 		try {
+			console.log('Calling authClient.signIn.anonymous()...');
 			// Use Better Auth's built-in anonymous sign-in
-			await authClient.signIn.anonymous();
+			const result = await authClient.signIn.anonymous();
+			console.log('Anonymous login result:', result);
 
 			// Redirect to home page without modal query parameter
 			window.location.href = '/';
@@ -88,7 +91,7 @@
 					variant="outline"
 					class="w-full"
 					size="lg"
-					onclick={handleAnonymousLogin}
+					onclick={() => handleAnonymousLogin()}
 					disabled={loading}
 				>
 					{loading ? 'Signing in...' : 'Continue as Guest'}
