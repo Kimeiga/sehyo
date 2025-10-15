@@ -53,6 +53,22 @@ jobs:
           command: d1 execute portfolio-facebook-db --remote --file=./migrations/0002_bot_profiles.sql
         continue-on-error: true
 
+      - name: Run Better Auth migration
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: d1 execute portfolio-facebook-db --remote --file=./migrations/0003_better_auth.sql
+        continue-on-error: true
+
+      - name: Run messaging E2EE migration
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: d1 execute portfolio-facebook-db --remote --file=./migrations/0003_messaging_e2ee.sql
+        continue-on-error: true
+
       - name: Deploy bot runner worker
         uses: cloudflare/wrangler-action@v3
         with:
