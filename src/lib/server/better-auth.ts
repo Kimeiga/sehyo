@@ -1,19 +1,20 @@
 import { betterAuth } from 'better-auth';
-import { d1Adapter } from 'better-auth/adapters/d1';
+import { Kysely } from 'kysely';
+import { D1Dialect } from 'kysely-d1';
+import type { D1Database } from '@cloudflare/workers-types';
 
 export function createAuth(db: D1Database, env: {
 	GOOGLE_CLIENT_ID: string;
 	GOOGLE_CLIENT_SECRET: string;
 	GOOGLE_REDIRECT_URI: string;
 }) {
+	// Create Kysely instance with D1
+	const kysely = new Kysely({
+		dialect: new D1Dialect({ database: db })
+	});
+
 	return betterAuth({
-		database: d1Adapter(db, {
-			// Map Better Auth tables to our custom names
-			user: 'better_auth_user',
-			session: 'better_auth_session',
-			account: 'better_auth_account',
-			verification: 'better_auth_verification'
-		}),
+		database: kysely,
 		
 		// Base URL for callbacks
 		baseURL: env.GOOGLE_REDIRECT_URI.replace('/auth/callback', ''),

@@ -1,19 +1,22 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { db } from '$lib/server/db';
+import { getDB } from '$lib/server/db';
 
 /**
  * Bot Comment Creation Endpoint
- * 
+ *
  * This endpoint allows bots to create comments on posts.
- * 
+ *
  * POST /api/bots/comments
  * Headers: { Authorization: Bearer <session_id> }
  * Body: { post_id: string, content: string, parent_comment_id?: string }
  * Returns: { comment_id: string, created_at: string }
  */
-export const POST: RequestHandler = async ({ request }) => {
+export const POST: RequestHandler = async ({ request, platform }) => {
 	try {
+		// Get database instance
+		const db = getDB(platform);
+
 		// Get session from Authorization header
 		const authHeader = request.headers.get('Authorization');
 		if (!authHeader || !authHeader.startsWith('Bearer ')) {

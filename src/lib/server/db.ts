@@ -287,3 +287,11 @@ export class Database {
 	}
 }
 
+// Helper function to get raw D1 database from platform
+// This is used by bot endpoints that need direct database access
+export function getDB(platform: App.Platform | undefined): D1Database {
+	if (!platform?.env?.DB) {
+		throw new Error('Database not available');
+	}
+	return platform.env.DB;
+}

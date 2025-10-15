@@ -1,6 +1,6 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { db } from '$lib/server/db';
+import { getDB } from '$lib/server/db';
 
 /**
  * Bot Authentication Endpoint
@@ -24,10 +24,13 @@ export const POST: RequestHandler = async ({ request, platform, cookies }) => {
 		// For now, use a simple secret validation
 		// In production, you'd want to use environment variables or a more secure method
 		const BOT_SECRET = platform?.env?.BOT_SECRET || 'dev_bot_secret_12345';
-		
+
 		if (secret !== BOT_SECRET) {
 			return error(401, 'Invalid bot secret');
 		}
+
+		// Get database instance
+		const db = getDB(platform);
 
 		// Get bot profile
 		const botProfile = await db.prepare(
