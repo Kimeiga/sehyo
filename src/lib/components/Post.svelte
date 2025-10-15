@@ -33,7 +33,6 @@
 	let { post, currentUserId }: Props = $props();
 
 	let isDeleting = $state(false);
-	let showComments = $state(false);
 
 	async function handleDelete() {
 		if (!confirm('Are you sure you want to delete this post?')) {
@@ -129,29 +128,39 @@
 
 		<!-- Action Buttons -->
 		<div class="flex items-center gap-2">
-			<ReactionPicker targetType="post" targetId={post.id} reactionCounts={post.reaction_counts} />
+			{#if currentUserId}
+				<ReactionPicker targetType="post" targetId={post.id} reactionCounts={post.reaction_counts} />
+			{:else}
+				<!-- Disabled reaction button for non-authenticated users -->
+				<Button variant="ghost" size="sm" class="gap-2" disabled>
+					<span>👍</span>
+					<span>Like</span>
+				</Button>
+			{/if}
 
 			<Button
 				variant="ghost"
 				size="sm"
-				onclick={() => (showComments = !showComments)}
+				onclick={() => {
+					// Scroll to comment input when clicked
+					const commentInput = document.querySelector(`[data-post-id="${post.id}"] input`);
+					commentInput?.focus();
+				}}
 				class="gap-2"
 			>
 				<MessageCircle class="size-4" />
 				<span>Comment</span>
 			</Button>
 
-			<Button variant="ghost" size="sm" class="gap-2">
+			<Button variant="ghost" size="sm" class="gap-2" disabled={!currentUserId}>
 				<Share2 class="size-4" />
 				<span>Share</span>
 			</Button>
 		</div>
 
-		<!-- Comments Section -->
-		{#if showComments}
-			<Separator class="my-4" />
-			<CommentSection postId={post.id} {currentUserId} />
-		{/if}
+		<!-- Comments Section (always visible) -->
+		<Separator class="my-4" />
+		<CommentSection postId={post.id} {currentUserId} />
 	</CardContent>
 </Card>
 

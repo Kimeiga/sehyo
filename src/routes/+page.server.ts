@@ -2,7 +2,8 @@ import type { PageServerLoad } from './$types';
 import { Database } from '$lib/server/db';
 
 export const load: PageServerLoad = async ({ platform, locals }) => {
-	if (!locals.user || !platform?.env?.DB) {
+	// Allow browsing without authentication
+	if (!platform?.env?.DB) {
 		return {
 			posts: []
 		};

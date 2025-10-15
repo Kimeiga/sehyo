@@ -5,7 +5,6 @@
 	import Self from './Comment.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Avatar, AvatarImage, AvatarFallback } from '$lib/components/ui/avatar';
-	import { Input } from '$lib/components/ui/input';
 
 	interface Props {
 		comment: CommentType & {
@@ -39,6 +38,14 @@
 	let replies = $state<any[]>([]);
 	let loadingReplies = $state(false);
 	let hasLoadedReplies = $state(false); // Track if we've checked for replies
+	let replyInputRef: HTMLInputElement | null = null;
+
+	// Focus reply input when reply form is shown
+	$effect(() => {
+		if (showReplyForm && replyInputRef) {
+			setTimeout(() => replyInputRef?.focus(), 0);
+		}
+	});
 
 	function formatDate(timestamp: number): string {
 		const date = new Date(timestamp * 1000);
@@ -154,15 +161,34 @@
 
 		<!-- Actions -->
 		<div class="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-			<ReactionPicker targetType="comment" targetId={comment.id} reactionCounts={comment.reaction_counts} />
-			<Button
-				variant="ghost"
-				size="sm"
-				onclick={() => (showReplyForm = !showReplyForm)}
-				class="h-auto p-0 hover:underline font-semibold"
-			>
-				Reply
-			</Button>
+			{#if currentUserId}
+				<ReactionPicker targetType="comment" targetId={comment.id} reactionCounts={comment.reaction_counts} />
+				<Button
+					variant="ghost"
+					size="sm"
+					onclick={() => (showReplyForm = !showReplyForm)}
+					class="h-auto p-0 hover:underline font-semibold"
+				>
+					Reply
+				</Button>
+			{:else}
+				<Button
+					variant="ghost"
+					size="sm"
+					disabled
+					class="h-auto p-0 font-semibold"
+				>
+					👍 Like
+				</Button>
+				<Button
+					variant="ghost"
+					size="sm"
+					disabled
+					class="h-auto p-0 font-semibold"
+				>
+					Reply
+				</Button>
+			{/if}
 			<span>{formatDate(comment.created_at)}</span>
 			{#if currentUserId === comment.user_id}
 				<Button
@@ -178,15 +204,16 @@
 		</div>
 
 		<!-- Reply Form -->
-		{#if showReplyForm}
+		{#if showReplyForm && currentUserId}
 			<div class="mt-2 flex gap-2">
-				<Input
+				<input
 					type="text"
 					bind:value={replyContent}
+					bind:this={replyInputRef}
 					placeholder="Write a reply..."
 					disabled={isSubmitting}
 					onkeydown={(e) => e.key === 'Enter' && handleReply()}
-					class="h-8 text-sm rounded-full"
+					class="border-input bg-background selection:bg-primary dark:bg-input/30 selection:text-primary-foreground ring-offset-background placeholder:text-muted-foreground shadow-xs flex h-8 w-full min-w-0 rounded-full border px-3 py-1 text-sm outline-none transition-[color,box-shadow] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
 				/>
 				<Button
 					size="sm"

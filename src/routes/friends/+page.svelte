@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
 	import { invalidateAll } from '$app/navigation';
+	import FriendButton from '$lib/components/FriendButton.svelte';
 
 	let { data }: PageProps = $props();
 
@@ -113,15 +114,30 @@
 <div class="container mx-auto px-4 py-8 max-w-4xl">
 	<h1 class="text-3xl font-bold mb-6">Friends</h1>
 
-	<!-- Search Section -->
-	<div class="bg-card rounded-lg shadow p-6 mb-6 border border-border">
-		<h2 class="text-xl font-semibold mb-4 text-foreground">Find Friends</h2>
-		<input
-			type="text"
-			bind:value={searchQuery}
-			placeholder="Search by name or username..."
-			class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-		/>
+	{#if !data.user}
+		<!-- Sign in prompt for non-authenticated users -->
+		<div class="bg-card rounded-lg shadow p-12 text-center border border-border">
+			<h2 class="text-2xl font-semibold mb-4">Sign in to manage friends</h2>
+			<p class="text-muted-foreground mb-6">
+				Connect with friends and manage your friend requests by signing in.
+			</p>
+			<a
+				href="/auth/login"
+				class="inline-block bg-primary text-primary-foreground px-6 py-3 rounded-lg font-semibold hover:opacity-90 transition"
+			>
+				Sign In
+			</a>
+		</div>
+	{:else}
+		<!-- Search Section -->
+		<div class="bg-card rounded-lg shadow p-6 mb-6 border border-border">
+			<h2 class="text-xl font-semibold mb-4 text-foreground">Find Friends</h2>
+			<input
+				type="text"
+				bind:value={searchQuery}
+				placeholder="Search by name or username..."
+				class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+			/>
 
 		{#if isSearching}
 			<p class="text-muted-foreground mt-4">Searching...</p>
@@ -291,5 +307,57 @@
 				</div>
 			{/if}
 		</div>
+	{/if}
+
+	<!-- All Users Section -->
+	<div class="bg-card rounded-lg shadow border border-border mt-6">
+		<div class="p-6 border-b border-border">
+			<h2 class="text-xl font-semibold text-foreground">All Users</h2>
+			<p class="text-sm text-muted-foreground mt-1">
+				Discover and connect with people on the platform (including AI bots!)
+			</p>
+		</div>
+		{#if data.allUsers.length === 0}
+			<div class="p-8 text-center text-muted-foreground">
+				<p class="text-lg mb-2">No users found</p>
+				<p class="text-sm">Check back later!</p>
+			</div>
+		{:else}
+			<div class="divide-y divide-border">
+				{#each data.allUsers as user}
+					<div class="p-4 flex items-center justify-between hover:bg-muted/50">
+						<a href="/profile/{user.id}" class="flex items-center gap-3 flex-1">
+							{#if user.profile_picture_url}
+								<img
+									src={user.profile_picture_url}
+									alt={user.display_name}
+									class="w-12 h-12 rounded-full"
+								/>
+							{:else}
+								<div class="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+									<span class="text-muted-foreground font-semibold">
+										{user.display_name?.charAt(0).toUpperCase() || '?'}
+									</span>
+								</div>
+							{/if}
+							<div>
+								<p class="font-semibold text-foreground">{user.display_name}</p>
+								{#if user.username}
+									<p class="text-sm text-muted-foreground">@{user.username}</p>
+								{/if}
+								{#if user.bio}
+									<p class="text-sm text-muted-foreground line-clamp-2">{user.bio}</p>
+								{/if}
+							</div>
+						</a>
+						<div class="ml-4">
+							<!-- Friend button component will handle the state -->
+							<FriendButton userId={user.id} />
+						</div>
+					</div>
+				{/each}
+			</div>
+		{/if}
+	</div>
 	{/if}
 </div>

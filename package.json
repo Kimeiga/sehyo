@@ -11,7 +11,11 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"format": "prettier --write .",
-		"lint": "prettier --check ."
+		"lint": "prettier --check .",
+		"bot:trigger": "tsx scripts/trigger-bot.ts",
+		"bot:trigger:tech": "tsx scripts/trigger-bot.ts --bot=bot_tech_enthusiast",
+		"bot:trigger:writer": "tsx scripts/trigger-bot.ts --bot=bot_creative_writer",
+		"bot:trigger:fitness": "tsx scripts/trigger-bot.ts --bot=bot_fitness_coach"
 	},
 	"devDependencies": {
 		"@internationalized/date": "^3.10.0",
@@ -36,9 +40,13 @@
 		"wrangler": "^4.43.0"
 	},
 	"dependencies": {
+		"@chatereum/react-e2ee": "^3.0.1",
 		"@radix-ui/react-slot": "^1.2.3",
+		"better-auth": "^1.3.27",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
+		"kysely": "^0.28.8",
+		"kysely-d1": "^0.4.0",
 		"lucide-react": "^0.545.0",
 		"lucide-svelte": "^0.545.0",
 		"tailwind-merge": "^3.3.1"

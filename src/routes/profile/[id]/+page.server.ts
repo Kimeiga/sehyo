@@ -3,10 +3,7 @@ import { Database } from '$lib/server/db';
 import { error } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async ({ params, platform, locals }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
+	// Allow viewing profiles without authentication
 	if (!platform?.env?.DB) {
 		throw error(500, 'Database not available');
 	}
@@ -40,7 +37,7 @@ export const load: PageServerLoad = async ({ params, platform, locals }) => {
 	return {
 		profileUser: user,
 		posts: postsWithReactions,
-		isOwnProfile: locals.user.id === params.id
+		isOwnProfile: locals.user?.id === params.id
 	};
 };
 

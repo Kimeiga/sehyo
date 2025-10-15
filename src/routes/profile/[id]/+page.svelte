@@ -2,8 +2,15 @@
 	import type { PageProps } from './$types';
 	import Post from '$lib/components/Post.svelte';
 	import FriendButton from '$lib/components/FriendButton.svelte';
+	import { Button } from '$lib/components/ui/button';
+	import { MessageCircle } from 'lucide-svelte';
+	import { goto } from '$app/navigation';
 
 	let { data }: PageProps = $props();
+
+	function handleMessage() {
+		goto('/messages');
+	}
 
 	function formatDate(timestamp: number | null | undefined): string {
 		if (!timestamp) return 'Recently';
@@ -50,7 +57,7 @@
 					{/if}
 				</div>
 
-				<div class="mt-16">
+				<div class="mt-16 flex gap-2">
 					{#if data.isOwnProfile}
 						<a
 							href="/profile/edit"
@@ -60,6 +67,10 @@
 						</a>
 					{:else}
 						<FriendButton userId={data.profileUser.id} />
+						<Button variant="outline" onclick={handleMessage}>
+							<MessageCircle class="size-4 mr-2" />
+							Message
+						</Button>
 					{/if}
 				</div>
 			</div>

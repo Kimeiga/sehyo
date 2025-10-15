@@ -10,6 +10,7 @@ export interface User {
 	bio: string | null;
 	location: string | null;
 	website: string | null;
+	public_key: string | null; // For E2E encrypted messaging
 	created_at: number;
 	updated_at: number;
 }

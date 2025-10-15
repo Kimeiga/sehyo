@@ -1,6 +1,5 @@
 <script lang="ts">
 	import Comment from './Comment.svelte';
-	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 
@@ -15,11 +14,19 @@
 	let newComment = $state('');
 	let isSubmitting = $state(false);
 	let isLoading = $state(false);
-	let showComments = $state(true); // Auto-show comments when component mounts
+	let showAllComments = $state(false); // Show only 2-3 comments by default
+	const INITIAL_COMMENT_COUNT = 2; // Show 2 comments initially
+	let lastLoadedPostId = '';
 
-	// Auto-load comments when component mounts
-	onMount(() => {
-		loadComments();
+	// Load comments when postId changes
+	$effect(() => {
+		// Only reload if postId actually changed
+		if (postId !== lastLoadedPostId) {
+			lastLoadedPostId = postId;
+			comments = []; // Clear old comments
+			showAllComments = false; // Reset view state
+			loadComments();
+		}
 	});
 
 	async function loadComments() {
@@ -56,7 +63,7 @@
 
 			newComment = '';
 			await loadComments();
-			showComments = true;
+			showAllComments = true; // Show all comments after posting
 		} catch (err) {
 			alert('Failed to post comment');
 		} finally {
@@ -64,59 +71,70 @@
 		}
 	}
 
-	async function toggleComments() {
-		showComments = !showComments;
-		if (showComments && comments.length === 0) {
-			await loadComments();
-		}
-	}
+	// Get top-level comments (no parent)
+	const topLevelComments = $derived(comments.filter((c) => !c.parent_comment_id));
+
+	// Comments to display (either first 2 or all)
+	const displayedComments = $derived(
+		showAllComments ? topLevelComments : topLevelComments.slice(0, INITIAL_COMMENT_COUNT)
+	);
+
+	// Check if there are more comments to show
+	const hasMoreComments = $derived(topLevelComments.length > INITIAL_COMMENT_COUNT);
 </script>
 
-<div class="border-t pt-3">
-	<!-- Comment Input -->
-	<div class="flex gap-2 mb-3">
-		<Input
-			type="text"
-			bind:value={newComment}
-			placeholder="Write a comment..."
-			class="rounded-full"
-			disabled={isSubmitting}
-			onkeydown={(e) => e.key === 'Enter' && handleSubmit()}
-		/>
-		<Button
-			onclick={handleSubmit}
-			disabled={isSubmitting || !newComment.trim()}
-			class="rounded-full"
-		>
-			{isSubmitting ? 'Posting...' : 'Post'}
-		</Button>
-	</div>
-
-	<!-- Toggle Comments Button -->
-	{#if comments.length > 0}
-		<Button
-			variant="ghost"
-			size="sm"
-			onclick={toggleComments}
-			class="h-auto p-0 text-sm hover:underline mb-2"
-		>
-			{showComments ? 'Hide' : 'View'} {comments.length} comment{comments.length !== 1 ? 's' : ''}
-		</Button>
-	{/if}
-
-	<!-- Comments List -->
-	{#if showComments}
-		<div class="space-y-3">
-			{#if isLoading}
-				<p class="text-sm text-muted-foreground">Loading comments...</p>
-			{:else if comments.length > 0}
-				{#each comments.filter((c) => !c.parent_comment_id) as comment}
-					<Comment {comment} {currentUserId} {postId} />
-				{/each}
-			{:else}
-				<p class="text-sm text-muted-foreground">No comments yet</p>
-			{/if}
+<div class="border-t pt-3" data-post-id={postId}>
+	<!-- Comment Input or Sign-in Prompt -->
+	{#if currentUserId}
+		<div class="flex gap-2 mb-3">
+			<Input
+				type="text"
+				bind:value={newComment}
+				placeholder="Write a comment..."
+				class="rounded-full"
+				disabled={isSubmitting}
+				onkeydown={(e) => e.key === 'Enter' && handleSubmit()}
+			/>
+			<Button
+				onclick={handleSubmit}
+				disabled={isSubmitting || !newComment.trim()}
+				class="rounded-full"
+			>
+				{isSubmitting ? 'Posting...' : 'Post'}
+			</Button>
+		</div>
+	{:else}
+		<!-- Sign-in prompt for non-authenticated users -->
+		<div class="flex gap-2 mb-3 p-3 bg-muted/50 rounded-lg">
+			<p class="text-sm text-muted-foreground flex-1">
+				<a href="/auth/login" class="text-primary hover:underline font-medium">Sign in</a> to write a comment
+			</p>
 		</div>
 	{/if}
+
+	<!-- Comments List (always visible) -->
+	<div class="space-y-3">
+		{#if isLoading}
+			<p class="text-sm text-muted-foreground">Loading comments...</p>
+		{:else if topLevelComments.length > 0}
+			{#each displayedComments as comment}
+				<Comment {comment} {currentUserId} {postId} />
+			{/each}
+
+			<!-- "View more comments" button -->
+			{#if hasMoreComments && !showAllComments}
+				<Button
+					variant="ghost"
+					size="sm"
+					onclick={() => (showAllComments = true)}
+					class="h-auto p-0 text-sm hover:underline text-muted-foreground"
+				>
+					View {topLevelComments.length - INITIAL_COMMENT_COUNT} more comment{topLevelComments.length - INITIAL_COMMENT_COUNT !== 1 ? 's' : ''}
+				</Button>
+			{/if}
+		{:else}
+			<p class="text-sm text-muted-foreground">No comments yet</p>
+		{/if}
+	</div>
 </div>
 

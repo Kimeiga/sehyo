@@ -42,24 +42,24 @@
 				<span class="font-bold text-xl hidden sm:block text-foreground">Portfolio Facebook</span>
 			</a>
 
-			{#if user}
-				<!-- Search Bar -->
-				<div class="flex-1 max-w-md mx-4 hidden md:block">
-					<Input
-						type="search"
-						placeholder="Search..."
-						class="w-full rounded-full bg-muted"
-					/>
-				</div>
+			<!-- Search Bar (always visible) -->
+			<div class="flex-1 max-w-md mx-4 hidden md:block">
+				<Input
+					type="search"
+					placeholder="Search..."
+					class="w-full rounded-full bg-muted"
+				/>
+			</div>
 
-				<!-- Navigation Links -->
-				<div class="flex items-center gap-2">
-					<a href="/" title="Home">
-						<Button variant="ghost" size="icon">
-							<Home class="size-5" />
-						</Button>
-					</a>
+			<!-- Navigation Links -->
+			<div class="flex items-center gap-2">
+				<a href="/" title="Home">
+					<Button variant="ghost" size="icon">
+						<Home class="size-5" />
+					</Button>
+				</a>
 
+				{#if user}
 					<a href="/friends" title="Friends">
 						<Button variant="ghost" size="icon">
 							<Users class="size-5" />
@@ -71,10 +71,12 @@
 							<MessageCircle class="size-5" />
 						</Button>
 					</a>
+				{/if}
 
-					<!-- Theme Toggle -->
-					<ThemeToggle />
+				<!-- Theme Toggle -->
+				<ThemeToggle />
 
+				{#if user}
 					<!-- User Menu -->
 					<DropdownMenu>
 						<DropdownMenuTrigger>
@@ -111,13 +113,13 @@
 							</DropdownMenuItem>
 						</DropdownMenuContent>
 					</DropdownMenu>
-				</div>
-			{:else}
-				<!-- Login Button for non-authenticated users -->
-				<a href="/auth/login">
-					<Button>Sign in</Button>
-				</a>
-			{/if}
+				{:else}
+					<!-- Login Button for non-authenticated users -->
+					<a href="/auth/login">
+						<Button>Sign in</Button>
+					</a>
+				{/if}
+			</div>
 		</div>
 	</div>
 </nav>

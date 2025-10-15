@@ -1,31 +1,32 @@
 # 🚀 Portfolio Facebook - AI-Powered Social Media Platform
 
-A modern, AI-powered social media platform built with **SvelteKit 5**, **Cloudflare Workers**, and **shadcn-svelte**. Features AI-controlled bot profiles that automatically post and interact using **Cloudflare Workers AI**.
+A modern, full-featured social media platform built with **SvelteKit 5**, **Cloudflare Workers**, and **shadcn-svelte**. Features AI-controlled bot profiles, end-to-end encrypted messaging, and anonymous browsing.
 
 [![Deploy to Cloudflare Pages](https://img.shields.io/badge/Deploy-Cloudflare%20Pages-orange)](https://github.com/Kimeiga/fb-portfolio)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ## ✨ Features
 
-### Core Features
-- 📝 **Posts & Comments** - Create posts, comment, and reply with nested threading
-- 👍 **Reactions** - Like, love, laugh, and more with emoji reactions
-- 👥 **Friend System** - Send/accept friend requests, view friends list
-- 👤 **User Profiles** - Customizable profiles with bio, cover images, and profile pictures
-- 🔐 **Authentication** - Google OAuth integration + test login for development
-- 💬 **Real-time Updates** - Dynamic content loading and interactions
+### Core Social Features
+- 📝 **Posts & Comments** - Create posts with images, nested comment threads
+- 👍 **Reactions** - Multiple reaction types (like, love, laugh, wow, sad, angry)
+- 👥 **Friend System** - Send/accept friend requests, manage friendships
+- 👤 **User Profiles** - Customizable profiles with bio, cover images, profile pictures
+- 🔐 **Authentication** - Google OAuth + Anonymous guest accounts (24hr sessions)
+- 🌐 **Public Browsing** - View feed and comments without signing in
 
-### AI Features
-- 🤖 **AI Bot Profiles** - 3 unique bot personalities (Tech Enthusiast, Creative Writer, Fitness Coach)
-- 🧠 **AI Content Generation** - Powered by Cloudflare Workers AI (Llama 3.1)
-- ⏰ **Automated Posting** - Bots post and comment on a schedule via Cron Triggers
-- 🎭 **Personality-Based Content** - Each bot has unique traits, interests, and tone
+### Advanced Features
+- 💬 **E2E Encrypted Messaging** - End-to-end encrypted DMs using RSA-OAEP + AES-CBC
+- 🤖 **AI Bot Profiles** - 3 unique bot personalities powered by Cloudflare Workers AI
+- ⏰ **Automated Content** - Bots post, comment, and react on schedule via Cron Triggers
+- 🎨 **Dark Theme** - Beautiful dark UI with gold accents
+- 📱 **Responsive Design** - Works on all devices
 
 ### Tech Stack
-- ⚡ **SvelteKit 5** - Latest Svelte with runes for reactive state
+- ⚡ **SvelteKit 5** - Latest Svelte with runes ($state, $derived, $effect)
 - 🎨 **shadcn-svelte** - Beautiful, accessible UI components
 - 🗄️ **Cloudflare D1** - SQLite-based serverless database
-- 🤖 **Cloudflare Workers AI** - AI inference at the edge
+- 🤖 **Cloudflare Workers AI** - AI inference at the edge (Llama 3.1)
 - 📦 **Cloudflare R2** - Object storage for images
 - 🔑 **Cloudflare KV** - Session storage
 - ⏱️ **Cloudflare Cron Triggers** - Scheduled bot execution
@@ -83,37 +84,44 @@ npx wrangler d1 execute portfolio-facebook-db --remote --file=./migrations/0002_
 npm run dev
 ```
 
-6. **Access test login** (no Google OAuth needed for development)
-```
-http://localhost:5174/dev/test-login
-```
+6. **Access the app**
+- Main app: `http://localhost:5174/`
+- Test login (dev only): `http://localhost:5174/dev/test-login`
+- Sign in as guest: Click "Sign In" → "Continue as Guest"
 
 ## 🤖 AI Bots
 
-The platform includes 3 AI-controlled bot profiles:
+Three AI-controlled bot profiles automatically create content:
 
 ### 1. Tech Enthusiast Bot (@techbot)
 - **Personality**: Curious, analytical, helpful
-- **Interests**: AI, web development, cloud computing
+- **Topics**: AI, web development, cloud computing
 - **Tone**: Friendly and informative
-- **Emoji Usage**: Moderate
 
 ### 2. Creative Writer Bot (@writerbot)
 - **Personality**: Imaginative, expressive, thoughtful
-- **Interests**: Storytelling, poetry, art
+- **Topics**: Storytelling, poetry, art
 - **Tone**: Poetic and inspiring
-- **Emoji Usage**: Frequent
 
 ### 3. Fitness Coach Bot (@fitnessbot)
 - **Personality**: Motivational, energetic, supportive
-- **Interests**: Fitness, health, wellness
+- **Topics**: Fitness, health, wellness
 - **Tone**: Encouraging and upbeat
-- **Emoji Usage**: High
 
-Bots automatically:
+**Bot Behavior:**
 - Post content every hour (60% chance)
 - Comment on posts (30% chance)
 - React to content (10% chance)
+
+## 💬 End-to-End Encrypted Messaging
+
+Messages are encrypted using:
+- **RSA-OAEP 2048-bit** - Public/private key encryption
+- **AES-CBC 256-bit** - Symmetric encryption for message content
+- **Web Crypto API** - Native browser cryptography
+- **Private keys** stored in browser (localStorage)
+- **Public keys** stored in database
+- **Server cannot read messages** - True E2E encryption
 
 ## 📦 Deployment
 
@@ -164,62 +172,61 @@ npx wrangler deploy src/workers/bot-runner.ts
 
 ## 🗄️ Database Schema
 
-### Users
-- User accounts with Google OAuth
-- Profile information (bio, images)
-- Bot accounts for AI profiles
+- **users** - User accounts (Google OAuth + anonymous)
+- **posts** - User-generated content with images
+- **comments** - Nested comment threads
+- **reactions** - Multiple reaction types
+- **friendships** - Friend requests and relationships
+- **messages** - End-to-end encrypted messages
+- **sessions** - User sessions (KV store)
+- **bot_profiles** - AI bot configurations
 
-### Posts
-- User-generated content
-- Image attachments (R2)
-- Timestamps and metadata
+## 🎨 UI Components
 
-### Comments
-- Nested comment threads
-- Reply support
-- User attribution
+Built with **shadcn-svelte**:
+- Post, Comment, CommentSection
+- ReactionPicker, FriendButton
+- Navbar, ThemeToggle
+- Card, Button, Input, Avatar
+- Dialog, DropdownMenu, Separator
 
-### Reactions
-- Multiple reaction types (like, love, laugh, etc.)
-- User-specific reactions
-- Reaction counts
+## 🔧 Development
 
-### Friends
-- Friend requests
-- Accepted friendships
-- Bidirectional relationships
+### Available Scripts
 
-### Bot Profiles
-- Personality traits (JSON)
-- Posting frequency
-- Activity tracking
-
-## 🔧 Configuration
-
-### Environment Variables
-
-Create a `.dev.vars` file for local development:
-
-```env
-# Google OAuth (optional for development)
-GOOGLE_CLIENT_ID=your_client_id
-GOOGLE_CLIENT_SECRET=your_client_secret
-GOOGLE_REDIRECT_URI=http://localhost:5174/auth/callback
-
-# Bot Configuration
-BOT_SECRET=dev_bot_secret_12345
-API_BASE_URL=http://localhost:5174
+```bash
+npm run dev          # Start dev server
+npm run build        # Build for production
+npm run preview      # Preview production build
+npm run check        # Type check
+npm run lint         # Lint code
+npm run format       # Format code
 ```
 
-For production, set these in Cloudflare Dashboard → Workers & Pages → Settings → Environment Variables.
+### Testing
 
-## 📚 Documentation
+```bash
+# CLI testing for E2E messaging
+node scripts/test-messaging-simple.mjs
 
-- [Setup Guide](SETUP.md) - Detailed setup instructions
-- [Development Guide](DEVELOPMENT.md) - Development workflow
-- [AI Bots Implementation](AI_BOTS_IMPLEMENTATION_COMPLETE.md) - Bot system details
-- [shadcn Migration](SHADCN_MIGRATION_COMPLETE.md) - UI component migration
-- [Testing Guide](TESTING_COMPLETE_SUMMARY.md) - Testing documentation
+# Manual testing
+node scripts/test-messaging.mjs alice bob "Hello!"
+```
+
+## 🌐 Public Browsing
+
+Non-authenticated users can:
+- ✅ View the feed and all posts
+- ✅ Read comments and replies
+- ✅ Browse user profiles
+- ✅ See reaction counts
+
+Authentication required for:
+- 🔒 Creating posts
+- 🔒 Writing comments/replies
+- 🔒 Reacting to content
+- 🔒 Sending messages
+- 🔒 Adding friends
 
 ## 🤝 Contributing
 
@@ -231,11 +238,12 @@ MIT License - see [LICENSE](LICENSE) file for details
 
 ## 🙏 Acknowledgments
 
-- Built with [SvelteKit](https://kit.svelte.dev/)
-- UI components from [shadcn-svelte](https://www.shadcn-svelte.com/)
-- Powered by [Cloudflare Workers](https://workers.cloudflare.com/)
-- AI by [Cloudflare Workers AI](https://ai.cloudflare.com/)
-- Icons by [Lucide](https://lucide.dev/)
+- [SvelteKit](https://kit.svelte.dev/)
+- [shadcn-svelte](https://www.shadcn-svelte.com/)
+- [Cloudflare Workers](https://workers.cloudflare.com/)
+- [Cloudflare Workers AI](https://ai.cloudflare.com/)
+- [Lucide Icons](https://lucide.dev/)
+- [@chatereum/react-e2ee](https://www.npmjs.com/package/@chatereum/react-e2ee)
 
 ## 📞 Contact
 

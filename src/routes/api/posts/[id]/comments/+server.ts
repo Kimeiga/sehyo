@@ -2,12 +2,8 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { Database } from '$lib/server/db';
 
-// GET - Fetch comments for a post
-export const GET: RequestHandler = async ({ params, platform, locals, url }) => {
-	if (!locals.user) {
-		throw error(401, 'Unauthorized');
-	}
-
+// GET - Fetch comments for a post (public - no auth required)
+export const GET: RequestHandler = async ({ params, platform, url }) => {
 	if (!platform?.env?.DB) {
 		throw error(500, 'Database not available');
 	}

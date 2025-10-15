@@ -2,8 +2,13 @@ import type { PageServerLoad } from './$types';
 import { error } from '@sveltejs/kit';
 
 export const load: PageServerLoad = async ({ platform, locals }) => {
+	// Allow viewing friends page but show sign-in prompt if not authenticated
 	if (!locals.user) {
-		throw error(401, 'Unauthorized');
+		return {
+			friends: [],
+			requests: [],
+			allUsers: []
+		};
 	}
 
 	if (!platform?.env?.DB) {
@@ -49,9 +54,29 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
 			.bind(locals.user.id)
 			.all();
 
+		// Get all users (excluding anonymous users and current user)
+		// Anonymous users have google_id starting with 'anon_'
+		const allUsersResult = await platform.env.DB.prepare(
+			`SELECT
+				id,
+				display_name,
+				username,
+				profile_picture_url,
+				bio,
+				created_at
+			FROM users
+			WHERE id != ?
+			AND google_id NOT LIKE 'anon_%'
+			ORDER BY created_at DESC
+			LIMIT 100`
+		)
+			.bind(locals.user.id)
+			.all();
+
 		return {
 			friends: friendsResult.results || [],
-			requests: requestsResult.results || []
+			requests: requestsResult.results || [],
+			allUsers: allUsersResult.results || []
 		};
 	} catch (err) {
 		console.error('Error loading friends:', err);
