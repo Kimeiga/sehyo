@@ -22,8 +22,9 @@ export function createAuth(db: D1Database, env: {
 		dialect: new D1Dialect({ database: db })
 	});
 
-	return betterAuth({
-		database: kysely,
+	try {
+		return betterAuth({
+			database: kysely,
 
 		// Base URL for callbacks
 		baseURL: env.GOOGLE_REDIRECT_URI?.replace('/api/auth/callback/google', '') || 'https://fb-portfolio-1ae.pages.dev',
@@ -91,6 +92,10 @@ export function createAuth(db: D1Database, env: {
 			}
 		}
 	});
+	} catch (error) {
+		console.error('Error creating Better Auth instance:', error);
+		throw error;
+	}
 }
 
 // Type for the auth instance

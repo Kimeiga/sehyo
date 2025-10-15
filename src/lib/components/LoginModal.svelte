@@ -27,16 +27,16 @@
 			});
 
 			if (response.ok) {
-				closeModal();
-				window.location.reload();
+				// Redirect to home page without modal query parameter
+				window.location.href = '/';
 			} else {
 				console.error('Anonymous login failed');
 				alert('Failed to sign in anonymously. Please try again.');
+				loading = false;
 			}
 		} catch (error) {
 			console.error('Anonymous login error:', error);
 			alert('Failed to sign in anonymously. Please try again.');
-		} finally {
 			loading = false;
 		}
 	}
