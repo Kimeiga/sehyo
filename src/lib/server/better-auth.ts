@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth';
+import { anonymous } from 'better-auth/plugins';
 import { Kysely } from 'kysely';
 import { D1Dialect } from 'kysely-d1';
 import type { D1Database } from '@cloudflare/workers-types';
@@ -90,7 +91,12 @@ export function createAuth(db: D1Database, env: {
 			crossSubDomainCookies: {
 				enabled: false
 			}
-		}
+		},
+
+		// Plugins
+		plugins: [
+			anonymous()
+		]
 	});
 	} catch (error) {
 		console.error('Error creating Better Auth instance:', error);

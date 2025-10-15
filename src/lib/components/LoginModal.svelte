@@ -5,6 +5,7 @@
 	import { Dialog, DialogContent } from '$lib/components/ui/dialog';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
+	import { authClient } from '$lib/auth-client';
 
 	let { open = false }: { open?: boolean } = $props();
 
@@ -22,18 +23,11 @@
 	async function handleAnonymousLogin() {
 		loading = true;
 		try {
-			const response = await fetch('/api/auth/anonymous', {
-				method: 'POST'
-			});
+			// Use Better Auth's built-in anonymous sign-in
+			await authClient.signIn.anonymous();
 
-			if (response.ok) {
-				// Redirect to home page without modal query parameter
-				window.location.href = '/';
-			} else {
-				console.error('Anonymous login failed');
-				alert('Failed to sign in anonymously. Please try again.');
-				loading = false;
-			}
+			// Redirect to home page without modal query parameter
+			window.location.href = '/';
 		} catch (error) {
 			console.error('Anonymous login error:', error);
 			alert('Failed to sign in anonymously. Please try again.');
