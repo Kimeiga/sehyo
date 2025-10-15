@@ -2,9 +2,25 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
 	import { Separator } from '$lib/components/ui/separator';
-	import { enhance } from '$app/forms';
+	import { authClient } from '$lib/auth-client';
 
 	let loading = $state(false);
+
+	async function handleAnonymousLogin() {
+		console.log('handleAnonymousLogin called');
+		loading = true;
+		try {
+			console.log('Calling authClient.signIn.anonymous()');
+			const result = await authClient.signIn.anonymous();
+			console.log('Anonymous login result:', result);
+			// Redirect to home page
+			window.location.href = '/';
+		} catch (error) {
+			console.error('Anonymous login error:', error);
+			alert('Failed to sign in anonymously. Please try again.');
+			loading = false;
+		}
+	}
 </script>
 
 <div class="min-h-screen flex items-center justify-center bg-background px-4">
@@ -54,21 +70,7 @@
 			</div>
 
 			<!-- Anonymous Sign In -->
-			<form
-				action="/api/auth/sign-in/anonymous"
-				method="POST"
-				use:enhance={() => {
-					console.log('Form submit with enhance');
-					loading = true;
-					return async ({ result }) => {
-						console.log('Form result:', result);
-						if (result.type === 'redirect') {
-							window.location.href = result.location;
-						}
-						loading = false;
-					};
-				}}
-			>
+			<form action="/api/auth/sign-in/anonymous" method="POST">
 				<button
 					type="submit"
 					class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground h-10 px-6 w-full"
