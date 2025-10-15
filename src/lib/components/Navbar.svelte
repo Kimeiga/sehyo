@@ -11,6 +11,7 @@
 		DropdownMenuTrigger
 	} from '$lib/components/ui/dropdown-menu';
 	import { Home, Users, MessageCircle } from 'lucide-svelte';
+	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
 
 	interface Props {
 		user: User | null;
@@ -70,6 +71,9 @@
 							<MessageCircle class="size-5" />
 						</Button>
 					</a>
+
+					<!-- Theme Toggle -->
+					<ThemeToggle />
 
 					<!-- User Menu -->
 					<DropdownMenu>

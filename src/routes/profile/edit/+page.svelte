@@ -44,10 +44,10 @@
 </script>
 
 <div class="container mx-auto px-4 py-8 max-w-2xl">
-	<div class="bg-white rounded-lg shadow p-6">
+	<div class="bg-card rounded-lg shadow p-6 border border-border">
 		<div class="flex items-center justify-between mb-6">
-			<h1 class="text-3xl font-bold">Edit Profile</h1>
-			<a href="/profile/{data.user?.id}" class="text-blue-600 hover:underline">
+			<h1 class="text-3xl font-bold text-foreground">Edit Profile</h1>
+			<a href="/profile/{data.user?.id}" class="text-primary hover:underline">
 				View Profile
 			</a>
 		</div>
@@ -92,13 +92,13 @@
 					name="cover_image"
 					accept="image/jpeg,image/png,image/gif,image/webp"
 					onchange={handleCoverImageChange}
-					class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+					class="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
 					disabled={uploadingCover}
 				/>
 				<button
 					type="submit"
 					disabled={uploadingCover}
-					class="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300"
+					class="mt-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50"
 				>
 					{uploadingCover ? 'Uploading...' : 'Upload Cover Image'}
 				</button>
@@ -127,8 +127,8 @@
 					{#if profilePicturePreview}
 						<img src={profilePicturePreview} alt="Profile" class="w-24 h-24 rounded-full" />
 					{:else}
-						<div class="w-24 h-24 rounded-full bg-gray-300 flex items-center justify-center">
-							<span class="text-3xl text-gray-600 font-bold">
+						<div class="w-24 h-24 rounded-full bg-muted flex items-center justify-center">
+							<span class="text-3xl text-muted-foreground font-bold">
 								{data.user?.display_name?.charAt(0).toUpperCase() || '?'}
 							</span>
 						</div>
@@ -139,7 +139,7 @@
 							name="profile_picture"
 							accept="image/jpeg,image/png,image/gif,image/webp"
 							onchange={handleProfilePictureChange}
-							class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+							class="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
 							disabled={uploadingProfilePic}
 						/>
 					</div>
@@ -147,7 +147,7 @@
 				<button
 					type="submit"
 					disabled={uploadingProfilePic}
-					class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300"
+					class="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50"
 				>
 					{uploadingProfilePic ? 'Uploading...' : 'Upload Profile Picture'}
 				</button>
@@ -199,7 +199,7 @@
 						class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
 						disabled={isSubmitting}
 					/>
-					<p class="text-xs text-gray-500 mt-1">Letters, numbers, underscores, and hyphens only</p>
+					<p class="text-xs text-muted-foreground mt-1">Letters, numbers, underscores, and hyphens only</p>
 				</div>
 
 				<div>
@@ -214,7 +214,7 @@
 						class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
 						disabled={isSubmitting}
 					></textarea>
-					<p class="text-xs text-gray-500 mt-1">{bio.length}/500 characters</p>
+					<p class="text-xs text-muted-foreground mt-1">{bio.length}/500 characters</p>
 				</div>
 
 				<div>
@@ -250,13 +250,13 @@
 				<button
 					type="submit"
 					disabled={isSubmitting}
-					class="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
+					class="px-6 py-2 bg-primary text-primary-foreground rounded-lg font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition"
 				>
 					{isSubmitting ? 'Saving...' : 'Save Changes'}
 				</button>
 				<a
 					href="/profile/{data.user?.id}"
-					class="px-6 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg font-semibold transition"
+					class="px-6 py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-lg font-semibold transition"
 				>
 					Cancel
 				</a>

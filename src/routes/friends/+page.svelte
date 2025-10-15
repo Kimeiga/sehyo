@@ -168,20 +168,20 @@
 	</div>
 
 	<!-- Tabs -->
-	<div class="flex gap-4 mb-6 border-b">
+	<div class="flex gap-4 mb-6 border-b border-border">
 		<button
 			onclick={() => (activeTab = 'friends')}
 			class="px-4 py-2 font-semibold {activeTab === 'friends'
-				? 'text-blue-600 border-b-2 border-blue-600'
-				: 'text-gray-600 hover:text-gray-800'}"
+				? 'text-primary border-b-2 border-primary'
+				: 'text-muted-foreground hover:text-foreground'}"
 		>
 			Friends ({data.friends.length})
 		</button>
 		<button
 			onclick={() => (activeTab = 'requests')}
 			class="px-4 py-2 font-semibold {activeTab === 'requests'
-				? 'text-blue-600 border-b-2 border-blue-600'
-				: 'text-gray-600 hover:text-gray-800'}"
+				? 'text-primary border-b-2 border-primary'
+				: 'text-muted-foreground hover:text-foreground'}"
 		>
 			Requests ({data.requests.length})
 		</button>
@@ -189,16 +189,16 @@
 
 	<!-- Friends List -->
 	{#if activeTab === 'friends'}
-		<div class="bg-white rounded-lg shadow">
+		<div class="bg-card rounded-lg shadow border border-border">
 			{#if data.friends.length === 0}
-				<div class="p-8 text-center text-gray-500">
+				<div class="p-8 text-center text-muted-foreground">
 					<p class="text-lg mb-2">No friends yet</p>
 					<p class="text-sm">Search for people to add as friends!</p>
 				</div>
 			{:else}
-				<div class="divide-y">
+				<div class="divide-y divide-border">
 					{#each data.friends as friend}
-						<div class="p-4 flex items-center justify-between hover:bg-gray-50">
+						<div class="p-4 flex items-center justify-between hover:bg-muted/50">
 							<a href="/profile/{friend.friend_id}" class="flex items-center gap-3 flex-1">
 								{#if friend.profile_picture_url}
 									<img
@@ -207,25 +207,25 @@
 										class="w-12 h-12 rounded-full"
 									/>
 								{:else}
-									<div class="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center">
-										<span class="text-gray-600 font-semibold">
+									<div class="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+										<span class="text-muted-foreground font-semibold">
 											{friend.display_name?.charAt(0).toUpperCase() || '?'}
 										</span>
 									</div>
 								{/if}
 								<div>
-									<p class="font-semibold">{friend.display_name}</p>
+									<p class="font-semibold text-foreground">{friend.display_name}</p>
 									{#if friend.username}
-										<p class="text-sm text-gray-500">@{friend.username}</p>
+										<p class="text-sm text-muted-foreground">@{friend.username}</p>
 									{/if}
 									{#if friend.bio}
-										<p class="text-sm text-gray-600 line-clamp-1">{friend.bio}</p>
+										<p class="text-sm text-muted-foreground line-clamp-1">{friend.bio}</p>
 									{/if}
 								</div>
 							</a>
 							<button
 								onclick={() => removeFriend(friend.id)}
-								class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm font-semibold"
+								class="px-4 py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-lg text-sm font-semibold"
 							>
 								Unfriend
 							</button>
@@ -238,16 +238,16 @@
 
 	<!-- Friend Requests -->
 	{#if activeTab === 'requests'}
-		<div class="bg-white rounded-lg shadow">
+		<div class="bg-card rounded-lg shadow border border-border">
 			{#if data.requests.length === 0}
-				<div class="p-8 text-center text-gray-500">
+				<div class="p-8 text-center text-muted-foreground">
 					<p class="text-lg mb-2">No pending requests</p>
 					<p class="text-sm">You'll see friend requests here</p>
 				</div>
 			{:else}
-				<div class="divide-y">
+				<div class="divide-y divide-border">
 					{#each data.requests as request}
-						<div class="p-4 flex items-center justify-between hover:bg-gray-50">
+						<div class="p-4 flex items-center justify-between hover:bg-muted/50">
 							<a href="/profile/{request.requester_id}" class="flex items-center gap-3 flex-1">
 								{#if request.profile_picture_url}
 									<img
@@ -256,32 +256,32 @@
 										class="w-12 h-12 rounded-full"
 									/>
 								{:else}
-									<div class="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center">
-										<span class="text-gray-600 font-semibold">
+									<div class="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+										<span class="text-muted-foreground font-semibold">
 											{request.display_name?.charAt(0).toUpperCase() || '?'}
 										</span>
 									</div>
 								{/if}
 								<div>
-									<p class="font-semibold">{request.display_name}</p>
+									<p class="font-semibold text-foreground">{request.display_name}</p>
 									{#if request.username}
-										<p class="text-sm text-gray-500">@{request.username}</p>
+										<p class="text-sm text-muted-foreground">@{request.username}</p>
 									{/if}
 									{#if request.bio}
-										<p class="text-sm text-gray-600 line-clamp-1">{request.bio}</p>
+										<p class="text-sm text-muted-foreground line-clamp-1">{request.bio}</p>
 									{/if}
 								</div>
 							</a>
 							<div class="flex gap-2">
 								<button
 									onclick={() => acceptRequest(request.id)}
-									class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold"
+									class="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 text-sm font-semibold"
 								>
 									Accept
 								</button>
 								<button
 									onclick={() => rejectRequest(request.id)}
-									class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm font-semibold"
+									class="px-4 py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-lg text-sm font-semibold"
 								>
 									Reject
 								</button>

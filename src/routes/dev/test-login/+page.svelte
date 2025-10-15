@@ -49,7 +49,7 @@
 </script>
 
 {#if !dev}
-	<div class="min-h-screen flex items-center justify-center bg-gray-50">
+	<div class="min-h-screen flex items-center justify-center bg-background p-4">
 		<Card class="w-full max-w-md">
 			<CardHeader>
 				<CardTitle>Not Available</CardTitle>
@@ -58,7 +58,7 @@
 		</Card>
 	</div>
 {:else}
-	<div class="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+	<div class="min-h-screen flex items-center justify-center bg-background p-4">
 		<Card class="w-full max-w-md">
 			<CardHeader>
 				<CardTitle>🧪 Test Login</CardTitle>
@@ -83,7 +83,7 @@
 					</div>
 
 					{#if error}
-						<div class="text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+						<div class="text-sm text-destructive bg-destructive/10 p-3 rounded-lg">
 							{error}
 						</div>
 					{/if}
@@ -95,10 +95,10 @@
 
 				<div class="relative">
 					<div class="absolute inset-0 flex items-center">
-						<span class="w-full border-t"></span>
+						<span class="w-full border-t border-border"></span>
 					</div>
 					<div class="relative flex justify-center text-xs uppercase">
-						<span class="bg-white px-2 text-gray-500">Quick Login</span>
+						<span class="bg-card px-2 text-muted-foreground">Quick Login</span>
 					</div>
 				</div>
 
@@ -115,7 +115,7 @@
 					{/each}
 				</div>
 
-				<div class="text-xs text-gray-500 text-center pt-4 border-t">
+				<div class="text-xs text-muted-foreground text-center pt-4 border-t border-border">
 					<p>💡 This creates test users without Google OAuth</p>
 					<p class="mt-1">Users are stored in the database like real users</p>
 				</div>
