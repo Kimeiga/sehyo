@@ -70,9 +70,11 @@
 				<p class="text-muted-foreground mb-4">
 					Sign in to create posts and interact with the community
 				</p>
-				<Button onclick={() => window.location.href = '/auth/login'} class="bg-primary text-primary-foreground">
-					Sign In
-				</Button>
+				<a href="?modal=login">
+					<Button class="bg-primary text-primary-foreground">
+						Sign In
+					</Button>
+				</a>
 			</div>
 		{/if}
 

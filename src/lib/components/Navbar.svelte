@@ -120,7 +120,7 @@
 					</DropdownMenu>
 				{:else}
 					<!-- Login Button for non-authenticated users -->
-					<a href="/auth/login">
+					<a href="?modal=login">
 						<Button>Sign in</Button>
 					</a>
 				{/if}
