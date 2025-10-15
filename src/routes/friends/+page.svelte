@@ -114,8 +114,8 @@
 	<h1 class="text-3xl font-bold mb-6">Friends</h1>
 
 	<!-- Search Section -->
-	<div class="bg-white rounded-lg shadow p-6 mb-6">
-		<h2 class="text-xl font-semibold mb-4">Find Friends</h2>
+	<div class="bg-card rounded-lg shadow p-6 mb-6 border border-border">
+		<h2 class="text-xl font-semibold mb-4 text-foreground">Find Friends</h2>
 		<input
 			type="text"
 			bind:value={searchQuery}
@@ -124,11 +124,11 @@
 		/>
 
 		{#if isSearching}
-			<p class="text-gray-500 mt-4">Searching...</p>
+			<p class="text-muted-foreground mt-4">Searching...</p>
 		{:else if searchResults.length > 0}
 			<div class="mt-4 space-y-3">
 				{#each searchResults as user}
-					<div class="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg">
+					<div class="flex items-center justify-between p-3 hover:bg-muted/50 rounded-lg">
 						<a href="/profile/{user.id}" class="flex items-center gap-3 flex-1">
 							{#if user.profile_picture_url}
 								<img
@@ -137,25 +137,25 @@
 									class="w-12 h-12 rounded-full"
 								/>
 							{:else}
-								<div class="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center">
-									<span class="text-gray-600 font-semibold">
+								<div class="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+									<span class="text-muted-foreground font-semibold">
 										{user.display_name?.charAt(0).toUpperCase() || '?'}
 									</span>
 								</div>
 							{/if}
 							<div>
-								<p class="font-semibold">{user.display_name}</p>
+								<p class="font-semibold text-foreground">{user.display_name}</p>
 								{#if user.username}
-									<p class="text-sm text-gray-500">@{user.username}</p>
+									<p class="text-sm text-muted-foreground">@{user.username}</p>
 								{/if}
 								{#if user.bio}
-									<p class="text-sm text-gray-600 line-clamp-1">{user.bio}</p>
+									<p class="text-sm text-muted-foreground line-clamp-1">{user.bio}</p>
 								{/if}
 							</div>
 						</a>
 						<button
 							onclick={() => sendFriendRequest(user.id)}
-							class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold"
+							class="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 text-sm font-semibold"
 						>
 							Add Friend
 						</button>
@@ -163,7 +163,7 @@
 				{/each}
 			</div>
 		{:else if searchQuery.trim().length > 0}
-			<p class="text-gray-500 mt-4">No users found</p>
+			<p class="text-muted-foreground mt-4">No users found</p>
 		{/if}
 	</div>
 

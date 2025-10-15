@@ -15,11 +15,11 @@
 
 <div class="container mx-auto px-4 py-8 max-w-4xl">
 	<!-- Cover Image -->
-	<div class="bg-white rounded-lg shadow overflow-hidden">
+	<div class="bg-card rounded-lg shadow overflow-hidden border border-border">
 		{#if data.profileUser.cover_image_url}
 			<div class="h-64 bg-cover bg-center" style="background-image: url('{data.profileUser.cover_image_url}')"></div>
 		{:else}
-			<div class="h-64 bg-gradient-to-r from-blue-400 to-purple-500"></div>
+			<div class="h-64 bg-gradient-to-r from-primary/20 to-primary/40"></div>
 		{/if}
 
 		<!-- Profile Info -->
@@ -34,18 +34,18 @@
 					/>
 				{:else}
 					<div
-						class="w-32 h-32 rounded-full border-4 border-white shadow-lg bg-gray-300 flex items-center justify-center"
+						class="w-32 h-32 rounded-full border-4 border-card shadow-lg bg-muted flex items-center justify-center"
 					>
-						<span class="text-4xl text-gray-600 font-bold">
+						<span class="text-4xl text-muted-foreground font-bold">
 							{data.profileUser.display_name?.charAt(0).toUpperCase() || '?'}
 						</span>
 					</div>
 				{/if}
 
 				<div class="flex-1 mt-16">
-					<h1 class="text-3xl font-bold">{data.profileUser.display_name}</h1>
+					<h1 class="text-3xl font-bold text-foreground">{data.profileUser.display_name}</h1>
 					{#if data.profileUser.username}
-						<p class="text-gray-600">@{data.profileUser.username}</p>
+						<p class="text-muted-foreground">@{data.profileUser.username}</p>
 					{/if}
 				</div>
 
@@ -53,7 +53,7 @@
 					{#if data.isOwnProfile}
 						<a
 							href="/profile/edit"
-							class="px-6 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg font-semibold transition inline-block"
+							class="px-6 py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-lg font-semibold transition inline-block"
 						>
 							Edit Profile
 						</a>
@@ -65,10 +65,10 @@
 
 			<!-- Bio and Info -->
 			{#if data.profileUser.bio}
-				<p class="text-gray-700 mb-4">{data.profileUser.bio}</p>
+				<p class="text-foreground mb-4">{data.profileUser.bio}</p>
 			{/if}
 
-			<div class="flex flex-wrap gap-4 text-sm text-gray-600">
+			<div class="flex flex-wrap gap-4 text-sm text-muted-foreground">
 				{#if data.profileUser.location}
 					<div class="flex items-center gap-1">
 						<svg
@@ -131,8 +131,8 @@
 		<h2 class="text-2xl font-bold mb-4">Posts</h2>
 
 		{#if data.posts.length === 0}
-			<div class="bg-white rounded-lg shadow p-8 text-center">
-				<p class="text-gray-600">
+			<div class="bg-card rounded-lg shadow p-8 text-center border border-border">
+				<p class="text-muted-foreground">
 					{data.isOwnProfile ? "You haven't posted anything yet" : 'No posts yet'}
 				</p>
 			</div>

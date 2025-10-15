@@ -11,7 +11,7 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-<div class="min-h-screen bg-gray-50">
+<div class="min-h-screen bg-background text-foreground">
 	<Navbar user={data.user} />
 	{@render children?.()}
 </div>

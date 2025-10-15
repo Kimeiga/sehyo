@@ -30,15 +30,15 @@
 	}
 </script>
 
-<nav class="bg-white shadow-md sticky top-0 z-50">
+<nav class="bg-card border-b border-border shadow-md sticky top-0 z-50">
 	<div class="container mx-auto px-4">
 		<div class="flex items-center justify-between h-16">
 			<!-- Logo -->
 			<a href="/" class="flex items-center gap-2">
-				<div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-					<span class="text-white font-bold text-xl">f</span>
+				<div class="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
+					<span class="text-primary-foreground font-bold text-xl">f</span>
 				</div>
-				<span class="font-bold text-xl hidden sm:block">Portfolio Facebook</span>
+				<span class="font-bold text-xl hidden sm:block text-foreground">Portfolio Facebook</span>
 			</a>
 
 			{#if user}
