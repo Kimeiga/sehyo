@@ -21,12 +21,17 @@ export const load: PageServerLoad = async ({ params, platform, locals }) => {
 	// Get user's posts
 	const posts = await db.getUserPosts(params.id, 20, 0);
 
-	// Get reaction counts for each post
+	// Get reaction counts for each post and transform user data
 	const postsWithReactions = await Promise.all(
-		posts.map(async (post) => {
+		posts.map(async (post: any) => {
 			const reactionCounts = await db.getReactionCounts('post', post.id);
 			return {
 				...post,
+				user: {
+					id: post.user_id,
+					display_name: post.display_name,
+					profile_picture_url: post.profile_picture_url
+				},
 				reaction_counts: reactionCounts
 			};
 		})

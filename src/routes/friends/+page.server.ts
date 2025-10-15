@@ -11,9 +11,9 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
 	}
 
 	try {
-		// Get friends
+		// Get friends (accepted friendships)
 		const friendsResult = await platform.env.DB.prepare(
-			`SELECT f.*, 
+			`SELECT f.*,
 				u.id as friend_id,
 				u.display_name,
 				u.username,
@@ -21,12 +21,12 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
 				u.bio
 			FROM friendships f
 			JOIN users u ON (
-				CASE 
-					WHEN f.user_id = ? THEN u.id = f.friend_id
-					ELSE u.id = f.user_id
+				CASE
+					WHEN f.requester_id = ? THEN u.id = f.addressee_id
+					ELSE u.id = f.requester_id
 				END
 			)
-			WHERE (f.user_id = ? OR f.friend_id = ?) 
+			WHERE (f.requester_id = ? OR f.addressee_id = ?)
 			AND f.status = 'accepted'
 			ORDER BY f.created_at DESC`
 		)
@@ -35,15 +35,15 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
 
 		// Get pending friend requests (received)
 		const requestsResult = await platform.env.DB.prepare(
-			`SELECT f.*, 
+			`SELECT f.*,
 				u.id as requester_id,
 				u.display_name,
 				u.username,
 				u.profile_picture_url,
 				u.bio
 			FROM friendships f
-			JOIN users u ON u.id = f.user_id
-			WHERE f.friend_id = ? AND f.status = 'pending'
+			JOIN users u ON u.id = f.requester_id
+			WHERE f.addressee_id = ? AND f.status = 'pending'
 			ORDER BY f.created_at DESC`
 		)
 			.bind(locals.user.id)
