@@ -1,8 +1,9 @@
 import { betterAuth } from 'better-auth';
 import { anonymous } from 'better-auth/plugins';
-import { Kysely } from 'kysely';
-import { D1Dialect } from 'kysely-d1';
+import { drizzle } from 'drizzle-orm/d1';
+import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import type { D1Database } from '@cloudflare/workers-types';
+import * as schema from './db/schema';
 
 export function createAuth(db: D1Database, env: {
 	GOOGLE_CLIENT_ID: string;
@@ -18,14 +19,14 @@ export function createAuth(db: D1Database, env: {
 		redirectUri: env.GOOGLE_REDIRECT_URI
 	});
 
-	// Create Kysely instance with D1
-	const kysely = new Kysely({
-		dialect: new D1Dialect({ database: db })
-	});
+	// Create Drizzle instance with D1
+	const drizzleDb = drizzle(db, { schema });
 
 	try {
 		return betterAuth({
-			database: kysely,
+			database: drizzleAdapter(drizzleDb, {
+				provider: 'sqlite', // D1 is SQLite-compatible
+			}),
 
 		// Base URL for callbacks
 		baseURL: env.GOOGLE_REDIRECT_URI?.replace('/api/auth/callback/google', '') || 'https://fb-portfolio-1ae.pages.dev',
