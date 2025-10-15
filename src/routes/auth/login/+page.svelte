@@ -9,14 +9,19 @@
 	let guestButtonRef: HTMLButtonElement;
 
 	onMount(() => {
+		console.log('onMount called, guestButtonRef:', guestButtonRef);
 		// Attach the click handler after the component is mounted
 		if (guestButtonRef) {
+			console.log('Attaching click handler to guest button');
 			guestButtonRef.addEventListener('click', async (e) => {
+				console.log('Guest button clicked!');
 				e.preventDefault();
 				e.stopPropagation();
 				loading = true;
 				try {
+					console.log('Calling authClient.signIn.anonymous()');
 					const result = await authClient.signIn.anonymous();
+					console.log('Anonymous login result:', result);
 					window.location.href = '/';
 				} catch (error) {
 					console.error('Anonymous login error:', error);
@@ -24,6 +29,8 @@
 					loading = false;
 				}
 			});
+		} else {
+			console.error('guestButtonRef is null!');
 		}
 	});
 </script>
