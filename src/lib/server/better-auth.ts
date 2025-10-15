@@ -8,6 +8,15 @@ export function createAuth(db: D1Database, env: {
 	GOOGLE_CLIENT_SECRET: string;
 	GOOGLE_REDIRECT_URI: string;
 }) {
+	// Log environment variables for debugging (remove in production)
+	console.log('Better Auth Config:', {
+		hasClientId: !!env.GOOGLE_CLIENT_ID,
+		hasClientSecret: !!env.GOOGLE_CLIENT_SECRET,
+		hasRedirectUri: !!env.GOOGLE_REDIRECT_URI,
+		clientIdPrefix: env.GOOGLE_CLIENT_ID?.substring(0, 20),
+		redirectUri: env.GOOGLE_REDIRECT_URI
+	});
+
 	// Create Kysely instance with D1
 	const kysely = new Kysely({
 		dialect: new D1Dialect({ database: db })
@@ -15,9 +24,9 @@ export function createAuth(db: D1Database, env: {
 
 	return betterAuth({
 		database: kysely,
-		
+
 		// Base URL for callbacks
-		baseURL: env.GOOGLE_REDIRECT_URI.replace('/auth/callback', ''),
+		baseURL: env.GOOGLE_REDIRECT_URI?.replace('/api/auth/callback/google', '') || 'https://fb-portfolio-1ae.pages.dev',
 		
 		// Email and password authentication
 		emailAndPassword: {
