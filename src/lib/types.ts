@@ -15,7 +15,6 @@ export interface User {
 	cover_image_url: string | null;
 	public_key: string | null; // For E2E encrypted messaging
 	isAnonymous: boolean | null;
-	google_id: string | null; // DEPRECATED: Legacy field, will be removed
 }
 
 // Post types
