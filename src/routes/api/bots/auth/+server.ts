@@ -34,9 +34,9 @@ export const POST: RequestHandler = async ({ request, platform, cookies }) => {
 
 		// Get bot profile
 		const botProfile = await db.prepare(
-			`SELECT bp.*, u.id as user_id, u.username, u.display_name
+			`SELECT bp.*, u.id as user_id, u.username, u.name as display_name
 			 FROM bot_profiles bp
-			 JOIN users u ON bp.user_id = u.id
+			 JOIN user u ON bp.user_id = u.id
 			 WHERE bp.id = ? AND bp.is_active = 1`
 		).bind(bot_id).first();
 

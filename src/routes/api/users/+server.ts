@@ -17,9 +17,9 @@ export const GET: RequestHandler = async ({ platform, locals, url }) => {
 
 		const users = await db
 			.prepare(
-				`SELECT id, username, display_name, profile_picture_url, bio, created_at
-				 FROM users
-				 ORDER BY created_at DESC
+				`SELECT id, username, name as display_name, image as profile_picture_url, bio, createdAt as created_at
+				 FROM user
+				 ORDER BY createdAt DESC
 				 LIMIT ? OFFSET ?`
 			)
 			.bind(limit, offset)

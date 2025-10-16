@@ -9,21 +9,21 @@ export class Database {
 		id: string;
 		google_id: string;
 		email: string;
-		display_name: string;
-		profile_picture_url?: string;
+		name: string;
+		image?: string;
 	}): Promise<User> {
 		const result = await this.db
 			.prepare(
-				`INSERT INTO users (id, google_id, email, display_name, profile_picture_url)
-				 VALUES (?, ?, ?, ?, ?)
+				`INSERT INTO user (id, google_id, email, name, image, createdAt, updatedAt, emailVerified)
+				 VALUES (?, ?, ?, ?, ?, unixepoch(), unixepoch(), 0)
 				 RETURNING *`
 			)
 			.bind(
 				data.id,
 				data.google_id,
 				data.email,
-				data.display_name,
-				data.profile_picture_url || null
+				data.name,
+				data.image || null
 			)
 			.first<User>();
 
@@ -32,19 +32,19 @@ export class Database {
 	}
 
 	async getUserById(id: string): Promise<User | null> {
-		return await this.db.prepare('SELECT * FROM users WHERE id = ?').bind(id).first<User>();
+		return await this.db.prepare('SELECT * FROM user WHERE id = ?').bind(id).first<User>();
 	}
 
 	async getUserByGoogleId(google_id: string): Promise<User | null> {
 		return await this.db
-			.prepare('SELECT * FROM users WHERE google_id = ?')
+			.prepare('SELECT * FROM user WHERE google_id = ?')
 			.bind(google_id)
 			.first<User>();
 	}
 
 	async getUserByUsername(username: string): Promise<User | null> {
 		return await this.db
-			.prepare('SELECT * FROM users WHERE username = ?')
+			.prepare('SELECT * FROM user WHERE username = ?')
 			.bind(username)
 			.first<User>();
 	}
@@ -69,7 +69,7 @@ export class Database {
 		values.push(id);
 		const result = await this.db
 			.prepare(
-				`UPDATE users SET ${fields.join(', ')}, updated_at = unixepoch()
+				`UPDATE user SET ${fields.join(', ')}, updatedAt = unixepoch()
 				 WHERE id = ?
 				 RETURNING *`
 			)
@@ -98,9 +98,9 @@ export class Database {
 	async getPostById(id: string): Promise<Post | null> {
 		return await this.db
 			.prepare(
-				`SELECT p.*, u.id as user_id, u.display_name, u.username, u.profile_picture_url
+				`SELECT p.*, u.id as user_id, u.name as display_name, u.username, u.image as profile_picture_url
 				 FROM posts p
-				 JOIN users u ON p.user_id = u.id
+				 JOIN user u ON p.user_id = u.id
 				 WHERE p.id = ?`
 			)
 			.bind(id)
@@ -110,9 +110,9 @@ export class Database {
 	async getFeedPosts(limit: number = 20, offset: number = 0): Promise<Post[]> {
 		const results = await this.db
 			.prepare(
-				`SELECT p.*, u.display_name, u.username, u.profile_picture_url
+				`SELECT p.*, u.name as display_name, u.username, u.image as profile_picture_url
 				 FROM posts p
-				 JOIN users u ON p.user_id = u.id
+				 JOIN user u ON p.user_id = u.id
 				 ORDER BY p.created_at DESC
 				 LIMIT ? OFFSET ?`
 			)
@@ -125,9 +125,9 @@ export class Database {
 	async getUserPosts(user_id: string, limit: number = 20, offset: number = 0): Promise<Post[]> {
 		const results = await this.db
 			.prepare(
-				`SELECT p.*, u.display_name, u.username, u.profile_picture_url
+				`SELECT p.*, u.name as display_name, u.username, u.image as profile_picture_url
 				 FROM posts p
-				 JOIN users u ON p.user_id = u.id
+				 JOIN user u ON p.user_id = u.id
 				 WHERE p.user_id = ?
 				 ORDER BY p.created_at DESC
 				 LIMIT ? OFFSET ?`
@@ -171,9 +171,9 @@ export class Database {
 	async getPostComments(post_id: string): Promise<Comment[]> {
 		const results = await this.db
 			.prepare(
-				`SELECT c.*, u.display_name, u.username, u.profile_picture_url
+				`SELECT c.*, u.name as display_name, u.username, u.image as profile_picture_url
 				 FROM comments c
-				 JOIN users u ON c.user_id = u.id
+				 JOIN user u ON c.user_id = u.id
 				 WHERE c.post_id = ? AND c.parent_comment_id IS NULL
 				 ORDER BY c.created_at ASC`
 			)
@@ -186,9 +186,9 @@ export class Database {
 	async getCommentReplies(comment_id: string): Promise<Comment[]> {
 		const results = await this.db
 			.prepare(
-				`SELECT c.*, u.display_name, u.username, u.profile_picture_url
+				`SELECT c.*, u.name as display_name, u.username, u.image as profile_picture_url
 				 FROM comments c
-				 JOIN users u ON c.user_id = u.id
+				 JOIN user u ON c.user_id = u.id
 				 WHERE c.parent_comment_id = ?
 				 ORDER BY c.created_at ASC`
 			)

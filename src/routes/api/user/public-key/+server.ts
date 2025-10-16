@@ -20,7 +20,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 
 		// Update user's public key
 		await db
-			.prepare(`UPDATE users SET public_key = ? WHERE id = ?`)
+			.prepare(`UPDATE user SET public_key = ?, updatedAt = unixepoch() WHERE id = ?`)
 			.bind(public_key, locals.user.id)
 			.run();
 

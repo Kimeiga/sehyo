@@ -26,7 +26,7 @@ export const POST: RequestHandler = async ({ request, platform, cookies }) => {
 	try {
 		// Check if test user exists
 		let user = await db
-			.prepare('SELECT * FROM users WHERE username = ?')
+			.prepare('SELECT * FROM user WHERE username = ?')
 			.bind(username)
 			.first();
 
@@ -39,14 +39,14 @@ export const POST: RequestHandler = async ({ request, platform, cookies }) => {
 
 			await db
 				.prepare(
-					`INSERT INTO users (id, google_id, email, username, display_name, created_at)
-					 VALUES (?, ?, ?, ?, ?, datetime('now'))`
+					`INSERT INTO user (id, google_id, email, username, name, createdAt, updatedAt, emailVerified)
+					 VALUES (?, ?, ?, ?, ?, unixepoch(), unixepoch(), 0)`
 				)
 				.bind(userId, googleId, email, username, displayName)
 				.run();
 
 			user = await db
-				.prepare('SELECT * FROM users WHERE id = ?')
+				.prepare('SELECT * FROM user WHERE id = ?')
 				.bind(userId)
 				.first();
 		}

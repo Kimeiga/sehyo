@@ -26,47 +26,6 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (session) {
 			event.locals.user = session.user;
 			event.locals.session = session.session;
-
-			// Sync Better Auth user to application users table
-			try {
-				const existingUser = await event.platform.env.DB
-					.prepare('SELECT id FROM users WHERE id = ?')
-					.bind(session.user.id)
-					.first();
-
-				if (!existingUser) {
-					// Create user in application users table
-					// For anonymous users, google_id is NULL
-					// For Google users, we need to extract the google_id from the account table
-					let googleId = null;
-
-					// Check if this is a Google user by looking in the account table
-					const account = await event.platform.env.DB
-						.prepare('SELECT accountId FROM account WHERE userId = ? AND providerId = ?')
-						.bind(session.user.id, 'google')
-						.first<{ accountId: string }>();
-
-					if (account) {
-						googleId = account.accountId;
-					}
-
-					await event.platform.env.DB
-						.prepare(`
-							INSERT INTO users (id, google_id, email, display_name, profile_picture_url)
-							VALUES (?, ?, ?, ?, ?)
-						`)
-						.bind(
-							session.user.id,
-							googleId, // NULL for anonymous users, Google ID for Google users
-							session.user.email,
-							session.user.name || 'Anonymous',
-							session.user.image || null
-						)
-						.run();
-				}
-			} catch (error) {
-				console.error('Error syncing user to users table:', error);
-			}
 		}
 	} catch (error) {
 		console.error('Error validating session:', error);

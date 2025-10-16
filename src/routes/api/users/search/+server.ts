@@ -22,25 +22,25 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
 		// Search by display name or username
 		const searchTerm = `%${query.trim()}%`;
 		const results = await platform.env.DB.prepare(
-			`SELECT 
+			`SELECT
 				id,
-				display_name,
+				name as display_name,
 				username,
-				profile_picture_url,
+				image as profile_picture_url,
 				bio,
-				created_at
-			FROM users
-			WHERE (display_name LIKE ? OR username LIKE ?)
+				createdAt as created_at
+			FROM user
+			WHERE (name LIKE ? OR username LIKE ?)
 			AND id != ?
-			ORDER BY 
-				CASE 
+			ORDER BY
+				CASE
 					WHEN username = ? THEN 1
-					WHEN display_name = ? THEN 2
+					WHEN name = ? THEN 2
 					WHEN username LIKE ? THEN 3
-					WHEN display_name LIKE ? THEN 4
+					WHEN name LIKE ? THEN 4
 					ELSE 5
 				END,
-				display_name ASC
+				name ASC
 			LIMIT ?`
 		)
 			.bind(

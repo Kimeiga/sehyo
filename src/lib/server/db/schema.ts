@@ -1,20 +1,22 @@
 import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
 
-// Better Auth User Table
+// Better Auth User Table (consolidated - replaces both user and users tables)
 export const user = sqliteTable('user', {
 	id: text('id').primaryKey(),
 	email: text('email').notNull().unique(),
 	emailVerified: integer('emailVerified', { mode: 'boolean' }).notNull().default(false),
-	name: text('name'),
-	image: text('image'),
+	name: text('name'), // Display name (maps to display_name in old users table)
+	image: text('image'), // Profile picture URL (maps to profile_picture_url in old users table)
 	createdAt: integer('createdAt', { mode: 'timestamp' }).notNull(),
 	updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull(),
 	// Additional fields for our app
+	google_id: text('google_id').unique(), // Google OAuth ID (nullable for anonymous users)
 	username: text('username').unique(),
 	bio: text('bio'),
 	location: text('location'),
 	website: text('website'),
 	cover_image_url: text('cover_image_url'),
+	public_key: text('public_key'), // For E2E encryption
 	// Anonymous user support
 	isAnonymous: integer('isAnonymous', { mode: 'boolean' }).default(false)
 });
