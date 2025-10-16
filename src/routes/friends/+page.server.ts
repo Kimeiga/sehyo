@@ -55,19 +55,18 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
 			.all();
 
 		// Get all users (excluding anonymous users and current user)
-		// Anonymous users have google_id starting with 'anon_'
 		const allUsersResult = await platform.env.DB.prepare(
 			`SELECT
 				id,
-				display_name,
+				name as display_name,
 				username,
-				profile_picture_url,
+				image as profile_picture_url,
 				bio,
-				created_at
-			FROM users
+				createdAt as created_at
+			FROM user
 			WHERE id != ?
-			AND google_id NOT LIKE 'anon_%'
-			ORDER BY created_at DESC
+			AND (isAnonymous IS NULL OR isAnonymous = 0)
+			ORDER BY createdAt DESC
 			LIMIT 100`
 		)
 			.bind(locals.user.id)

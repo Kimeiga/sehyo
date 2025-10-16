@@ -33,16 +33,15 @@ export const POST: RequestHandler = async ({ request, platform, cookies }) => {
 		// Create test user if doesn't exist
 		if (!user) {
 			const userId = crypto.randomUUID();
-			const googleId = `test_${username}_${Date.now()}`; // Fake Google ID for test users
 			const email = `${username}@test.local`;
 			const displayName = username.charAt(0).toUpperCase() + username.slice(1);
 
 			await db
 				.prepare(
-					`INSERT INTO user (id, google_id, email, username, name, createdAt, updatedAt, emailVerified)
-					 VALUES (?, ?, ?, ?, ?, unixepoch(), unixepoch(), 0)`
+					`INSERT INTO user (id, email, username, name, createdAt, updatedAt, emailVerified)
+					 VALUES (?, ?, ?, ?, unixepoch(), unixepoch(), 0)`
 				)
-				.bind(userId, googleId, email, username, displayName)
+				.bind(userId, email, username, displayName)
 				.run();
 
 			user = await db

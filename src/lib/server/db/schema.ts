@@ -10,7 +10,7 @@ export const user = sqliteTable('user', {
 	createdAt: integer('createdAt', { mode: 'timestamp' }).notNull(),
 	updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull(),
 	// Additional fields for our app
-	google_id: text('google_id').unique(), // Google OAuth ID (nullable for anonymous users)
+	bot_id: text('bot_id').unique(), // Bot identifier (for bot users only)
 	username: text('username').unique(),
 	bio: text('bio'),
 	location: text('location'),
@@ -18,7 +18,9 @@ export const user = sqliteTable('user', {
 	cover_image_url: text('cover_image_url'),
 	public_key: text('public_key'), // For E2E encryption
 	// Anonymous user support
-	isAnonymous: integer('isAnonymous', { mode: 'boolean' }).default(false)
+	isAnonymous: integer('isAnonymous', { mode: 'boolean' }).default(false),
+	// Legacy field (will be removed in future migration)
+	google_id: text('google_id').unique() // DEPRECATED: Use account table for OAuth, bot_id for bots
 });
 
 // Better Auth Session Table

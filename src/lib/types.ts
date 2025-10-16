@@ -7,7 +7,7 @@ export interface User {
 	image: string | null; // Better Auth uses 'image' instead of 'profile_picture_url'
 	createdAt: Date | number; // Better Auth uses camelCase
 	updatedAt: Date | number; // Better Auth uses camelCase
-	google_id: string | null;
+	bot_id: string | null; // Bot identifier (for bot users only)
 	username: string | null;
 	bio: string | null;
 	location: string | null;
@@ -15,6 +15,7 @@ export interface User {
 	cover_image_url: string | null;
 	public_key: string | null; // For E2E encrypted messaging
 	isAnonymous: boolean | null;
+	google_id: string | null; // DEPRECATED: Legacy field, will be removed
 }
 
 // Post types

@@ -7,20 +7,20 @@ export class Database {
 	// User operations
 	async createUser(data: {
 		id: string;
-		google_id: string;
+		bot_id?: string; // Optional bot_id for bot users
 		email: string;
 		name: string;
 		image?: string;
 	}): Promise<User> {
 		const result = await this.db
 			.prepare(
-				`INSERT INTO user (id, google_id, email, name, image, createdAt, updatedAt, emailVerified)
+				`INSERT INTO user (id, bot_id, email, name, image, createdAt, updatedAt, emailVerified)
 				 VALUES (?, ?, ?, ?, ?, unixepoch(), unixepoch(), 0)
 				 RETURNING *`
 			)
 			.bind(
 				data.id,
-				data.google_id,
+				data.bot_id || null,
 				data.email,
 				data.name,
 				data.image || null
@@ -35,10 +35,10 @@ export class Database {
 		return await this.db.prepare('SELECT * FROM user WHERE id = ?').bind(id).first<User>();
 	}
 
-	async getUserByGoogleId(google_id: string): Promise<User | null> {
+	async getUserByBotId(bot_id: string): Promise<User | null> {
 		return await this.db
-			.prepare('SELECT * FROM user WHERE google_id = ?')
-			.bind(google_id)
+			.prepare('SELECT * FROM user WHERE bot_id = ?')
+			.bind(bot_id)
 			.first<User>();
 	}
 
