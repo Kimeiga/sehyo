@@ -15,6 +15,23 @@ export const load: PageServerLoad = async ({ params, platform, locals }) => {
 		throw error(404, 'User not found');
 	}
 
+	// Map Better Auth column names to expected profile page format
+	const profileUser = {
+		id: user.id,
+		display_name: user.name || user.email || 'Anonymous User',
+		username: user.username,
+		profile_picture_url: user.image,
+		cover_image_url: user.cover_image_url,
+		bio: user.bio,
+		location: user.location,
+		website: user.website,
+		created_at: user.createdAt
+			? (typeof user.createdAt === 'number'
+				? user.createdAt
+				: Math.floor(new Date(user.createdAt).getTime() / 1000))
+			: null
+	};
+
 	// Get user's posts
 	const posts = await db.getUserPosts(params.id, 20, 0);
 
@@ -35,7 +52,7 @@ export const load: PageServerLoad = async ({ params, platform, locals }) => {
 	);
 
 	return {
-		profileUser: user,
+		profileUser,
 		posts: postsWithReactions,
 		isOwnProfile: locals.user?.id === params.id
 	};

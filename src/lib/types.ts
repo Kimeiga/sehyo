@@ -1,18 +1,20 @@
-// User types
+// User types - matches Better Auth schema
 export interface User {
 	id: string;
-	google_id: string;
 	email: string;
-	display_name: string;
+	emailVerified: boolean;
+	name: string | null; // Better Auth uses 'name' instead of 'display_name'
+	image: string | null; // Better Auth uses 'image' instead of 'profile_picture_url'
+	createdAt: Date | number; // Better Auth uses camelCase
+	updatedAt: Date | number; // Better Auth uses camelCase
+	google_id: string | null;
 	username: string | null;
-	profile_picture_url: string | null;
-	cover_image_url: string | null;
 	bio: string | null;
 	location: string | null;
 	website: string | null;
+	cover_image_url: string | null;
 	public_key: string | null; // For E2E encrypted messaging
-	created_at: number;
-	updated_at: number;
+	isAnonymous: boolean | null;
 }
 
 // Post types
