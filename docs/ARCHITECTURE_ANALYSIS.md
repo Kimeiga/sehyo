@@ -138,22 +138,20 @@ if (user.isAnonymous) {
 
 ## Potential Issues (Minor)
 
-### ⚠️ 1. Legacy `google_id` Field
-**Issue:** The `google_id` field in the `user` table is no longer used for Google OAuth.
-- Google users now use the `account` table to link to Google (via `accountId`)
-- The `google_id` field is `null` for Google OAuth users
-- **However**, it's still used for:
-  - Bot users (`bot_*`)
-  - Test users (`test_*`)
-  - Old anonymous users (`anon_*`)
+### ✅ 1. ~~Legacy `google_id` Field~~ **FIXED!**
+**Status:** ✅ **COMPLETED** (Migrations 0013 & 0014)
 
-**Impact:** Low - creates confusion about its purpose
-**Fix:**
-1. Rename to `legacy_id` or `internal_id` to clarify it's not for Google
-2. Or migrate bots/test users to use a different identifier
-3. Then remove the field
+**What was done:**
+1. Added `bot_id` field for bot users
+2. Migrated bot data from `google_id` to `bot_id`
+3. Cleared `google_id` for all users (bots, test users, anonymous users)
+4. Dropped the `google_id` column entirely
 
-**Why it exists:** Leftover from the old custom auth system before Better Auth
+**Result:** Architecture is now fully clean:
+- Google OAuth users: Use `account` table (`accountId`)
+- Bot users: Use `bot_id` field
+- Anonymous users: Use `isAnonymous` flag
+- No more confusing `google_id` field!
 
 ### ⚠️ 2. Temporary Email Format
 **Issue:** Anonymous users get emails like `temp-xyz@http://localhost:5174`
@@ -310,35 +308,39 @@ The current architecture is **excellent** and should be maintained:
 3. Better Auth handles all complexity
 4. Application code is simple and unified
 
-### 🔧 Optional Improvements
+### ✅ ~~Optional Improvements~~ **COMPLETED!**
 
-#### 1. Clean Up Legacy `google_id` Field
+#### 1. ✅ Clean Up Legacy `google_id` Field - **DONE!**
 
-**Current State:**
-- Google OAuth users: Use `account` table (don't use `google_id`)
-- Bot users: Use `google_id` with `bot_*` prefix
-- Test users: Use `google_id` with `test_*` prefix
-- Old anonymous users: Use `google_id` with `anon_*` prefix
+**Completed in Migrations 0013 & 0014:**
 
-**Option A: Rename for Clarity**
+**Migration 0013: Migrate to bot_id**
 ```sql
--- Rename to clarify it's not for Google OAuth
-ALTER TABLE user RENAME COLUMN google_id TO internal_id;
-```
-
-**Option B: Migrate to Better Approach**
-```sql
--- Add a proper bot_id field
-ALTER TABLE user ADD COLUMN bot_id TEXT UNIQUE;
+-- Add bot_id field
+ALTER TABLE user ADD COLUMN bot_id TEXT;
 
 -- Migrate bot users
 UPDATE user SET bot_id = google_id WHERE google_id LIKE 'bot_%';
 
--- Then remove google_id
-ALTER TABLE user DROP COLUMN google_id;
+-- Create unique index
+CREATE UNIQUE INDEX idx_user_bot_id ON user(bot_id) WHERE bot_id IS NOT NULL;
+
+-- Clear google_id for all users
+UPDATE user SET google_id = NULL WHERE google_id LIKE 'bot_%';
+UPDATE user SET google_id = NULL WHERE google_id LIKE 'test_%';
+UPDATE user SET google_id = NULL WHERE google_id LIKE 'anon_%';
 ```
 
-**Recommendation:** Option A (rename) is simpler and less risky.
+**Migration 0014: Drop google_id**
+```sql
+-- Recreate table without google_id column
+CREATE TABLE user_new (...);  -- Without google_id
+INSERT INTO user_new SELECT ...;
+DROP TABLE user;
+ALTER TABLE user_new RENAME TO user;
+```
+
+**Result:** Clean architecture with proper field separation!
 
 #### 2. Add Anonymous-to-Google Upgrade Flow
 ```typescript
