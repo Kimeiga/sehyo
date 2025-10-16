@@ -8,13 +8,29 @@ export const GET: RequestHandler = async ({ request, platform }) => {
 	}
 
 	try {
+		const url = new URL(request.url);
+		const baseURL = `${url.protocol}//${url.host}`;
+
+		console.log('Better Auth GET request:', {
+			pathname: url.pathname,
+			search: url.search,
+			baseURL
+		});
+
 		const auth = createAuth(platform.env.DB, {
 			GOOGLE_CLIENT_ID: platform.env.GOOGLE_CLIENT_ID,
 			GOOGLE_CLIENT_SECRET: platform.env.GOOGLE_CLIENT_SECRET,
 			GOOGLE_REDIRECT_URI: platform.env.GOOGLE_REDIRECT_URI
+		}, baseURL);
+
+		const response = await auth.handler(request);
+
+		console.log('Better Auth GET response:', {
+			status: response.status,
+			pathname: url.pathname
 		});
 
-		return await auth.handler(request);
+		return response;
 	} catch (error) {
 		console.error('Error in Better Auth GET handler:', error);
 		return new Response(JSON.stringify({ error: String(error) }), {
@@ -33,16 +49,19 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 	try {
 		// Log the request URL for debugging
 		const url = new URL(request.url);
+		const baseURL = `${url.protocol}//${url.host}`;
+
 		console.log('Better Auth POST request:', {
 			pathname: url.pathname,
-			method: request.method
+			method: request.method,
+			baseURL
 		});
 
 		const auth = createAuth(platform.env.DB, {
 			GOOGLE_CLIENT_ID: platform.env.GOOGLE_CLIENT_ID,
 			GOOGLE_CLIENT_SECRET: platform.env.GOOGLE_CLIENT_SECRET,
 			GOOGLE_REDIRECT_URI: platform.env.GOOGLE_REDIRECT_URI
-		});
+		}, baseURL);
 
 		const response = await auth.handler(request);
 

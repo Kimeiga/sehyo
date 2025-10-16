@@ -11,12 +11,16 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	try {
+		// Get base URL from request
+		const url = new URL(event.request.url);
+		const baseURL = `${url.protocol}//${url.host}`;
+
 		// Create Better Auth instance
 		const auth = createAuth(event.platform.env.DB, {
 			GOOGLE_CLIENT_ID: event.platform.env.GOOGLE_CLIENT_ID,
 			GOOGLE_CLIENT_SECRET: event.platform.env.GOOGLE_CLIENT_SECRET,
 			GOOGLE_REDIRECT_URI: event.platform.env.GOOGLE_REDIRECT_URI
-		});
+		}, baseURL);
 
 		// Get session from Better Auth
 		const session = await auth.api.getSession({

@@ -5,31 +5,46 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import type { D1Database } from '@cloudflare/workers-types';
 import * as schema from './db/schema';
 
+// Cache for auth instances - use a Map with baseURL as key
+const authCache = new Map<string, ReturnType<typeof betterAuth>>();
+
 export function createAuth(db: D1Database, env: {
 	GOOGLE_CLIENT_ID: string;
 	GOOGLE_CLIENT_SECRET: string;
-	GOOGLE_REDIRECT_URI: string;
-}) {
+	GOOGLE_REDIRECT_URI?: string;
+}, baseURL?: string) {
+	// Determine the base URL
+	const effectiveBaseURL = baseURL || env.GOOGLE_REDIRECT_URI?.replace('/api/auth/callback/google', '') || 'https://fb-portfolio-1ae.pages.dev';
+
+	// Return cached instance if it exists for this baseURL
+	const cached = authCache.get(effectiveBaseURL);
+	if (cached) {
+		return cached;
+	}
+
+	// Construct redirect URI
+	const redirectURI = env.GOOGLE_REDIRECT_URI || `${effectiveBaseURL}/api/auth/callback/google`;
+
 	// Log environment variables for debugging (remove in production)
-	console.log('Better Auth Config:', {
+	console.log('Creating new Better Auth instance:', {
 		hasClientId: !!env.GOOGLE_CLIENT_ID,
 		hasClientSecret: !!env.GOOGLE_CLIENT_SECRET,
-		hasRedirectUri: !!env.GOOGLE_REDIRECT_URI,
-		clientIdPrefix: env.GOOGLE_CLIENT_ID?.substring(0, 20),
-		redirectUri: env.GOOGLE_REDIRECT_URI
+		baseURL: effectiveBaseURL,
+		redirectURI: redirectURI,
+		clientIdPrefix: env.GOOGLE_CLIENT_ID?.substring(0, 20)
 	});
 
 	// Create Drizzle instance with D1
 	const drizzleDb = drizzle(db, { schema });
 
 	try {
-		return betterAuth({
+		const auth = betterAuth({
 			database: drizzleAdapter(drizzleDb, {
 				provider: 'sqlite', // D1 is SQLite-compatible
 			}),
 
 		// Base URL for callbacks
-		baseURL: env.GOOGLE_REDIRECT_URI?.replace('/api/auth/callback/google', '') || 'https://fb-portfolio-1ae.pages.dev',
+		baseURL: effectiveBaseURL,
 
 		// Trusted origins for CORS (allow localhost for development)
 		trustedOrigins: [
@@ -55,7 +70,7 @@ export function createAuth(db: D1Database, env: {
 			google: {
 				clientId: env.GOOGLE_CLIENT_ID,
 				clientSecret: env.GOOGLE_CLIENT_SECRET,
-				redirectURI: env.GOOGLE_REDIRECT_URI
+				redirectURI: redirectURI
 			}
 		},
 		
@@ -110,6 +125,10 @@ export function createAuth(db: D1Database, env: {
 			anonymous()
 		]
 	});
+
+		// Cache the instance by baseURL
+		authCache.set(effectiveBaseURL, auth);
+		return auth;
 	} catch (error) {
 		console.error('Error creating Better Auth instance:', error);
 		throw error;
