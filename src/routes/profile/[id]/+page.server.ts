@@ -32,6 +32,13 @@ export const load: PageServerLoad = async ({ params, platform, locals }) => {
 			: null
 	};
 
+	console.log('Profile User Data:', {
+		id: profileUser.id,
+		display_name: profileUser.display_name,
+		profile_picture_url: profileUser.profile_picture_url,
+		hasImage: !!profileUser.profile_picture_url
+	});
+
 	// Get user's posts
 	const posts = await db.getUserPosts(params.id, 20, 0);
 
