@@ -30,6 +30,17 @@ export function createAuth(db: D1Database, env: {
 
 		// Base URL for callbacks
 		baseURL: env.GOOGLE_REDIRECT_URI?.replace('/api/auth/callback/google', '') || 'https://fb-portfolio-1ae.pages.dev',
+
+		// Trusted origins for CORS (allow localhost for development)
+		trustedOrigins: [
+			'http://localhost:5173',
+			'http://localhost:5174',
+			'http://localhost:5175',
+			'http://localhost:5176',
+			'http://localhost:5177',
+			'http://localhost:5178',
+			'https://fb-portfolio-1ae.pages.dev'
+		],
 		
 		// Email and password authentication
 		emailAndPassword: {
