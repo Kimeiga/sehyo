@@ -139,12 +139,19 @@ if (user.isAnonymous) {
 ## Potential Issues (Minor)
 
 ### ⚠️ 1. Legacy `google_id` Field
-**Issue:** The `google_id` field in the `user` table is no longer used.
-- Google users now use the `account` table to link to Google
-- The `google_id` field is `null` for all users (including Google users)
+**Issue:** The `google_id` field in the `user` table is no longer used for Google OAuth.
+- Google users now use the `account` table to link to Google (via `accountId`)
+- The `google_id` field is `null` for Google OAuth users
+- **However**, it's still used for:
+  - Bot users (`bot_*`)
+  - Test users (`test_*`)
+  - Old anonymous users (`anon_*`)
 
-**Impact:** Low - just unused storage
-**Fix:** Can be removed in a future migration
+**Impact:** Low - creates confusion about its purpose
+**Fix:**
+1. Rename to `legacy_id` or `internal_id` to clarify it's not for Google
+2. Or migrate bots/test users to use a different identifier
+3. Then remove the field
 
 **Why it exists:** Leftover from the old custom auth system before Better Auth
 
@@ -305,11 +312,33 @@ The current architecture is **excellent** and should be maintained:
 
 ### 🔧 Optional Improvements
 
-#### 1. Remove Legacy `google_id` Field
+#### 1. Clean Up Legacy `google_id` Field
+
+**Current State:**
+- Google OAuth users: Use `account` table (don't use `google_id`)
+- Bot users: Use `google_id` with `bot_*` prefix
+- Test users: Use `google_id` with `test_*` prefix
+- Old anonymous users: Use `google_id` with `anon_*` prefix
+
+**Option A: Rename for Clarity**
 ```sql
--- Future migration
+-- Rename to clarify it's not for Google OAuth
+ALTER TABLE user RENAME COLUMN google_id TO internal_id;
+```
+
+**Option B: Migrate to Better Approach**
+```sql
+-- Add a proper bot_id field
+ALTER TABLE user ADD COLUMN bot_id TEXT UNIQUE;
+
+-- Migrate bot users
+UPDATE user SET bot_id = google_id WHERE google_id LIKE 'bot_%';
+
+-- Then remove google_id
 ALTER TABLE user DROP COLUMN google_id;
 ```
+
+**Recommendation:** Option A (rename) is simpler and less risky.
 
 #### 2. Add Anonymous-to-Google Upgrade Flow
 ```typescript
