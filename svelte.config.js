@@ -12,7 +12,14 @@ const config = {
 			// Cloudflare Pages configuration
 			routes: {
 				include: ['/*'],
-				exclude: ['<all>']
+				exclude: [
+					'<build>',
+					'<files>',
+					'<prerendered>',
+					'/sw.js',
+					'/workbox-*.js',
+					'/sprites/*'
+				]
 			}
 		})
 	}
