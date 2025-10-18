@@ -82,15 +82,17 @@ export class Database {
 
 	// Post operations
 	async createPost(data: { id: string; user_id: string; content: string; image_url?: string }): Promise<Post> {
-		const result = await this.db
+		// Insert the post
+		await this.db
 			.prepare(
 				`INSERT INTO posts (id, user_id, content, image_url)
-				 VALUES (?, ?, ?, ?)
-				 RETURNING *`
+				 VALUES (?, ?, ?, ?)`
 			)
 			.bind(data.id, data.user_id, data.content, data.image_url || null)
-			.first<Post>();
+			.run();
 
+		// Fetch the post with user information
+		const result = await this.getPostById(data.id);
 		if (!result) throw new Error('Failed to create post');
 		return result;
 	}
@@ -98,7 +100,7 @@ export class Database {
 	async getPostById(id: string): Promise<Post | null> {
 		return await this.db
 			.prepare(
-				`SELECT p.*, u.id as user_id, u.name as display_name, u.username, u.image as profile_picture_url
+				`SELECT p.*, u.id as user_id, u.name as display_name, u.username, u.image as profile_picture_url, u.sprite_id
 				 FROM posts p
 				 JOIN user u ON p.user_id = u.id
 				 WHERE p.id = ?`
@@ -110,7 +112,7 @@ export class Database {
 	async getFeedPosts(limit: number = 20, offset: number = 0): Promise<Post[]> {
 		const results = await this.db
 			.prepare(
-				`SELECT p.*, u.name as display_name, u.username, u.image as profile_picture_url
+				`SELECT p.*, u.name as display_name, u.username, u.image as profile_picture_url, u.sprite_id
 				 FROM posts p
 				 JOIN user u ON p.user_id = u.id
 				 ORDER BY p.created_at DESC
@@ -125,7 +127,7 @@ export class Database {
 	async getUserPosts(user_id: string, limit: number = 20, offset: number = 0): Promise<Post[]> {
 		const results = await this.db
 			.prepare(
-				`SELECT p.*, u.name as display_name, u.username, u.image as profile_picture_url
+				`SELECT p.*, u.name as display_name, u.username, u.image as profile_picture_url, u.sprite_id
 				 FROM posts p
 				 JOIN user u ON p.user_id = u.id
 				 WHERE p.user_id = ?
@@ -171,7 +173,7 @@ export class Database {
 	async getPostComments(post_id: string): Promise<Comment[]> {
 		const results = await this.db
 			.prepare(
-				`SELECT c.*, u.name as display_name, u.username, u.image as profile_picture_url
+				`SELECT c.*, u.name as display_name, u.username, u.image as profile_picture_url, u.sprite_id
 				 FROM comments c
 				 JOIN user u ON c.user_id = u.id
 				 WHERE c.post_id = ? AND c.parent_comment_id IS NULL
@@ -186,7 +188,7 @@ export class Database {
 	async getCommentReplies(comment_id: string): Promise<Comment[]> {
 		const results = await this.db
 			.prepare(
-				`SELECT c.*, u.name as display_name, u.username, u.image as profile_picture_url
+				`SELECT c.*, u.name as display_name, u.username, u.image as profile_picture_url, u.sprite_id
 				 FROM comments c
 				 JOIN user u ON c.user_id = u.id
 				 WHERE c.parent_comment_id = ?

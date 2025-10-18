@@ -60,7 +60,7 @@ export const GET: RequestHandler = async ({ params, platform, locals, url }) => 
 			const reactionCounts = await db.getReactionCounts('comment', reply.id);
 
 			// Structure the user data as a nested object
-			const { display_name, username, profile_picture_url, ...replyData } = reply;
+			const { display_name, username, profile_picture_url, sprite_id, ...replyData } = reply;
 
 			return {
 				...replyData,
@@ -68,7 +68,8 @@ export const GET: RequestHandler = async ({ params, platform, locals, url }) => 
 					id: reply.user_id,
 					display_name,
 					username,
-					profile_picture_url
+					profile_picture_url,
+					sprite_id
 				},
 				reaction_counts: reactionCounts
 			};

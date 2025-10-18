@@ -5,6 +5,7 @@
 	import Self from './Comment.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { Avatar, AvatarImage, AvatarFallback } from '$lib/components/ui/avatar';
+	import { Heart } from 'lucide-svelte';
 
 	interface Props {
 		comment: CommentType & {
@@ -12,6 +13,7 @@
 				id: string;
 				display_name: string;
 				profile_picture_url?: string | null;
+				sprite_id?: number | null;
 			};
 			reaction_counts?: {
 				total: number;
@@ -142,12 +144,25 @@
 <div class="flex gap-2" style="margin-left: {depth * 2}rem">
 	<!-- Avatar -->
 	<a href="/profile/{comment.user_id}" class="flex-shrink-0">
-		<Avatar class="size-8">
-			<AvatarImage src={comment.user?.profile_picture_url} alt={comment.user?.display_name} />
-			<AvatarFallback class="text-xs">
-				{comment.user?.display_name?.charAt(0).toUpperCase() || '?'}
-			</AvatarFallback>
-		</Avatar>
+		{#if comment.user?.display_name === 'Anonymous' && comment.user?.sprite_id}
+			<!-- For anonymous users, show sprite as profile picture -->
+			<div class="size-8 flex items-center justify-center">
+				<img
+					src="/sprites/{comment.user.sprite_id}.png"
+					alt="Sprite"
+					class="h-full w-auto"
+					style="image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: crisp-edges;"
+				/>
+			</div>
+		{:else}
+			<!-- For logged-in users, show regular avatar -->
+			<Avatar class="size-8">
+				<AvatarImage src={comment.user?.profile_picture_url} alt={comment.user?.display_name} />
+				<AvatarFallback class="text-xs">
+					{comment.user?.display_name?.charAt(0).toUpperCase() || '?'}
+				</AvatarFallback>
+			</Avatar>
+		{/if}
 	</a>
 
 	<div class="flex-1 min-w-0">
@@ -176,9 +191,10 @@
 					variant="ghost"
 					size="sm"
 					disabled
-					class="h-auto p-0 font-semibold"
+					class="h-auto p-0 font-semibold gap-1"
 				>
-					👍 Like
+					<Heart class="size-3" />
+					Like
 				</Button>
 				<Button
 					variant="ghost"

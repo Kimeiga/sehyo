@@ -21,6 +21,7 @@ export const load: PageServerLoad = async ({ params, platform, locals }) => {
 		display_name: user.name || user.email || 'Anonymous User',
 		username: user.username,
 		profile_picture_url: user.image,
+		sprite_id: user.sprite_id,
 		cover_image_url: user.cover_image_url,
 		bio: user.bio,
 		location: user.location,

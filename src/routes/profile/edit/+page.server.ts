@@ -186,6 +186,42 @@ export const actions: Actions = {
 			console.error('Error uploading cover image:', err);
 			return fail(500, { error: 'Failed to upload image' });
 		}
+	},
+
+	updateSprite: async ({ request, platform, locals }) => {
+		if (!locals.user) {
+			throw error(401, 'Unauthorized');
+		}
+
+		if (!platform?.env?.DB) {
+			throw error(500, 'Database not available');
+		}
+
+		const formData = await request.formData();
+		const spriteIdStr = formData.get('sprite_id') as string;
+
+		if (!spriteIdStr) {
+			return fail(400, { error: 'Sprite ID is required' });
+		}
+
+		const spriteId = parseInt(spriteIdStr, 10);
+
+		// Validate sprite ID is between 1 and 125
+		if (isNaN(spriteId) || spriteId < 1 || spriteId > 125) {
+			return fail(400, { error: 'Invalid sprite ID. Must be between 1 and 125' });
+		}
+
+		try {
+			const db = new Database(platform.env.DB);
+			await db.updateUser(locals.user.id, {
+				sprite_id: spriteId
+			});
+
+			return { success: true, sprite_id: spriteId };
+		} catch (err) {
+			console.error('Error updating sprite:', err);
+			return fail(500, { error: 'Failed to update sprite' });
+		}
 	}
 };
 

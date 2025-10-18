@@ -10,6 +10,7 @@
 		user: {
 			display_name: string;
 			profile_picture_url?: string | null;
+			sprite_id?: number | null;
 		};
 	}
 
@@ -110,13 +111,26 @@
 </script>
 
 <Card class="mb-6">
-	<CardContent class="pt-6">
+	<CardContent class="py-4">
 		<form onsubmit={handleSubmit}>
 			<div class="flex gap-3">
-				<Avatar>
-					<AvatarImage src={user.profile_picture_url} alt={user.display_name} />
-					<AvatarFallback>{user.display_name?.charAt(0).toUpperCase() || '?'}</AvatarFallback>
-				</Avatar>
+				{#if user.display_name === 'Anonymous' && user.sprite_id}
+					<!-- For anonymous users, show sprite as profile picture -->
+					<div class="size-10 flex items-center justify-center flex-shrink-0">
+						<img
+							src="/sprites/{user.sprite_id}.png"
+							alt="Sprite"
+							class="h-full w-auto"
+							style="image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: crisp-edges;"
+						/>
+					</div>
+				{:else}
+					<!-- For logged-in users, show regular avatar -->
+					<Avatar>
+						<AvatarImage src={user.profile_picture_url} alt={user.display_name} />
+						<AvatarFallback>{user.display_name?.charAt(0).toUpperCase() || '?'}</AvatarFallback>
+					</Avatar>
+				{/if}
 				<div class="flex-1">
 					<Textarea
 						bind:value={content}

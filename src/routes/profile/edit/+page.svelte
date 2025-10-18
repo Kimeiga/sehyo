@@ -2,6 +2,7 @@
 	import type { PageProps } from './$types';
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
+	import SpriteSelector from '$lib/components/SpriteSelector.svelte';
 
 	let { data, form }: PageProps = $props();
 
@@ -17,6 +18,7 @@
 	let isSubmitting = $state(false);
 	let uploadingProfilePic = $state(false);
 	let uploadingCover = $state(false);
+	let showSpriteSelector = $state(false);
 
 	function handleProfilePictureChange(e: Event) {
 		const target = e.target as HTMLInputElement;
@@ -154,6 +156,37 @@
 			</form>
 		</div>
 
+		<!-- Sprite Selection -->
+		<div class="mb-6">
+			<label class="block text-sm font-semibold mb-2">Sprite Avatar</label>
+			<div class="flex items-center gap-4">
+				{#if data.user?.sprite_id}
+					<div class="h-16 flex items-center justify-center">
+						<img
+							src="/sprites/{data.user.sprite_id}.png"
+							alt="Current sprite"
+							class="h-full w-auto"
+							style="image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: crisp-edges;"
+						/>
+					</div>
+				{:else}
+					<div class="w-16 h-16 rounded-lg border-2 border-border bg-muted flex items-center justify-center">
+						<span class="text-xs text-muted-foreground">No sprite</span>
+					</div>
+				{/if}
+				<button
+					type="button"
+					onclick={() => (showSpriteSelector = true)}
+					class="px-4 py-2 bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-lg font-semibold transition"
+				>
+					Choose Sprite
+				</button>
+			</div>
+			<p class="text-xs text-muted-foreground mt-2">
+				Your sprite appears as your profile picture in posts and comments
+			</p>
+		</div>
+
 		<!-- Profile Info Form -->
 		<form
 			method="POST"
@@ -265,3 +298,9 @@
 	</div>
 </div>
 
+<!-- Sprite Selector Modal -->
+<SpriteSelector
+	bind:open={showSpriteSelector}
+	currentSpriteId={data.user?.sprite_id}
+	onClose={() => (showSpriteSelector = false)}
+/>

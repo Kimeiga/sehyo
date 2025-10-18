@@ -108,6 +108,11 @@ export function createAuth(db: D1Database, env: {
 				cover_image_url: {
 					type: 'string',
 					required: false
+				},
+				sprite_id: {
+					type: 'number',
+					required: false,
+					defaultValue: () => Math.floor(Math.random() * 125) + 1 // Random sprite 1-125
 				}
 			}
 		},

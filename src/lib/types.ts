@@ -15,6 +15,7 @@ export interface User {
 	cover_image_url: string | null;
 	public_key: string | null; // For E2E encrypted messaging
 	isAnonymous: boolean | null;
+	sprite_id: number | null; // Sprite avatar ID (1-125)
 }
 
 // Post types

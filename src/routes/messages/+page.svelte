@@ -6,7 +6,6 @@
 	import { Avatar, AvatarImage, AvatarFallback } from '$lib/components/ui/avatar';
 	import { MessageCircle, Send, Lock, CircleAlert } from 'lucide-svelte';
 	import {
-		generateKeyPair,
 		storePrivateKey,
 		storePublicKey,
 		getStoredPrivateKey,
@@ -72,23 +71,22 @@
 
 		isSettingUpEncryption = true;
 		try {
-			// Generate new key pair
-			const keys = await generateKeyPair();
-
-			// Store private key locally (NEVER send to server!)
-			storePrivateKey(keys.private_key);
-			storePublicKey(keys.public_key);
-
-			// Send public key to server
-			const response = await fetch('/api/user/public-key', {
+			// For anonymous users or users without keys, generate keys server-side
+			// This ensures they can use messaging even if they're temporary accounts
+			const response = await fetch('/api/user/generate-keys', {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ public_key: keys.public_key })
+				headers: { 'Content-Type': 'application/json' }
 			});
 
 			if (!response.ok) {
-				throw new Error('Failed to save public key');
+				throw new Error('Failed to generate encryption keys');
 			}
+
+			const keys = await response.json();
+
+			// Store keys locally (private key NEVER sent to server, only returned once!)
+			storePrivateKey(keys.private_key);
+			storePublicKey(keys.public_key);
 
 			encryptionSetup = true;
 		} catch (error) {

@@ -2,7 +2,6 @@
 	import type { User } from '$lib/types';
 	import { Button } from '$lib/components/ui/button';
 	import { Avatar, AvatarImage, AvatarFallback } from '$lib/components/ui/avatar';
-	import { Input } from '$lib/components/ui/input';
 	import {
 		DropdownMenu,
 		DropdownMenuContent,
@@ -12,6 +11,7 @@
 	} from '$lib/components/ui/dropdown-menu';
 	import { Home, Users, MessageCircle } from 'lucide-svelte';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+	import GlobalSearch from '$lib/components/GlobalSearch.svelte';
 
 	interface Props {
 		user: User | null;
@@ -49,11 +49,7 @@
 
 			<!-- Search Bar (always visible) -->
 			<div class="flex-1 max-w-md mx-4 hidden md:block">
-				<Input
-					type="search"
-					placeholder="Search..."
-					class="w-full rounded-full bg-muted"
-				/>
+				<GlobalSearch />
 			</div>
 
 			<!-- Navigation Links -->
@@ -85,24 +81,50 @@
 					<!-- User Menu -->
 					<DropdownMenu>
 						<DropdownMenuTrigger>
-							<Avatar class="size-8 cursor-pointer">
-								<AvatarImage src={user.profile_picture_url} alt={user.display_name} />
-								<AvatarFallback>
-									{user.display_name?.charAt(0).toUpperCase() || '?'}
-								</AvatarFallback>
-							</Avatar>
+							{#if user.name === 'Anonymous' && user.sprite_id}
+								<!-- For anonymous users, show sprite as profile picture -->
+								<div class="size-8 flex items-center justify-center cursor-pointer">
+									<img
+										src="/sprites/{user.sprite_id}.png"
+										alt="Sprite"
+										class="h-full w-auto"
+										style="image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: crisp-edges;"
+									/>
+								</div>
+							{:else}
+								<!-- For logged-in users, show regular avatar -->
+								<Avatar class="size-8 cursor-pointer">
+									<AvatarImage src={user.image} alt={user.name} />
+									<AvatarFallback>
+										{user.name?.charAt(0).toUpperCase() || '?'}
+									</AvatarFallback>
+								</Avatar>
+							{/if}
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align="end" class="w-64">
 							<a href="/profile/{user.id}">
 								<DropdownMenuItem class="flex items-center gap-3 cursor-pointer">
-									<Avatar class="size-10">
-										<AvatarImage src={user.profile_picture_url} alt={user.display_name} />
-										<AvatarFallback>
-											{user.display_name?.charAt(0).toUpperCase() || '?'}
-										</AvatarFallback>
-									</Avatar>
+									{#if user.name === 'Anonymous' && user.sprite_id}
+										<!-- For anonymous users, show sprite as profile picture -->
+										<div class="size-10 flex items-center justify-center flex-shrink-0">
+											<img
+												src="/sprites/{user.sprite_id}.png"
+												alt="Sprite"
+												class="h-full w-auto"
+												style="image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: crisp-edges;"
+											/>
+										</div>
+									{:else}
+										<!-- For logged-in users, show regular avatar -->
+										<Avatar class="size-10">
+											<AvatarImage src={user.image} alt={user.name} />
+											<AvatarFallback>
+												{user.name?.charAt(0).toUpperCase() || '?'}
+											</AvatarFallback>
+										</Avatar>
+									{/if}
 									<div>
-										<p class="font-semibold">{user.display_name}</p>
+										<p class="font-semibold">{user.name}</p>
 										<p class="text-sm text-muted-foreground">View profile</p>
 									</div>
 								</DropdownMenuItem>

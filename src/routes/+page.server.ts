@@ -18,7 +18,7 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
 			const reactionCounts = await db.getReactionCounts('post', post.id);
 
 			// Structure the user data as a nested object
-			const { display_name, username, profile_picture_url, ...postData } = post;
+			const { display_name, username, profile_picture_url, sprite_id, ...postData } = post;
 
 			return {
 				...postData,
@@ -26,7 +26,8 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
 					id: post.user_id,
 					display_name,
 					username,
-					profile_picture_url
+					profile_picture_url,
+					sprite_id
 				},
 				reaction_counts: reactionCounts
 			};

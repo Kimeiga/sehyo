@@ -8,7 +8,7 @@
 	import { Avatar, AvatarImage, AvatarFallback } from '$lib/components/ui/avatar';
 	import { Badge } from '$lib/components/ui/badge';
 	import { Separator } from '$lib/components/ui/separator';
-	import { Trash2, MessageCircle, Share2 } from 'lucide-svelte';
+	import { Trash2, MessageCircle, Share2, Heart } from 'lucide-svelte';
 
 	interface Props {
 		post: PostType & {
@@ -16,6 +16,7 @@
 				id: string;
 				display_name: string;
 				profile_picture_url?: string | null;
+				sprite_id?: number | null;
 			};
 			reaction_counts?: {
 				total: number;
@@ -76,16 +77,29 @@
 </script>
 
 <Card class="mb-4">
-	<CardContent class="pt-6">
+	<CardContent class="py-4">
 		<!-- Post Header -->
 		<div class="flex items-start justify-between mb-4">
 			<a href="/profile/{post.user_id}" class="flex items-center gap-3 hover:underline">
-				<Avatar>
-					<AvatarImage src={post.user?.profile_picture_url} alt={post.user?.display_name} />
-					<AvatarFallback>
-						{post.user?.display_name?.charAt(0).toUpperCase() || '?'}
-					</AvatarFallback>
-				</Avatar>
+				{#if post.user?.display_name === 'Anonymous' && post.user?.sprite_id}
+					<!-- For anonymous users, show sprite as profile picture -->
+					<div class="size-10 flex items-center justify-center flex-shrink-0">
+						<img
+							src="/sprites/{post.user.sprite_id}.png"
+							alt="Sprite"
+							class="h-full w-auto"
+							style="image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: crisp-edges;"
+						/>
+					</div>
+				{:else}
+					<!-- For logged-in users, show regular avatar -->
+					<Avatar>
+						<AvatarImage src={post.user?.profile_picture_url} alt={post.user?.display_name} />
+						<AvatarFallback>
+							{post.user?.display_name?.charAt(0).toUpperCase() || '?'}
+						</AvatarFallback>
+					</Avatar>
+				{/if}
 				<div>
 					<p class="font-semibold">{post.user?.display_name || 'Unknown User'}</p>
 					<p class="text-sm text-muted-foreground">
@@ -133,7 +147,7 @@
 			{:else}
 				<!-- Disabled reaction button for non-authenticated users -->
 				<Button variant="ghost" size="sm" class="gap-2" disabled>
-					<span>👍</span>
+					<Heart class="size-4" />
 					<span>Like</span>
 				</Button>
 			{/if}

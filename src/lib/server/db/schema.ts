@@ -17,6 +17,7 @@ export const user = sqliteTable('user', {
 	website: text('website'),
 	cover_image_url: text('cover_image_url'),
 	public_key: text('public_key'), // For E2E encryption
+	sprite_id: integer('sprite_id'), // Sprite avatar ID (1-125)
 	// Anonymous user support
 	isAnonymous: integer('isAnonymous', { mode: 'boolean' }).default(false)
 });

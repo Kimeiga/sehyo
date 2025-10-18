@@ -34,13 +34,27 @@
 		<div class="p-6">
 			<div class="flex items-start gap-6 -mt-20 mb-4">
 				<!-- Profile Picture -->
-				{#if data.profileUser.profile_picture_url}
+				{#if data.profileUser.display_name === 'Anonymous' && data.profileUser.sprite_id}
+					<!-- For anonymous users, show sprite -->
+					<div
+						class="w-32 h-32 rounded-full border-4 border-card shadow-lg bg-muted flex items-center justify-center overflow-hidden"
+					>
+						<img
+							src="/sprites/{data.profileUser.sprite_id}.png"
+							alt="Sprite"
+							class="h-full w-auto"
+							style="image-rendering: pixelated; image-rendering: -moz-crisp-edges; image-rendering: crisp-edges;"
+						/>
+					</div>
+				{:else if data.profileUser.profile_picture_url}
+					<!-- For Google users, show profile picture -->
 					<img
 						src={data.profileUser.profile_picture_url}
 						alt={data.profileUser.display_name}
 						class="w-32 h-32 rounded-full border-4 border-white shadow-lg"
 					/>
 				{:else}
+					<!-- Fallback: show first letter -->
 					<div
 						class="w-32 h-32 rounded-full border-4 border-card shadow-lg bg-muted flex items-center justify-center"
 					>
