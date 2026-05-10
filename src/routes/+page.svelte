@@ -905,7 +905,7 @@
 	   nested children inside tw-main. */
 	.tw-item {
 		display: flex;
-		gap: 12px;
+		gap: 8px;
 		align-items: stretch;
 		width: 100%;
 	}
@@ -916,15 +916,15 @@
 
 	.tw-left {
 		flex-shrink: 0;
-		width: 44px;
+		width: 40px;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 	}
 	.tw-avatar-link {
 		display: block;
-		width: 44px;
-		height: 44px;
+		width: 40px;
+		height: 40px;
 		border-radius: 999px;
 		overflow: hidden;
 		flex-shrink: 0;
@@ -932,8 +932,8 @@
 	}
 	.tw-avatar {
 		display: block;
-		width: 44px;
-		height: 44px;
+		width: 40px;
+		height: 40px;
 		border-radius: 999px;
 		overflow: hidden;
 		background: var(--muted);
@@ -1050,32 +1050,35 @@
 	.tw-item.is-reply {
 		position: relative;
 	}
-	/* Right-angle hook: vertical stub at x:-34 (overlaps parent's
-	   drop-line) + horizontal stub at y:34 (avatar's vertical
-	   center) hooking into the avatar's left edge. No curve — a
-	   clean right angle is more legible and easier to clip
-	   against. */
+	/* Horizontal-only hook into the parent's drop-line. The
+	   parent's line already provides the vertical at x:-28
+	   (= parent.tw-left center, since avatar is 40px and the
+	   gap is 8px → child.x:0 = parent.x:48, parent's line at
+	   parent.x:20 = child.x:-28). The hook is just a 28px
+	   horizontal stub at avatar vertical-center (12px padding +
+	   20px half-avatar = 32px) so the line bends in cleanly
+	   without doubling up at the corner. */
 	.tw-item.is-reply::before {
 		content: '';
 		position: absolute;
-		left: -34px;
-		top: -2px;
-		width: 34px;
-		height: 36px;
-		border-left: 2px solid var(--border);
-		border-bottom: 2px solid var(--border);
+		left: -28px;
+		top: 32px;
+		width: 28px;
+		height: 2px;
+		background: var(--border);
+		border-radius: 999px;
 		pointer-events: none;
 	}
-	/* Stop the parent's drop-line at this child's hook by drawing
-	   an opaque cover over the line tail from y:34 (after the
-	   hook) down to the bottom of THIS reply's li. Bounded to the
-	   li so the cover never bleeds into subsequent posts. */
+	/* Stop the parent's drop-line at this child's hook. Cover
+	   the line tail from y:32 (after the hook) down to the
+	   bottom of THIS reply's li. Bounded so it doesn't bleed
+	   into subsequent posts. */
 	.tw-children > .tw-item.is-reply:last-child::after {
 		content: '';
 		display: block;
 		position: absolute;
-		left: -36px;
-		top: 34px;
+		left: -30px;
+		top: 32px;
 		bottom: 0;
 		width: 4px;
 		background: var(--background);
