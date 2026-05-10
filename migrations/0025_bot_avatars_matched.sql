@@ -37,5 +37,5 @@ UPDATE user SET image = 'https://i.pravatar.cc/300?img=17' WHERE id = 'user_seed
 UPDATE user SET image = 'https://i.pravatar.cc/300?img=59' WHERE id = 'user_seed_minjun';   -- Min-jun Park (Korean M — South Asian closest)
 UPDATE user SET image = 'https://i.pravatar.cc/300?img=49' WHERE id = 'user_seed_yuki';     -- Yuki Sato (Japanese F — South Asian closest)
 UPDATE user SET image = 'https://i.pravatar.cc/300?img=42' WHERE id = 'user_seed_mei';      -- Mei Chen (Chinese F — South Asian closest)
-UPDATE user SET image = 'https://i.pravatar.cc/300?img=18' WHERE id = 'user_seed_akira';    -- Akira Yamamoto (Japanese M — closest)
+UPDATE user SET image = 'https://i.pravatar.cc/300?img=54' WHERE id = 'user_seed_akira';    -- Akira Yamamoto (Japanese M — closest, MENA-coded)
 UPDATE user SET image = 'https://i.pravatar.cc/300?img=16' WHERE id = 'user_seed_jihye';    -- Ji-hye Kim (Korean F — closest)
