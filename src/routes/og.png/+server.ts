@@ -42,8 +42,11 @@ export const GET: RequestHandler = async ({ platform }) => {
 		if (row?.prompt_text) promptText = row.prompt_text;
 	}
 
-	const [geistThin, geistMid, mplusBold] = await Promise.all([
-		loadGoogleFont({ family: 'Geist', weight: 100 }),
+	const [geistLight, geistMid, mplusBold] = await Promise.all([
+		// 200 (ExtraLight / "ultralight") reads better than 100 (Thin)
+		// at link-preview sizes (~250px wide in most chat apps) without
+		// going as solid as 300 (Light).
+		loadGoogleFont({ family: 'Geist', weight: 200 }),
 		loadGoogleFont({ family: 'Geist', weight: 500 }),
 		loadGoogleFont({ family: 'M PLUS 2', weight: 700 })
 	]);
@@ -52,16 +55,15 @@ export const GET: RequestHandler = async ({ platform }) => {
 
 	const html = `
 		<div style="display:flex; flex-direction:column; justify-content:space-between; width:100%; height:100%; padding:72px 80px; background:white; font-family:Geist;">
-			<div style="display:flex; align-items:center;">
+			<div style="display:flex; justify-content:space-between; align-items:flex-start;">
 				<div style="display:flex; align-items:center; justify-content:center; background:#00A5D8; border-radius:22px; width:88px; height:88px; font-family:'M PLUS 2'; font-weight:700; font-size:64px; color:white; line-height:1;">製</div>
+				<span style="font-size:26px; color:#888; font-weight:500;">Today on sehyo.com</span>
 			</div>
 			<div style="display:flex; flex-direction:column;">
-				<p style="font-size:30px; color:#888; margin:0 0 20px; font-weight:500; letter-spacing:0.04em; text-transform:uppercase;">Today on Sehyo</p>
-				<h1 style="font-size:72px; font-weight:100; line-height:1.08; color:#111; margin:0; letter-spacing:-0.02em;">${safe}</h1>
+				<h1 style="font-size:72px; font-weight:200; line-height:1.08; color:#111; margin:0; letter-spacing:-0.02em;">${safe}</h1>
 			</div>
-			<div style="display:flex; justify-content:space-between; align-items:center;">
-				<span style="font-size:26px; color:#888; font-weight:500;">share your thoughts</span>
-				<span style="font-size:26px; color:#888; font-weight:500;">sehyo.com</span>
+			<div style="display:flex; justify-content:flex-end;">
+				<span style="font-size:26px; color:#888; font-weight:500;">Share your thoughts on sehyo.com</span>
 			</div>
 		</div>
 	`;
@@ -70,7 +72,7 @@ export const GET: RequestHandler = async ({ platform }) => {
 		width: 1200,
 		height: 630,
 		fonts: [
-			{ name: 'Geist',     data: geistThin,  weight: 100, style: 'normal' },
+			{ name: 'Geist',     data: geistLight, weight: 200, style: 'normal' },
 			{ name: 'Geist',     data: geistMid,   weight: 500, style: 'normal' },
 			{ name: 'M PLUS 2',  data: mplusBold,  weight: 700, style: 'normal' }
 		]
