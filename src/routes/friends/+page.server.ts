@@ -20,12 +20,12 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
 		const friendsResult = await platform.env.DB.prepare(
 			`SELECT f.*,
 				u.id as friend_id,
-				u.display_name,
+				u.name as display_name,
 				u.username,
-				u.profile_picture_url,
+				u.image as profile_picture_url,
 				u.bio
 			FROM friendships f
-			JOIN users u ON (
+			JOIN user u ON (
 				CASE
 					WHEN f.requester_id = ? THEN u.id = f.addressee_id
 					ELSE u.id = f.requester_id
@@ -42,12 +42,12 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
 		const requestsResult = await platform.env.DB.prepare(
 			`SELECT f.*,
 				u.id as requester_id,
-				u.display_name,
+				u.name as display_name,
 				u.username,
-				u.profile_picture_url,
+				u.image as profile_picture_url,
 				u.bio
 			FROM friendships f
-			JOIN users u ON u.id = f.requester_id
+			JOIN user u ON u.id = f.requester_id
 			WHERE f.addressee_id = ? AND f.status = 'pending'
 			ORDER BY f.created_at DESC`
 		)

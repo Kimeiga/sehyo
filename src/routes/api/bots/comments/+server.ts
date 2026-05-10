@@ -27,9 +27,9 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 
 		// Validate session and get user
 		const session = await db.prepare(
-			`SELECT s.user_id, u.username, u.display_name, bp.id as bot_id
+			`SELECT s.user_id, u.username, u.name as display_name, bp.id as bot_id
 			 FROM sessions s
-			 JOIN users u ON s.user_id = u.id
+			 JOIN user u ON s.user_id = u.id
 			 LEFT JOIN bot_profiles bp ON bp.user_id = u.id
 			 WHERE s.id = ? AND s.expires_at > datetime('now')`
 		).bind(sessionId).first();
@@ -97,7 +97,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 		const comment = await db.prepare(
 			`SELECT c.*, u.username, u.display_name
 			 FROM comments c
-			 JOIN users u ON c.user_id = u.id
+			 JOIN user u ON c.user_id = u.id
 			 WHERE c.id = ?`
 		).bind(commentId).first();
 
