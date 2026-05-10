@@ -78,15 +78,14 @@ export const GET: RequestHandler = async ({ platform }) => {
 		]
 	});
 
-	// Wrap to add caching headers; ImageResponse already sets content-type.
-	return new Response(response.body, {
-		status: response.status,
-		headers: {
-			...Object.fromEntries(response.headers),
-			// Short cache so design iterations and the daily-prompt
-			// rollover surface within 5 minutes. Once the layout settles
-			// we can bump this back to an hour.
-			'Cache-Control': 'public, max-age=300, s-maxage=300'
-		}
-	});
+	// workers-og's ImageResponse defaults Cache-Control to
+	// `public, immutable, no-transform, max-age=31536000` (1 year,
+	// immutable). That's a deal-breaker for an image whose content
+	// changes every day — browsers and social-card scrapers refuse to
+	// revalidate immutable responses. Replace the header (set, not
+	// merge) with a short TTL so today's prompt actually appears.
+	const headers = new Headers(response.headers);
+	headers.delete('Cache-Control');
+	headers.set('Cache-Control', 'public, max-age=300, s-maxage=300');
+	return new Response(response.body, { status: response.status, headers });
 };

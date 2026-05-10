@@ -24,10 +24,12 @@
 			? `Today's question on Sehyo: ${data.prompt.text} Answer, see what others say, and share your thoughts.`
 			: DEFAULT_DESC
 	);
-	// Dynamic prompt-of-the-day image. Generated edge-side via workers-og,
-	// cached 1h. The static /og-default.png stays as a fallback if anything
-	// else points at it.
-	const ogImage = $derived(`${SITE}/og.png`);
+	// Dynamic prompt-of-the-day image. Generated edge-side via workers-og.
+	// Lives under /api/og so SvelteKit-Cloudflare doesn't apply its
+	// static-asset cache-control override (which would mark the response
+	// `immutable, max-age=14400` and prevent re-fetch by browsers and
+	// social-card scrapers).
+	const ogImage = $derived(`${SITE}/api/og`);
 
 	onMount(async () => {
 		if (pwaInfo) {
