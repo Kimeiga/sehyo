@@ -12,6 +12,60 @@
 	let saving = $state(false);
 	let editError = $state('');
 
+	// Bio editor (separate state so it can be in or out of edit mode
+	// independently of the username field).
+	let editingBio = $state(false);
+	let bioDraft = $state('');
+	let savingBio = $state(false);
+	let bioError = $state('');
+
+	function startBioEdit() {
+		bioDraft = u.bio ?? '';
+		bioError = '';
+		editingBio = true;
+	}
+	function cancelBioEdit() {
+		editingBio = false;
+		bioDraft = '';
+		bioError = '';
+	}
+
+	async function saveBio() {
+		if (savingBio) return;
+		const next = bioDraft.trim();
+		if (next === (u.bio ?? '')) {
+			editingBio = false;
+			return;
+		}
+		savingBio = true;
+		bioError = '';
+		try {
+			const res = await fetch('/api/user/me', {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ bio: next })
+			});
+			if (!res.ok) {
+				const body = await res.json().catch(() => ({}));
+				bioError = body?.message ?? `Could not save (HTTP ${res.status}).`;
+				return;
+			}
+			editingBio = false;
+			await invalidateAll();
+		} catch (err) {
+			console.error('Bio save failed:', err);
+			bioError = 'Could not save. Try again.';
+		} finally {
+			savingBio = false;
+		}
+	}
+
+	function formatJoined(unixSeconds: number) {
+		const d = new Date(unixSeconds * 1000);
+		return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+	}
+
 	function startEdit() {
 		draft = u.username;
 		editError = '';
@@ -127,7 +181,38 @@
 				{/if}
 			</p>
 		{/if}
-		{#if u.bio}<p class="bio">{u.bio}</p>{/if}
+		{#if isOwnProfile && editingBio}
+			<form class="bio-editor" onsubmit={(e) => { e.preventDefault(); saveBio(); }}>
+				<textarea
+					bind:value={bioDraft}
+					rows="3"
+					maxlength="280"
+					placeholder="Write a short bio…"
+					disabled={savingBio}
+				></textarea>
+				<div class="bio-bar">
+					<span class="bio-count">{bioDraft.length}/280</span>
+					<button type="button" class="ghost-button" onclick={cancelBioEdit} disabled={savingBio}>Cancel</button>
+					<button type="submit" class="primary-button" disabled={savingBio}>
+						{savingBio ? 'Saving…' : 'Save'}
+					</button>
+				</div>
+				{#if bioError}<p class="handle-error">{bioError}</p>{/if}
+			</form>
+		{:else if u.bio}
+			<p class="bio">
+				{u.bio}
+				{#if isOwnProfile}
+					<button type="button" class="edit-handle" aria-label="Edit bio" onclick={startBioEdit}>
+						<Pencil size="13" strokeWidth="1.8" />
+					</button>
+				{/if}
+			</p>
+		{:else if isOwnProfile}
+			<button type="button" class="add-bio" onclick={startBioEdit}>+ Add a bio</button>
+		{/if}
+
+		<p class="joined">Joined {formatJoined(u.createdAt)}</p>
 	</header>
 
 	{#if data.posts.length === 0}
@@ -270,8 +355,83 @@
 		font-size: 16px;
 		color: var(--foreground);
 		line-height: 1.5;
-		margin: 0;
+		margin: 0 0 12px;
 		max-width: 540px;
+		display: inline-flex;
+		align-items: flex-start;
+		gap: 8px;
+		flex-wrap: wrap;
+	}
+	.add-bio {
+		appearance: none;
+		border: 0;
+		background: transparent;
+		color: var(--muted-foreground);
+		font: inherit;
+		font-size: 14px;
+		padding: 4px 0;
+		margin: 0 0 12px;
+		cursor: pointer;
+		text-align: left;
+	}
+	.add-bio:hover { color: var(--foreground); }
+
+	.bio-editor {
+		max-width: 540px;
+		margin: 0 0 16px;
+	}
+	.bio-editor textarea {
+		width: 100%;
+		font-family: var(--font-sans);
+		font-size: 16px;
+		line-height: 1.5;
+		padding: 12px 14px;
+		border-radius: 12px;
+		border: 1px solid var(--border);
+		background: var(--card);
+		color: var(--card-foreground);
+		resize: vertical;
+		min-height: 80px;
+	}
+	.bio-editor textarea:focus { outline: 2px solid var(--ring); outline-offset: -1px; }
+	.bio-bar {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin-top: 10px;
+	}
+	.bio-count { font-size: 12px; color: var(--muted-foreground); margin-right: auto; }
+	.ghost-button {
+		appearance: none;
+		border: 0;
+		background: transparent;
+		color: var(--muted-foreground);
+		font: inherit;
+		font-weight: 500;
+		font-size: 14px;
+		padding: 8px 14px;
+		border-radius: 999px;
+		cursor: pointer;
+	}
+	.ghost-button:hover { color: var(--foreground); }
+	.primary-button {
+		appearance: none;
+		border: 0;
+		background: var(--foreground);
+		color: var(--background);
+		font: inherit;
+		font-weight: 600;
+		font-size: 14px;
+		padding: 8px 18px;
+		border-radius: 999px;
+		cursor: pointer;
+	}
+	.primary-button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+	.joined {
+		font-size: 13px;
+		color: var(--muted-foreground);
+		margin: 0;
 	}
 
 	.feed {

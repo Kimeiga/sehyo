@@ -108,7 +108,7 @@
 				<section>
 					<h2 class="eyebrow">People · {results.users.length}</h2>
 					{#each results.users as u (u.id)}
-						<a class="row" href="/profile/{u.id}">
+						<a class="row" href={u.username ? `/${u.username}` : `/profile/${u.id}`}>
 							<div class="row-main">
 								<p class="row-title">{u.display_name ?? 'Anonymous'}</p>
 								{#if u.username}<p class="row-sub">@{u.username}</p>{/if}
