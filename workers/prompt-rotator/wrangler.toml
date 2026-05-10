@@ -1,0 +1,20 @@
+name = "sehyo-prompt-rotator"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+
+# 11:00 UTC = 6:00 AM EST (winter) / 7:00 AM EDT (summer).
+# DST is intentionally ignored — drift to 7am in summer is fine.
+[triggers]
+crons = ["0 11 * * *"]
+
+[vars]
+API_BASE_URL = "https://sehyo.com"
+
+# ADMIN_SECRET lives in the root project's .dev.vars (symlinked here as
+# `.dev.vars`). `wrangler dev` picks it up automatically — no paste needed.
+#
+# For production deploys, secrets must be uploaded to Cloudflare's secret
+# store separately. Non-interactive (reads from the same .dev.vars):
+#   grep -E '^ADMIN_SECRET=' .dev.vars | cut -d= -f2- | npx wrangler secret put ADMIN_SECRET
+# Must match the ADMIN_SECRET configured on the Pages deployment that hosts
+# /api/admin/rotate-prompt.

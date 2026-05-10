@@ -3,5 +3,8 @@
 
 GOOGLE_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your_google_client_secret
-GOOGLE_REDIRECT_URI=http://localhost:5173/auth/callback
+# Optional. If unset, Better Auth derives the redirect URI from the request
+# host (`${origin}/api/auth/callback/google`), which is what you usually want
+# for local dev. Only set this to pin a specific URI (e.g. for production).
+# GOOGLE_REDIRECT_URI=https://your-domain.com/api/auth/callback/google
 

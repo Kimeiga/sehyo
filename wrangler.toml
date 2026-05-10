@@ -8,6 +8,7 @@ pages_build_output_dir = ".svelte-kit/cloudflare"
 binding = "DB"
 database_name = "sehyo-db"
 database_id = "5effc8ea-6563-45ee-a7d7-ef4b950fd7e8"
+remote = true
 
 # R2 Bucket binding for image uploads
 [[r2_buckets]]

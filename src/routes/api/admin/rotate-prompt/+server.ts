@@ -1,6 +1,6 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { rotatePromptIfNeeded, regenerateSeedAnswersForToday } from '$lib/server/ai-bots';
+import { rotatePrompt, regenerateSeedAnswersForToday } from '$lib/server/ai-bots';
 
 /**
  * Triggers today's prompt rotation. Idempotent: if today's prompt already
@@ -24,6 +24,6 @@ export const POST: RequestHandler = async ({ request, platform, url }) => {
 		const result = await regenerateSeedAnswersForToday(env.DB, env.AI);
 		return json(result);
 	}
-	const result = await rotatePromptIfNeeded(env.DB, env.AI);
+	const result = await rotatePrompt(env.DB, env.AI);
 	return json(result);
 };
