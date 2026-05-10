@@ -2,7 +2,8 @@
 	import type { PageProps } from './$types';
 	import { invalidateAll } from '$app/navigation';
 	import { authClient } from '$lib/auth-client';
-	import { MessageCircle, Pencil, MoreHorizontal, Check } from 'lucide-svelte';
+	import { promptSignIn } from '$lib/stores/sign-in-modal';
+	import { MessageCircle, Pencil, MoreHorizontal, Check, CornerUpLeft } from 'lucide-svelte';
 
 	let { data }: PageProps = $props();
 
@@ -11,11 +12,39 @@
 		content: string;
 		created_at: number;
 		user_id: string;
+		parent_comment_id: string | null;
 		user: {
 			id: string;
 			display_name: string | null;
 			username: string | null;
 		};
+	}
+
+	const MAX_NEST_DEPTH = 3;
+
+	function buildCommentTree(flat: CommentRow[]): { comment: CommentRow; children: CommentRow[] }[] {
+		// Group by parent. Render top-level (parent null) with their full
+		// descendant trees flattened up to MAX_NEST_DEPTH visual layers.
+		const byParent = new Map<string | null, CommentRow[]>();
+		for (const c of flat) {
+			const key = c.parent_comment_id;
+			const arr = byParent.get(key) ?? [];
+			arr.push(c);
+			byParent.set(key, arr);
+		}
+		// We render via a recursive snippet, so just return top-level array.
+		const top = byParent.get(null) ?? [];
+		// Sort by created_at ascending within each level (the API already does
+		// this, but defensive).
+		top.sort((a, b) => a.created_at - b.created_at);
+		return top.map((c) => ({ comment: c, children: byParent.get(c.id) ?? [] }));
+	}
+
+	// Children of a given comment id, sorted ascending by created_at.
+	function childrenOf(commentsForPost: CommentRow[], commentId: string): CommentRow[] {
+		return commentsForPost
+			.filter((c) => c.parent_comment_id === commentId)
+			.sort((a, b) => a.created_at - b.created_at);
 	}
 
 	// Today's-prompt composer state.
@@ -56,14 +85,27 @@
 	// Browser-notification permission state. The actual web-push
 	// subscription wiring is a Phase 2 follow-up; for now we just hold
 	// the permission so the UI can reflect it.
-	let notificationPermission = $state<NotificationPermission | 'unsupported' | null>(null);
+	type NotifyState = NotificationPermission | 'unsupported' | 'ios-pwa-required' | null;
+	let notificationPermission = $state<NotifyState>(null);
 	$effect(() => {
 		if (typeof window === 'undefined') return;
-		if (!('Notification' in window)) {
-			notificationPermission = 'unsupported';
+		const ua = window.navigator.userAgent;
+		const isIos = /iPad|iPhone|iPod/.test(ua) && !('MSStream' in window);
+		const isStandalone =
+			(window.navigator as { standalone?: boolean }).standalone === true ||
+			window.matchMedia('(display-mode: standalone)').matches;
+
+		if ('Notification' in window) {
+			notificationPermission = Notification.permission;
 			return;
 		}
-		notificationPermission = Notification.permission;
+		// iOS Safari hides the Notification API unless the page is
+		// installed to the home screen as a PWA (iOS 16.4+).
+		if (isIos && !isStandalone) {
+			notificationPermission = 'ios-pwa-required';
+			return;
+		}
+		notificationPermission = 'unsupported';
 	});
 
 	async function enableNotifications() {
@@ -94,6 +136,17 @@
 	let commentValue = $state('');
 	let submittingComment = $state(false);
 	let commentsByPost = $state<Record<string, CommentRow[]>>({});
+
+	// When non-null, indicates a reply composer is open under this comment id.
+	let replyingTo = $state<string | null>(null);
+	let replyValue = $state('');
+	let submittingReply = $state(false);
+
+	const isAnon = $derived(!!data.user && !!data.user.isAnonymous);
+
+	function changeMyName() {
+		promptSignIn('Sign in to change your name.');
+	}
 
 	async function ensureSession() {
 		if (data.user) return true;
@@ -284,6 +337,42 @@
 		}
 	}
 
+	async function submitReply(postId: string, parentCommentId: string, e: SubmitEvent) {
+		e.preventDefault();
+		const content = replyValue.trim();
+		if (!content || submittingReply) return;
+		submittingReply = true;
+		try {
+			if (!(await ensureSession())) return;
+			const res = await fetch(`/api/posts/${postId}/comments`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ content, parent_comment_id: parentCommentId })
+			});
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			replyValue = '';
+			replyingTo = null;
+			await loadComments(postId);
+			await invalidateAll();
+		} catch (err) {
+			console.error('Reply failed:', err);
+			alert('Could not post reply. Try again.');
+		} finally {
+			submittingReply = false;
+		}
+	}
+
+	function toggleReply(commentId: string) {
+		if (replyingTo === commentId) {
+			replyingTo = null;
+			replyValue = '';
+		} else {
+			replyingTo = commentId;
+			replyValue = '';
+		}
+	}
+
 	function formatDate(iso: string) {
 		const d = new Date(iso + 'T00:00:00Z');
 		return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
@@ -368,7 +457,19 @@
 					</div>
 				{:else}
 					<header class="author-row">
-						<span class="author">{data.user?.name ?? 'You'}</span>
+						<span class="author-inline">
+							<span class="author">{data.user?.name ?? 'You'}</span>
+							{#if isAnon}
+								<button
+									type="button"
+									class="edit-name"
+									aria-label="Change your name"
+									onclick={changeMyName}
+								>
+									<Pencil size="13" strokeWidth="1.8" />
+								</button>
+							{/if}
+						</span>
 					</header>
 					<p class="answer-body">{data.myAnswer.content}</p>
 					<footer class="answer-foot">
@@ -392,32 +493,7 @@
 					</footer>
 
 					{#if openCommentFor === data.myAnswer.id}
-						<div class="comment-thread">
-							{#if commentsByPost[data.myAnswer.id]?.length}
-								<ul class="comment-list">
-									{#each commentsByPost[data.myAnswer.id] as c (c.id)}
-										<li class="comment">
-											<span class="comment-author">{c.user?.display_name ?? 'Anonymous'}</span>
-											<span class="comment-body">{c.content}</span>
-										</li>
-									{/each}
-								</ul>
-							{/if}
-							<form class="comment-composer" onsubmit={(e) => submitComment(data.myAnswer!.id, e)}>
-								<textarea
-									bind:value={commentValue}
-									placeholder="Add a comment…"
-									rows="2"
-									maxlength="1000"
-									disabled={submittingComment}
-								></textarea>
-								<button
-									type="submit"
-									class="post-button small"
-									disabled={submittingComment || commentValue.trim().length === 0}
-								>{submittingComment ? '…' : 'Post'}</button>
-							</form>
-						</div>
+						{@render commentThread(data.myAnswer.id)}
 					{/if}
 				{/if}
 			</article>
@@ -434,6 +510,8 @@
 				A new question will be posited tomorrow.
 				{#if notificationPermission === 'granted'}
 					<span class="nudge-state">Notifications on.</span>
+				{:else if notificationPermission === 'ios-pwa-required'}
+					<span class="nudge-state">To enable notifications: tap Share → Add to Home Screen, then open Sehyo from the icon.</span>
 				{:else if notificationPermission === 'denied' || notificationPermission === 'unsupported'}
 					<span class="nudge-state">Notifications unavailable.</span>
 				{:else}
@@ -519,6 +597,107 @@
 	{/if}
 </main>
 
+{#snippet authorName(displayName: string | null, isOwn: boolean)}
+	<span class="author-inline">
+		<span class="author author-mask">{displayName ?? 'Anonymous'}</span>
+		{#if isOwn && isAnon}
+			<button
+				type="button"
+				class="edit-name"
+				aria-label="Change your name"
+				onclick={changeMyName}
+			>
+				<Pencil size="12" strokeWidth="1.8" />
+			</button>
+		{/if}
+	</span>
+{/snippet}
+
+{#snippet commentNode(c: CommentRow, postId: string, depth: number)}
+	{@const all = commentsByPost[postId] ?? []}
+	{@const kids = childrenOf(all, c.id)}
+	{@const ownComment = !!data.user && c.user_id === data.user.id}
+	<li class="comment">
+		<div class="comment-row">
+			<span class="comment-author author-mask">{c.user?.display_name ?? 'Anonymous'}</span>
+			{#if ownComment && isAnon}
+				<button
+					type="button"
+					class="edit-name comment-edit-name"
+					aria-label="Change your name"
+					onclick={changeMyName}
+				>
+					<Pencil size="11" strokeWidth="1.8" />
+				</button>
+			{/if}
+			<span class="comment-body">{c.content}</span>
+		</div>
+		<div class="comment-foot">
+			<button type="button" class="reply-button" onclick={() => toggleReply(c.id)}>
+				<CornerUpLeft size="13" strokeWidth="1.7" />
+				{replyingTo === c.id ? 'Cancel' : 'Reply'}
+			</button>
+		</div>
+
+		{#if replyingTo === c.id}
+			<form class="reply-composer" onsubmit={(e) => submitReply(postId, c.id, e)}>
+				<textarea
+					bind:value={replyValue}
+					placeholder="Reply…"
+					rows="2"
+					maxlength="1000"
+					disabled={submittingReply}
+				></textarea>
+				<button
+					type="submit"
+					class="post-button small"
+					disabled={submittingReply || replyValue.trim().length === 0}
+				>{submittingReply ? '…' : 'Reply'}</button>
+			</form>
+		{/if}
+
+		{#if kids.length > 0}
+			<ul class="comment-list nested" class:capped={depth + 1 >= MAX_NEST_DEPTH}>
+				{#each kids as child (child.id)}
+					{#if depth + 1 < MAX_NEST_DEPTH}
+						{@render commentNode(child, postId, depth + 1)}
+					{:else}
+						{@render commentNode(child, postId, depth)}
+					{/if}
+				{/each}
+			</ul>
+		{/if}
+	</li>
+{/snippet}
+
+{#snippet commentThread(postId: string)}
+	{@const all = commentsByPost[postId] ?? []}
+	{@const tops = all.filter((c) => c.parent_comment_id === null).sort((a, b) => a.created_at - b.created_at)}
+	<div class="comment-thread">
+		{#if tops.length > 0}
+			<ul class="comment-list">
+				{#each tops as c (c.id)}
+					{@render commentNode(c, postId, 0)}
+				{/each}
+			</ul>
+		{/if}
+		<form class="comment-composer" onsubmit={(e) => submitComment(postId, e)}>
+			<textarea
+				bind:value={commentValue}
+				placeholder="Add a comment…"
+				rows="2"
+				maxlength="1000"
+				disabled={submittingComment}
+			></textarea>
+			<button
+				type="submit"
+				class="post-button small"
+				disabled={submittingComment || commentValue.trim().length === 0}
+			>{submittingComment ? '…' : 'Post'}</button>
+		</form>
+	</div>
+{/snippet}
+
 {#snippet userQuestionCard(q: { id: string; content: string; display_name: string | null; bot_id: string | null; comment_count: number })}
 	<article class="user-question">
 		<p class="user-question-from">From <span class="user-question-name author-mask">{q.display_name ?? 'Anonymous'}</span></p>
@@ -536,32 +715,7 @@
 		</footer>
 
 		{#if openCommentFor === q.id}
-			<div class="comment-thread">
-				{#if commentsByPost[q.id]?.length}
-					<ul class="comment-list">
-						{#each commentsByPost[q.id] as c (c.id)}
-							<li class="comment">
-								<span class="comment-author author-mask">{c.user?.display_name ?? 'Anonymous'}</span>
-								<span class="comment-body">{c.content}</span>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-				<form class="comment-composer" onsubmit={(e) => submitComment(q.id, e)}>
-					<textarea
-						bind:value={commentValue}
-						placeholder="Reply…"
-						rows="2"
-						maxlength="1000"
-						disabled={submittingComment}
-					></textarea>
-					<button
-						type="submit"
-						class="post-button small"
-						disabled={submittingComment || commentValue.trim().length === 0}
-					>{submittingComment ? '…' : 'Reply'}</button>
-				</form>
-			</div>
+			{@render commentThread(q.id)}
 		{/if}
 	</article>
 {/snippet}
@@ -585,32 +739,7 @@
 		</footer>
 
 		{#if openCommentFor === a.id}
-			<div class="comment-thread">
-				{#if commentsByPost[a.id]?.length}
-					<ul class="comment-list">
-						{#each commentsByPost[a.id] as c (c.id)}
-							<li class="comment">
-								<span class="comment-author author-mask">{c.user?.display_name ?? 'Anonymous'}</span>
-								<span class="comment-body">{c.content}</span>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-				<form class="comment-composer" onsubmit={(e) => submitComment(a.id, e)}>
-					<textarea
-						bind:value={commentValue}
-						placeholder="Add a comment…"
-						rows="2"
-						maxlength="1000"
-						disabled={submittingComment}
-					></textarea>
-					<button
-						type="submit"
-						class="post-button small"
-						disabled={submittingComment || commentValue.trim().length === 0}
-					>{submittingComment ? '…' : 'Post'}</button>
-				</form>
-			</div>
+			{@render commentThread(a.id)}
 		{/if}
 	</article>
 {/snippet}
@@ -855,10 +984,93 @@
 		gap: 8px;
 		align-items: flex-end;
 	}
-	.comment-composer textarea {
+	.comment-composer textarea,
+	.reply-composer textarea {
 		flex: 1;
-		font-size: 15px;
+		/* 16px specifically — anything smaller and iOS Safari zooms the
+		   page on focus. */
+		font-size: 16px;
 		min-height: 60px;
+	}
+
+	.reply-composer {
+		display: flex;
+		gap: 8px;
+		align-items: flex-end;
+		margin-top: 8px;
+	}
+
+	.comment-row {
+		display: flex;
+		align-items: baseline;
+		flex-wrap: wrap;
+		gap: 6px;
+	}
+
+	.comment-foot {
+		margin-top: 4px;
+	}
+
+	.reply-button {
+		appearance: none;
+		border: 0;
+		background: transparent;
+		color: var(--muted-foreground);
+		font: inherit;
+		font-size: 12px;
+		font-weight: 500;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 4px 6px;
+		border-radius: 6px;
+		cursor: pointer;
+	}
+	.reply-button:hover {
+		color: var(--foreground);
+		background: var(--muted);
+	}
+
+	/* Nested replies. Padding-left + a left border line to indicate
+	   nesting. After MAX_NEST_DEPTH layers we render flat in the same
+	   indent (.capped suppresses additional indent). */
+	.comment-list.nested {
+		list-style: none;
+		padding: 0;
+		margin: 8px 0 0 14px;
+		border-left: 1px solid var(--border);
+		padding-left: 12px;
+	}
+	.comment-list.nested.capped {
+		border-left: 0;
+		padding-left: 0;
+		margin-left: 0;
+	}
+
+	/* Pencil affordance next to the user's own (anonymous) name. */
+	.author-inline {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+	}
+	.edit-name {
+		appearance: none;
+		border: 0;
+		background: transparent;
+		color: var(--muted-foreground);
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 2px;
+		border-radius: 4px;
+		cursor: pointer;
+	}
+	.edit-name:hover {
+		color: var(--foreground);
+		background: var(--muted);
+	}
+	.comment-edit-name {
+		padding: 1px;
 	}
 
 	/* Soft gray nudge that surfaces below the answers feed once the

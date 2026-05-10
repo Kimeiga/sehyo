@@ -171,12 +171,15 @@ export class Database {
 	}
 
 	async getPostComments(post_id: string): Promise<Comment[]> {
+		// Returns ALL comments (top-level + replies) flat. The client
+		// builds the nested tree by parent_comment_id so we can render
+		// indented replies up to a depth limit.
 		const results = await this.db
 			.prepare(
 				`SELECT c.*, u.name as display_name, u.username, u.image as profile_picture_url, u.sprite_id
 				 FROM comments c
 				 JOIN user u ON c.user_id = u.id
-				 WHERE c.post_id = ? AND c.parent_comment_id IS NULL
+				 WHERE c.post_id = ?
 				 ORDER BY c.created_at ASC`
 			)
 			.bind(post_id)

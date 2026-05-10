@@ -3,6 +3,7 @@
 	import { goto, invalidateAll } from '$app/navigation';
 	import { authClient } from '$lib/auth-client';
 	import { menuOpen, closeMenu } from '$lib/stores/menu';
+	import { promptSignIn } from '$lib/stores/sign-in-modal';
 	import type { User } from '$lib/types';
 
 	interface Props {
@@ -72,7 +73,8 @@
 	}
 
 	function showSignInGate() {
-		alert('Please sign in to do that.');
+		closeMenu();
+		promptSignIn('Sign in to use messages.');
 	}
 
 	const isSignedIn = $derived(!!user && !user.isAnonymous);
