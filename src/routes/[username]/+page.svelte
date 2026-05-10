@@ -491,6 +491,8 @@
 		min-height: 56px;
 	}
 	.profile-avatar-frame {
+		position: relative;
+		z-index: 2;
 		width: 112px;
 		height: 112px;
 		border-radius: 999px;
