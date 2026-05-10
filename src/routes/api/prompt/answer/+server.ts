@@ -28,6 +28,16 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 
 	if (!prompt) throw error(409, 'No active prompt today');
 
+	// One answer per user per prompt. If they already have one, tell the
+	// client to use the edit flow instead of creating a duplicate.
+	const existing = await db
+		.prepare('SELECT id FROM posts WHERE user_id = ? AND prompt_id = ?')
+		.bind(locals.user.id, prompt.id)
+		.first<{ id: string }>();
+	if (existing) {
+		throw error(409, 'You already answered this prompt');
+	}
+
 	const postId = crypto.randomUUID();
 	await db
 		.prepare(`INSERT INTO posts (id, user_id, prompt_id, content) VALUES (?, ?, ?, ?)`)

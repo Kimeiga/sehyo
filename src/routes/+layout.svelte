@@ -3,17 +3,11 @@
 	import type { LayoutProps } from './$types';
 	import Menu from '$lib/components/Menu.svelte';
 	import LoginModal from '$lib/components/LoginModal.svelte';
-	import { menuOpen, openMenu } from '$lib/stores/menu';
+	import { menuOpen, toggleMenu } from '$lib/stores/menu';
 	import { onMount } from 'svelte';
-	import { page } from '$app/state';
 	import { pwaInfo } from 'virtual:pwa-info';
 
 	let { data, children }: LayoutProps = $props();
-
-	// On the home route, the page itself renders a giant centered logo.
-	// Everywhere else, a small floating logo button lives in the corner so the
-	// menu is always reachable.
-	const showFloatingLogo = $derived(page.url.pathname !== '/');
 
 	onMount(async () => {
 		if (pwaInfo) {
@@ -33,22 +27,28 @@
 	<link rel="apple-touch-icon" href="/pwa-192x192.png" />
 </svelte:head>
 
-<div class="app">
-	{#if showFloatingLogo && !$menuOpen}
-		<button
-			type="button"
-			class="floating-logo"
-			onclick={openMenu}
-			aria-label="Open menu"
-		>
-			<img src="/sehyo-logo.svg" alt="" width="44" height="44" />
-		</button>
-	{/if}
+<div class="app" class:names-blurred={data.namesBlurred}>
+	<button
+		type="button"
+		class="logo-button"
+		class:open={$menuOpen}
+		onclick={toggleMenu}
+		aria-label={$menuOpen ? 'Close menu' : 'Open menu'}
+		aria-expanded={$menuOpen}
+	>
+		{#if $menuOpen}
+			<svg class="x-icon" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+				<line x1="6" y1="6" x2="18" y2="18" />
+				<line x1="18" y1="6" x2="6" y2="18" />
+			</svg>
+		{:else}
+			<img src="/sehyo-logo.svg" alt="" width="40" height="40" />
+		{/if}
+	</button>
 
 	{@render children?.()}
 
-	<Menu user={data.user} prompt={data.prompt ?? null} answers={data.answers ?? []} />
-
+	<Menu user={data.user} />
 	<LoginModal open={data.showLoginModal} />
 </div>
 
@@ -59,24 +59,44 @@
 		color: var(--foreground);
 	}
 
-	.floating-logo {
+	/* Author names are masked until the viewer commits to engaging.
+	   Applied at the layout level so every page picks it up. */
+	.app.names-blurred :global(.author-mask) {
+		filter: blur(5px);
+		user-select: none;
+		pointer-events: none;
+	}
+
+	.logo-button {
 		position: fixed;
-		top: 14px;
-		left: 14px;
-		z-index: 50;
+		top: 16px;
+		left: 16px;
+		z-index: 100;
 		appearance: none;
 		border: 0;
 		padding: 0;
+		width: 44px;
+		height: 44px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 		background: transparent;
 		cursor: pointer;
 		border-radius: 10px;
-		transition: transform 160ms ease, box-shadow 160ms ease;
+		color: var(--foreground);
+		transition: transform 160ms ease;
 	}
-	.floating-logo img {
+	.logo-button img {
 		display: block;
-		border-radius: 10px;
-		box-shadow: 0 6px 20px -8px color-mix(in oklab, var(--primary) 60%, transparent);
+		width: 40px;
+		height: 40px;
+		border-radius: 9px;
 	}
-	.floating-logo:hover { transform: scale(1.06); }
-	.floating-logo:active { transform: scale(0.96); }
+	.logo-button:hover { transform: scale(1.06); }
+	.logo-button:active { transform: scale(0.94); }
+	.logo-button.open { color: var(--foreground); }
+	.logo-button:focus-visible {
+		outline: 2px solid var(--ring);
+		outline-offset: 3px;
+	}
 </style>
