@@ -117,7 +117,7 @@ VITE_GOOGLE_CLIENT_ID=your_client_id_here
 ### **Production Deployment:**
 1. Run migration on production database:
    ```bash
-   npx wrangler d1 execute portfolio-facebook-db --remote --file=./migrations/0003_better_auth.sql
+   npx wrangler d1 execute sehyo-db --remote --file=./migrations/0003_better_auth.sql
    ```
 
 2. Set production secrets:

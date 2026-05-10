@@ -1,6 +1,6 @@
 {
-  "name": "Portfolio Facebook",
-  "short_name": "PortfolioFB",
+  "name": "Sehyo",
+  "short_name": "Sehyo",
   "description": "A modern social media platform built with SvelteKit and Cloudflare",
   "start_url": "/",
   "display": "standalone",

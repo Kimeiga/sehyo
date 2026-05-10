@@ -42,9 +42,9 @@
 			<!-- Logo -->
 			<a href="/" class="flex items-center gap-2">
 				<div class="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-					<span class="text-primary-foreground font-bold text-xl">f</span>
+					<span class="text-primary-foreground font-bold text-xl">S</span>
 				</div>
-				<span class="font-bold text-xl hidden sm:block text-foreground">Portfolio Facebook</span>
+				<span class="font-bold text-xl hidden sm:block text-foreground">Sehyo</span>
 			</a>
 
 			<!-- Search Bar (always visible) -->

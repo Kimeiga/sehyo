@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Portfolio Facebook - Setup Script
+# Sehyo - Setup Script
 # This script helps you set up the Cloudflare resources needed for the application
 
 set -e
 
-echo "🚀 Portfolio Facebook - Setup Script"
+echo "🚀 Sehyo - Setup Script"
 echo "===================================="
 echo ""
 
@@ -20,9 +20,9 @@ echo ""
 
 # Step 1: Create D1 Database
 echo "📊 Step 1: Creating D1 Database..."
-echo "Running: npx wrangler d1 create portfolio-facebook-db"
+echo "Running: npx wrangler d1 create sehyo-db"
 echo ""
-npx wrangler d1 create portfolio-facebook-db
+npx wrangler d1 create sehyo-db
 echo ""
 echo "⚠️  IMPORTANT: Copy the database_id from above and update it in wrangler.toml"
 echo "Press Enter when you've updated wrangler.toml..."
@@ -31,18 +31,18 @@ read
 # Step 2: Run Migrations
 echo ""
 echo "📝 Step 2: Running Database Migrations..."
-echo "Running: npx wrangler d1 execute portfolio-facebook-db --file=./migrations/0001_initial_schema.sql"
+echo "Running: npx wrangler d1 execute sehyo-db --file=./migrations/0001_initial_schema.sql"
 echo ""
-npx wrangler d1 execute portfolio-facebook-db --file=./migrations/0001_initial_schema.sql
+npx wrangler d1 execute sehyo-db --file=./migrations/0001_initial_schema.sql
 echo ""
 echo "✅ Database migrations completed"
 
 # Step 3: Create R2 Bucket
 echo ""
 echo "🪣 Step 3: Creating R2 Bucket..."
-echo "Running: npx wrangler r2 bucket create portfolio-facebook-images"
+echo "Running: npx wrangler r2 bucket create sehyo-images"
 echo ""
-npx wrangler r2 bucket create portfolio-facebook-images
+npx wrangler r2 bucket create sehyo-images
 echo ""
 echo "✅ R2 bucket created"
 

@@ -68,9 +68,9 @@
 	<Card class="w-full max-w-md">
 		<CardHeader class="text-center">
 			<div class="w-16 h-16 bg-primary rounded-lg flex items-center justify-center mx-auto mb-4">
-				<span class="text-primary-foreground font-bold text-3xl">f</span>
+				<span class="text-primary-foreground font-bold text-3xl">S</span>
 			</div>
-			<CardTitle class="text-2xl">Welcome to Portfolio Facebook</CardTitle>
+			<CardTitle class="text-2xl">Welcome to Sehyo</CardTitle>
 			<CardDescription>
 				Connect with friends, share moments, and stay in touch
 			</CardDescription>

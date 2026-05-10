@@ -1,8 +1,8 @@
-# 🚀 Portfolio Facebook - AI-Powered Social Media Platform
+# 🚀 Sehyo - AI-Powered Social Media Platform
 
 A modern, full-featured social media platform built with **SvelteKit 5**, **Cloudflare Workers**, and **shadcn-svelte**. Features AI-controlled bot profiles, end-to-end encrypted messaging, and anonymous browsing.
 
-[![Deploy to Cloudflare Pages](https://img.shields.io/badge/Deploy-Cloudflare%20Pages-orange)](https://github.com/Kimeiga/fb-portfolio)
+[![Deploy to Cloudflare Pages](https://img.shields.io/badge/Deploy-Cloudflare%20Pages-orange)](https://github.com/Kimeiga/sehyo)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ## ✨ Features
@@ -45,8 +45,8 @@ A modern, full-featured social media platform built with **SvelteKit 5**, **Clou
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/Kimeiga/fb-portfolio.git
-cd fb-portfolio
+git clone https://github.com/Kimeiga/sehyo.git
+cd sehyo
 ```
 
 2. **Install dependencies**
@@ -57,13 +57,13 @@ npm install
 3. **Set up Cloudflare resources**
 ```bash
 # Create D1 database
-npx wrangler d1 create portfolio-facebook-db
+npx wrangler d1 create sehyo-db
 
 # Create KV namespace for sessions
 npx wrangler kv:namespace create SESSIONS
 
 # Create R2 bucket for images
-npx wrangler r2 bucket create portfolio-facebook-images
+npx wrangler r2 bucket create sehyo-images
 
 # Update wrangler.toml with the IDs from above commands
 ```
@@ -71,12 +71,12 @@ npx wrangler r2 bucket create portfolio-facebook-images
 4. **Run database migrations**
 ```bash
 # Local database
-npx wrangler d1 execute portfolio-facebook-db --local --file=./migrations/0001_initial_schema.sql
-npx wrangler d1 execute portfolio-facebook-db --local --file=./migrations/0002_bot_profiles.sql
+npx wrangler d1 execute sehyo-db --local --file=./migrations/0001_initial_schema.sql
+npx wrangler d1 execute sehyo-db --local --file=./migrations/0002_bot_profiles.sql
 
 # Remote database (for production)
-npx wrangler d1 execute portfolio-facebook-db --remote --file=./migrations/0001_initial_schema.sql
-npx wrangler d1 execute portfolio-facebook-db --remote --file=./migrations/0002_bot_profiles.sql
+npx wrangler d1 execute sehyo-db --remote --file=./migrations/0001_initial_schema.sql
+npx wrangler d1 execute sehyo-db --remote --file=./migrations/0002_bot_profiles.sql
 ```
 
 5. **Start development server**
@@ -164,7 +164,7 @@ The workflow will automatically:
 npm run build
 
 # Deploy to Cloudflare Pages
-npx wrangler pages deploy .svelte-kit/cloudflare --project-name=fb-portfolio
+npx wrangler pages deploy .svelte-kit/cloudflare --project-name=sehyo
 
 # Deploy bot runner worker
 npx wrangler deploy src/workers/bot-runner.ts

@@ -10,7 +10,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     name: Deploy to Cloudflare Pages
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -28,22 +28,21 @@ jobs:
       - name: Build project
         run: npm run build
         env:
-          # Public environment variables
-          PUBLIC_APP_NAME: "Portfolio Facebook"
+          PUBLIC_APP_NAME: "Sehyo"
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy .svelte-kit/cloudflare --project-name=fb-portfolio
+          command: pages deploy .svelte-kit/cloudflare --project-name=sehyo
 
       - name: Run database migrations
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: d1 execute portfolio-facebook-db --remote --file=./migrations/0001_initial_schema.sql
+          command: d1 execute sehyo-db --remote --file=./migrations/0001_initial_schema.sql
         continue-on-error: true
 
       - name: Run bot profiles migration
@@ -51,7 +50,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: d1 execute portfolio-facebook-db --remote --file=./migrations/0002_bot_profiles.sql
+          command: d1 execute sehyo-db --remote --file=./migrations/0002_bot_profiles.sql
         continue-on-error: true
 
       - name: Run Better Auth migration
@@ -59,7 +58,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: d1 execute portfolio-facebook-db --remote --file=./migrations/0003_better_auth.sql
+          command: d1 execute sehyo-db --remote --file=./migrations/0003_better_auth.sql
         continue-on-error: true
 
       - name: Run messaging E2EE migration
@@ -67,14 +66,22 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: d1 execute portfolio-facebook-db --remote --file=./migrations/0003_messaging_e2ee.sql
+          command: d1 execute sehyo-db --remote --file=./migrations/0003_messaging_e2ee.sql
         continue-on-error: true
 
-      - name: Deploy bot runner worker
+      - name: Run bot email rename migration
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy src/workers/bot-runner.ts
+          command: d1 execute sehyo-db --remote --file=./migrations/0018_rename_bot_emails.sql
         continue-on-error: true
 
+      # Bot runner worker deploy disabled until split into its own wrangler config.
+      # - name: Deploy bot runner worker
+      #   uses: cloudflare/wrangler-action@v3
+      #   with:
+      #     apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      #     accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      #     command: deploy src/workers/bot-runner.ts
+      #   continue-on-error: true

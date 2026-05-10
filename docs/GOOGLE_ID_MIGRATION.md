@@ -219,18 +219,18 @@ AND (isAnonymous IS NULL OR isAnonymous = 0)
 
 ```bash
 # Check bot users have bot_id
-npx wrangler d1 execute portfolio-facebook-db --local --command="SELECT id, email, name, bot_id FROM user WHERE bot_id IS NOT NULL;"
+npx wrangler d1 execute sehyo-db --local --command="SELECT id, email, name, bot_id FROM user WHERE bot_id IS NOT NULL;"
 
 # Verify google_id is gone
-npx wrangler d1 execute portfolio-facebook-db --local --command="PRAGMA table_info(user);"
+npx wrangler d1 execute sehyo-db --local --command="PRAGMA table_info(user);"
 ```
 
 ### Production Database
 
 ```bash
 # Apply migrations
-npx wrangler d1 execute portfolio-facebook-db --remote --file=./migrations/0013_migrate_to_bot_id.sql
-npx wrangler d1 execute portfolio-facebook-db --remote --file=./migrations/0014_drop_google_id.sql
+npx wrangler d1 execute sehyo-db --remote --file=./migrations/0013_migrate_to_bot_id.sql
+npx wrangler d1 execute sehyo-db --remote --file=./migrations/0014_drop_google_id.sql
 ```
 
 ## 📊 Results

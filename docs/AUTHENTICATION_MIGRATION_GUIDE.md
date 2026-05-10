@@ -151,7 +151,7 @@ export function createAuth(db: D1Database, env: {
 	GOOGLE_REDIRECT_URI?: string;
 }, baseURL?: string) {
 	// Determine the base URL
-	const effectiveBaseURL = baseURL || env.GOOGLE_REDIRECT_URI?.replace('/api/auth/callback/google', '') || 'https://fb-portfolio-1ae.pages.dev';
+	const effectiveBaseURL = baseURL || env.GOOGLE_REDIRECT_URI?.replace('/api/auth/callback/google', '') || 'https://sehyo.com';
 	
 	// Return cached instance if it exists for this baseURL
 	const cached = authCache.get(effectiveBaseURL);
@@ -175,7 +175,7 @@ export function createAuth(db: D1Database, env: {
 			'http://localhost:5174',
 			'http://localhost:5175',
 			'http://localhost:5176',
-			'https://fb-portfolio-1ae.pages.dev'
+			'https://sehyo.com'
 		],
 		socialProviders: {
 			google: {

@@ -1,4 +1,4 @@
-# Portfolio Facebook - Complete Setup Guide
+# Sehyo - Complete Setup Guide
 
 This guide will walk you through setting up the entire application from scratch.
 
@@ -20,16 +20,16 @@ npm install
 ### 2.1 Create D1 Database
 
 ```bash
-npx wrangler d1 create portfolio-facebook-db
+npx wrangler d1 create sehyo-db
 ```
 
 You'll see output like:
 ```
-✅ Successfully created DB 'portfolio-facebook-db'!
+✅ Successfully created DB 'sehyo-db'!
 
 [[d1_databases]]
 binding = "DB"
-database_name = "portfolio-facebook-db"
+database_name = "sehyo-db"
 database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 ```
 
@@ -38,7 +38,7 @@ Copy the `database_id` and update it in `wrangler.toml`.
 ### 2.2 Run Database Migrations
 
 ```bash
-npx wrangler d1 execute portfolio-facebook-db --file=./migrations/0001_initial_schema.sql
+npx wrangler d1 execute sehyo-db --file=./migrations/0001_initial_schema.sql
 ```
 
 This creates all the necessary tables (users, posts, comments, reactions, friendships, messages, etc.).
@@ -46,7 +46,7 @@ This creates all the necessary tables (users, posts, comments, reactions, friend
 ### 2.3 Create R2 Bucket for Images
 
 ```bash
-npx wrangler r2 bucket create portfolio-facebook-images
+npx wrangler r2 bucket create sehyo-images
 ```
 
 The bucket name is already configured in `wrangler.toml`.
@@ -59,7 +59,7 @@ npx wrangler kv:namespace create SESSIONS
 
 You'll see output like:
 ```
-🌀 Creating namespace with title "fb-portfolio-SESSIONS"
+🌀 Creating namespace with title "sehyo-SESSIONS"
 ✨ Success!
 Add the following to your configuration file in your kv_namespaces array:
 { binding = "SESSIONS", id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" }
@@ -73,7 +73,7 @@ Copy the `id` and update it in `wrangler.toml`.
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Click "Select a project" → "New Project"
-3. Enter project name (e.g., "Portfolio Facebook")
+3. Enter project name (e.g., "Sehyo")
 4. Click "Create"
 
 ### 3.2 Enable Google+ API
@@ -88,13 +88,13 @@ Copy the `id` and update it in `wrangler.toml`.
 2. Click "Create Credentials" → "OAuth client ID"
 3. If prompted, configure the OAuth consent screen:
    - User Type: External
-   - App name: Portfolio Facebook
+   - App name: Sehyo
    - User support email: your email
    - Developer contact: your email
    - Click "Save and Continue" through the scopes and test users
 4. Back to "Create OAuth client ID":
    - Application type: Web application
-   - Name: Portfolio Facebook
+   - Name: Sehyo
    - Authorized JavaScript origins: 
      - `http://localhost:5173` (for development)
      - Your production URL (e.g., `https://your-app.pages.dev`)

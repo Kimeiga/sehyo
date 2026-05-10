@@ -15,8 +15,8 @@ export default defineConfig({
 			base: '/',
 			selfDestroying: false,
 			manifest: {
-				name: 'Portfolio Facebook',
-				short_name: 'PortfolioFB',
+				name: 'Sehyo',
+				short_name: 'Sehyo',
 				description: 'A modern social media platform built with SvelteKit and Cloudflare',
 				theme_color: '#1877f2',
 				background_color: '#ffffff',

@@ -251,7 +251,7 @@ INSERT INTO users (id, google_id, email, username, display_name, bio, created_at
 (
     'user_bot_custom',
     'bot_custom_google',
-    'custom.bot@portfolio-facebook.ai',
+    'custom.bot@sehyo.ai',
     'custombot',
     'Custom Bot',
     'Your custom bot description here! 🎉',
@@ -274,7 +274,7 @@ INSERT INTO bot_profiles (id, user_id, name, personality, posting_frequency, is_
 
 3. **Run migration**:
 ```bash
-npx wrangler d1 execute portfolio-facebook-db --file=./migrations/0002_bot_profiles.sql
+npx wrangler d1 execute sehyo-db --file=./migrations/0002_bot_profiles.sql
 ```
 
 ### Adjust Bot Behavior
