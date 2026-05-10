@@ -1070,15 +1070,17 @@
 		pointer-events: none;
 	}
 	/* Stop the parent's drop-line at this child's hook. Cover
-	   the line tail from y:32 (after the hook) down to the
-	   bottom of THIS reply's li. Bounded so it doesn't bleed
-	   into subsequent posts. */
+	   starts at y:34 (= hook bottom: 32 + 2px hook thickness),
+	   NOT at y:32, so it doesn't erase the leftmost pixel of
+	   the hook itself. The 4px width fully overlaps the 2px
+	   parent line, and the cover is bounded by the li so it
+	   doesn't bleed into subsequent posts. */
 	.tw-children > .tw-item.is-reply:last-child::after {
 		content: '';
 		display: block;
 		position: absolute;
 		left: -30px;
-		top: 32px;
+		top: 34px;
 		bottom: 0;
 		width: 4px;
 		background: var(--background);
@@ -1098,6 +1100,13 @@
 		margin: 12px 0 0;
 	}
 	.reply-composer { margin-top: 8px; }
+	/* The post-level "Add a comment" composer sits at the article
+	   level (outside .tw-item), so left-indent it by avatar+gap
+	   (40 + 8 = 48px) to align with where comments will appear
+	   inside .tw-children. */
+	.comment-composer {
+		margin-left: 48px;
+	}
 	.reply-composer textarea, .comment-composer textarea {
 		flex: 1;
 		min-height: 54px;
