@@ -3,6 +3,7 @@
 	import type { LayoutProps } from './$types';
 	import Menu from '$lib/components/Menu.svelte';
 	import LoginModal from '$lib/components/LoginModal.svelte';
+	import SignInModal from '$lib/components/SignInModal.svelte';
 	import { menuOpen, toggleMenu } from '$lib/stores/menu';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
@@ -93,6 +94,7 @@
 
 	<Menu user={data.user} />
 	<LoginModal open={data.showLoginModal} />
+	<SignInModal />
 </div>
 
 <style>
