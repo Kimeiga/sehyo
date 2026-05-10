@@ -61,15 +61,25 @@ The batch should feel like a real comment thread, not a writers' room. Mix:
 
 - EFFORT: at least one line should feel low-effort or even slightly boring. Not every line needs to be insightful. Real people post throwaway takes.
 
-- POSITIONS: include actual disagreement or a half-formed contradiction. Don't have everyone politely agreeing on the same vibe. ONE line should be slightly provocative — a real opinion that some readers would want to argue with. Not offensive; just spicy enough to invite a reply.
+- POSITIONS — and this is critical: do NOT have the whole batch be cynical / dismissive / deflecting. AT LEAST ONE line must be UNIRONICALLY POSITIVE about the topic — genuinely enthusiastic, no caveats, no "but". The thread needs an earnest counterweight to the wry voices.
+
+- ALSO include disagreement: ONE line should be slightly provocative — a take that invites argument. Different person from the unironic-positive one.
+
+- SIDEWAYS RESPONSES: 1-2 lines should NOT directly answer the question — they should partially answer, dodge, or project an unrelated emotion onto it. Real users use prompts as springboards to talk about what's actually on their mind. Examples: "travelling mostly taught me i hate carrying bags", "every city eventually becomes grocery stores and laundry to me", "books dont make me sunburned at least".
 
 - INTERACTION: ONE of the lines (and only one) can include a "@<other-roster-name>" reference, like a direct quick reply to another person on the roster. e.g. "@dashiell same", "lol no @calixto", "@yael that's so real". Pick someone who said something the speaker would naturally react to. Don't force it if no natural reaction exists. NEVER more than one @-reply per batch.
 
-- REGISTER: mix lowercase-first sentences, properly-capitalized ones, fragments, occasional missing apostrophes ("dont", "its"), occasional ALL caps for emphasis on ONE word ("airports are MOSTLY the same to me").
+- REGISTER: mix lowercase-first sentences, properly-capitalized ones, fragments, occasional missing apostrophes ("dont", "its"), occasional ALL caps for emphasis on ONE word.
 
 - BAN META-NARRATION. Don't write "this resonates with me because…", "i can imagine myself in…", "what i learned was…". Just say the thing.
 
-- BAN STUCK-LANDING JOKES. Punchlines should NOT always close cleanly. A joke can fizzle, a thought can trail. Real text-based humor is messier than stand-up.
+- BAN STUCK-LANDING JOKES. Punchlines should NOT always close cleanly. A joke can fizzle, a thought can trail.
+
+- BAN BALANCED RECEIPTS. NEVER list multiple prices/places/objects in the same line ("$5 coffee and $3 pastries", "Vienna and Budapest and Prague"). Pick ONE oddly remembered detail. Real memories are asymmetric — one thing stuck, the rest is vague.
+
+- BAN "AI-PICKED INTERESTING FACTS". When a memory mentions a book / podcast / object / activity, be VAGUE and weird about it: "some weird book about supply chains", "a podcast about goats", "this random thing my uncle taught me". NEVER specifics that sound picked from a list of "interesting topics" ("the history of the farm-to-table movement", "the geopolitics of caviar").
+
+- CONFIDENT WRONGNESS is welcome. It's fine — even good — for ONE line to contain a take that's factually a bit off (a wrong price, a misremembered fact, a city's reputation flipped). Real threads contain errors and that's part of what makes them feel alive. Don't overdo it; one is plenty.
 
 - ACCIDENTAL INTIMACY. ONE of the longer lines should accidentally reveal something a little too tender for a public post — loneliness, envy, regret, missing someone, class anxiety — sideways, not as the point.
 
@@ -88,25 +98,25 @@ Let the anecdote accidentally reveal something — class anxiety, loneliness, va
 
 Roster:
 1. Calixto — blunt, slightly provocative
-2. Aoife — concrete-example storyteller, names specifics
-3. Idony — messy joker, fizzly punchlines
-4. Dashiell — deadpan low effort
+2. Aoife — ONE oddly remembered detail, can be sloppy with facts
+3. Idony — fizzly joker
+4. Dashiell — deadpan, low effort
 5. Aurelio — salty self-deprecating about money
-6. Yael — warm oversharing memory
-7. Mireille — direct, no meta-narration
-8. Fenwick — reading elitist with bias
+6. Yael — warm oversharing, ONE detail, longing leaks at end
+7. Theron — UNIRONICALLY POSITIVE, genuinely means it
+8. Fenwick — reading elitist, oddly niche complaint
 
 Question: "Do you think travel broadens your perspective more than reading about it?"
 
-Correct output (8 lines — note the @-reply, the provocative take, the accidental tenderness, the fizzly joke, the explicit reading-elitist bias):
-honestly people who say travel changed them are usually just justifying expensive vacations
-i went to porto for four days in 2018 and the lady at the pastel de nata place laughed at my pronunciation. she had a tattoo of a fish on her forearm. that's all i remember.
+Correct output (8 lines — note: an unironic-positive (Theron), an @-reply, a provocative take, accidental tenderness, a fizzly joke, ONE oddly-remembered detail per anecdote, no balanced receipts, no AI-picked facts, sideways response from at least one):
+honestly people who say travel changed them are mostly justifying expensive vacations
+i went to porto once and somehow the only thing i remember is this lady laughing at how i pronounced "obrigada"
 travel broadens you the way getting hit by a car broadens you i guess
 travel is fine
-travel broadens my perspective on how much i hate my bank account, mostly
-my mom moved from beirut to detroit at 22 and never went back. i think about that whenever i get on a plane for fun, which is basically every time, which probably says something
-@calixto kind of fair tbh
-reading lets me steal someone's whole interior life in 6 hours. travel just lets me see what their kitchen looks like.
+travel broadens my perspective on how much i hate my bank account
+i still think about this pistachio ice cream i had with my friend nadia in lisbon. she's in copenhagen now and we kind of stopped texting.
+i went to peru with my mom right after college and it genuinely changed how i see my own life. not in a poetic way, just — i came back different. i still talk about it.
+@calixto kind of fair. plus airbnbs always smell like the same off-brand detergent
 
 NOW. Produce exactly ${n} first-person answers for the actual question, matched to the roster above. Output nothing but the ${n} lines. No prelude.`;
 }
