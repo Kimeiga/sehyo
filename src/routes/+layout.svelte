@@ -5,9 +5,14 @@
 	import Navbar from '$lib/components/Navbar.svelte';
 	import LoginModal from '$lib/components/LoginModal.svelte';
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import { pwaInfo } from 'virtual:pwa-info';
 
 	let { data, children }: LayoutProps = $props();
+
+	// The minimalist home (/) handles its own navigation via the in-menu UI,
+	// so the global Navbar is suppressed there.
+	const showNavbar = $derived(page.url.pathname !== '/');
 
 	// Register service worker for PWA
 	onMount(async () => {
@@ -31,7 +36,9 @@
 </svelte:head>
 
 <div class="min-h-screen bg-background text-foreground">
-	<Navbar user={data.user} />
+	{#if showNavbar}
+		<Navbar user={data.user} />
+	{/if}
 	{@render children?.()}
 
 	<!-- Login Modal -->

@@ -20,6 +20,10 @@ bucket_name = "sehyo-images"
 binding = "SESSIONS"
 id = "bc491214935341a9b88984146caebddb"
 
+# Workers AI binding (used by daily-prompt + bot-answer generation)
+[ai]
+binding = "AI"
+
 [vars]
 # Public environment variables
 PUBLIC_APP_NAME = "Sehyo"
