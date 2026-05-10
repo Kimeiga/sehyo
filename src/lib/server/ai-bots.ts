@@ -32,24 +32,29 @@ ${roster}
 
 CRITICAL RULES:
 - Write each answer FIRST PERSON, as the person themselves typing. NEVER use third-person narration ("X said with a smile", "X shrugged", "X mused"). NO action tags, NO dialogue tags, NO scene-setting, NO mention of the person's own name. Just the words they would type.
+- EVERY ANSWER MUST ACTUALLY ATTEMPT THE QUESTION. Banned: "great question", "honestly i dont know what to say", "no comment", "interesting question", or any answer that is just a deflection without a payoff. Even a wry sidestep needs to land — give a punchline or an angle.
 - Output exactly ${n} lines. Line 1 = person 1's answer, line 2 = person 2's answer, etc. No numbering, no labels, no name prefixes, no quote marks around the answers, no markdown.
 - Personality should flavor the voice (a deadpan person sounds different from a contrarian one) but the actual content of the answers must still be DISTINCT — different angles, different points.
 - Keep it safe-for-work. No vulgarity, no slurs, no NSFW references.
 
+LENGTH AND ANECDOTES (very important):
+- 1 or 2 of the ${n} answers should be a small anecdote (40-70 words): a specific concrete moment from this person's life that bears on the question, then one short line of why it stuck or what they took from it. Make it feel like a real memory, not a parable.
+- The rest are short (5-20 words). One or two can be a fragment ("idk", "couldnt tell ya, but i'd rather not find out").
+- Choose the anecdote-tellers based on personality: "concrete example", "anecdotal", "warm", "philosophical", "earnest" types are natural storytellers. Avoid stories from "deadpan", "sardonic", "contrarian" types.
+
 STYLE VARIANCE across the ${n} lines (deliberately mix these — do not make them all the same):
-- Most short (5-15 words). 1 or 2 longer (30-60 words) with more thought or a small personal anecdote. Some can be a fragment.
 - Some lowercase-first ("i think it's fine"), some properly capitalized.
 - Some ending in a period, some not, some trailing off with "...".
 - Contractions without apostrophes occasionally ("dont", "its", "wont").
-- The occasional very short reply ("idk", "couldnt tell ya").
 - Avoid: clichés, motivational lines, hashtags, emoji, quotation marks, every line starting with "I think" / "Honestly" / "Actually".
 
-Example. Roster: "1. Calixto — contrarian; 2. Aurelio — self-deprecating; 3. Idony — sidesteps with humor."
+Example. Roster: "1. Calixto — contrarian; 2. Aoife — concrete-example storyteller; 3. Idony — sidesteps with humor; 4. Aurelio — self-deprecating."
 Question: "How do you handle stress?"
-Correct output (3 lines, no narration, first person):
+Correct output (4 lines, no narration, first person, one anecdote):
 the framing is wrong. you dont handle stress, you reorganize your life so it doesnt show up
-ha, im clearly the wrong person to ask. mine has health insurance now
+i had a panic attack on the M5 around 2019, parked at a service station and just sat there for 40 minutes watching people buy crisps. it didnt fix anything but i learned that pulling over is allowed. now i pull over a lot, even metaphorically.
 couldnt tell ya, mine is currently undefeated
+i would tell you my method but my method is also why im stressed in the first place
 
 Now produce exactly ${n} first-person answers for the actual question, matched to the roster above. Output nothing but the ${n} answer lines.`;
 }
