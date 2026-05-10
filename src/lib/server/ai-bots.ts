@@ -19,51 +19,52 @@ Constraints:
 
 const PROMPT_GENERATION_USER = 'Give me today\'s question.';
 
-function answersSystemPrompt(n: number) {
-	return `Generate exactly ${n} answers to a daily-question forum prompt, as if from ${n} different anonymous people typing on their phones.
+function answersSystemPrompt(authors: SeedAuthor[]) {
+	const n = authors.length;
+	const roster = authors
+		.map((a, i) => `${i + 1}. ${a.name} — ${a.bio ?? 'no specific personality'}`)
+		.join('\n');
 
-Make them feel HUMAN, not machine-generated. Vary the following ACROSS the ${n} answers (do not make them uniform):
+	return `You are simulating ${n} different anonymous people typing answers on a daily-question forum. Each line of output is ONE PERSON'S OWN answer, in their first-person voice.
 
-LENGTH: most are short (5-15 words). 1 or 2 should run longer (30-60 words) with more thought or a small personal anecdote. The shortest can be a fragment.
+ROSTER (in order — line N comes from person N):
+${roster}
 
-STYLE: mix
-- lowercase-first sentences ("i think it's fine") with properly-capitalized ones
-- some answers ending in a period, some not, some trailing off with "..."
-- contractions without apostrophes ("dont", "its", "wont") sometimes
-- comma-spliced run-ons sometimes
-- the occasional very-short reply ("idk", "couldnt tell ya")
-- not every answer looks the same shape
+CRITICAL RULES:
+- Write each answer FIRST PERSON, as the person themselves typing. NEVER use third-person narration ("X said with a smile", "X shrugged", "X mused"). NO action tags, NO dialogue tags, NO scene-setting, NO mention of the person's own name. Just the words they would type.
+- Output exactly ${n} lines. Line 1 = person 1's answer, line 2 = person 2's answer, etc. No numbering, no labels, no name prefixes, no quote marks around the answers, no markdown.
+- Personality should flavor the voice (a deadpan person sounds different from a contrarian one) but the actual content of the answers must still be DISTINCT — different angles, different points.
+- Keep it safe-for-work. No vulgarity, no slurs, no NSFW references.
 
-TONE: sincere, funny, contrarian, mildly self-deprecating, sidestep with humor, admit inexperience, push back on the premise. Disagreements between answers are great.
+STYLE VARIANCE across the ${n} lines (deliberately mix these — do not make them all the same):
+- Most short (5-15 words). 1 or 2 longer (30-60 words) with more thought or a small personal anecdote. Some can be a fragment.
+- Some lowercase-first ("i think it's fine"), some properly capitalized.
+- Some ending in a period, some not, some trailing off with "...".
+- Contractions without apostrophes occasionally ("dont", "its", "wont").
+- The occasional very short reply ("idk", "couldnt tell ya").
+- Avoid: clichés, motivational lines, hashtags, emoji, quotation marks, every line starting with "I think" / "Honestly" / "Actually".
 
-AVOID: clichés, motivational-poster lines, hashtags, emoji, quotation marks, essay phrasing, every answer ending in a period.
+Example. Roster: "1. Calixto — contrarian; 2. Aurelio — self-deprecating; 3. Idony — sidesteps with humor."
+Question: "How do you handle stress?"
+Correct output (3 lines, no narration, first person):
+the framing is wrong. you dont handle stress, you reorganize your life so it doesnt show up
+ha, im clearly the wrong person to ask. mine has health insurance now
+couldnt tell ya, mine is currently undefeated
 
-OUTPUT FORMAT: ${n} lines total. One answer per line. No numbering, bullets, labels, or signatures.
-
-Example for "How do you handle stress?":
-deep breaths and aggressively ignoring my email
-honestly i just absorb it like a sponge
-go for a walk even though i hate walking
-The key isn't handling stress, it's letting it pass through you. Like rain through a screen door.
-my dog handles it for me, somehow
-why are you asking, im clearly stressed rn
-control what you can, accept the rest, occasionally scream into a pillow
-i used to think breathing exercises were dumb but i tried one during a panic attack last year and it actually worked. now i do them in elevators and stuff. weird how thats become a habit
-idk
-
-Now produce exactly ${n} answers for the actual question, in that format.`;
+Now produce exactly ${n} first-person answers for the actual question, matched to the roster above. Output nothing but the ${n} answer lines.`;
 }
 
 export interface SeedAuthor {
 	user_id: string;
 	bot_id: string;
 	name: string;
+	bio: string | null;
 }
 
 export async function getSeedAuthors(db: D1Database): Promise<SeedAuthor[]> {
 	const rows = await db
-		.prepare(`SELECT id AS user_id, bot_id, name FROM user WHERE bot_id LIKE 'seed_%'`)
-		.all<{ user_id: string; bot_id: string; name: string }>();
+		.prepare(`SELECT id AS user_id, bot_id, name, bio FROM user WHERE bot_id LIKE 'seed_%'`)
+		.all<{ user_id: string; bot_id: string; name: string; bio: string | null }>();
 	return rows.results ?? [];
 }
 
@@ -79,17 +80,21 @@ export async function generatePromptText(ai: Ai): Promise<string> {
 	return cleanLine(res.response ?? '');
 }
 
-export async function generateSeedAnswers(ai: Ai, promptText: string, n: number): Promise<string[]> {
+export async function generateSeedAnswers(
+	ai: Ai,
+	promptText: string,
+	authors: SeedAuthor[]
+): Promise<string[]> {
 	const res = (await ai.run(ANSWERS_MODEL, {
 		messages: [
-			{ role: 'system', content: answersSystemPrompt(n) },
+			{ role: 'system', content: answersSystemPrompt(authors) },
 			{ role: 'user', content: promptText }
 		],
 		temperature: 0.95,
-		max_tokens: 800
+		max_tokens: 900
 	})) as { response?: string };
 	const raw = res.response ?? '';
-	return splitAnswers(raw, n);
+	return splitAnswers(raw, authors.length);
 }
 
 function splitAnswers(raw: string, n: number): string[] {
@@ -111,6 +116,17 @@ function cleanLine(s: string): string {
 	}
 	// Strip leading "Answer:" / "Response:" labels.
 	out = out.replace(/^(answer|response)[:.\-]\s*/i, '');
+	// Strip leading "Name: " labels the model sometimes adds despite
+	// being told not to (e.g. "Aurelio: idk").
+	out = out.replace(/^[A-Z][a-z]+(?:\s[A-Z][a-z]+)?[:.\-—]\s*/, '');
+	// Strip trailing third-person dialogue / action tags. The model
+	// sometimes appends ", Aurelio said with a smile." or
+	// " Aoife shrugged." despite the first-person rule.
+	out = out.replace(
+		/[\s,]+[A-Z][a-z]+(?:\s[A-Z][a-z]+)?\s+(?:said|asked|added|noted|replied|whispered|shrugged|laughed|smiled|chuckled|sighed|mused|quipped|hinted|argued|retorted|insisted|observed|continued|interjected|countered)\b[^.?!]*[.?!]?\s*$/i,
+		''
+	);
+	out = out.trim();
 	return out;
 }
 
@@ -164,8 +180,8 @@ export async function rotatePromptIfNeeded(db: D1Database, ai: Ai): Promise<{
 
 	const authors = await getSeedAuthors(db);
 	const n = Math.min(ANSWER_COUNT, authors.length);
-	const answers = await generateSeedAnswers(ai, promptText, n);
-	const picked = shuffle(authors).slice(0, answers.length);
+	const picked = shuffle(authors).slice(0, n);
+	const answers = await generateSeedAnswers(ai, promptText, picked);
 
 	let inserted = 0;
 	for (let i = 0; i < answers.length; i++) {
