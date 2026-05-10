@@ -18,7 +18,7 @@ export default defineConfig({
 				name: 'Sehyo',
 				short_name: 'Sehyo',
 				description: 'A modern social media platform built with SvelteKit and Cloudflare',
-				theme_color: '#1877f2',
+				theme_color: '#00A5D8',
 				background_color: '#ffffff',
 				display: 'standalone',
 				start_url: '/',
