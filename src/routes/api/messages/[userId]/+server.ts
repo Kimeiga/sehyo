@@ -1,7 +1,11 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
-const TYPING_FRESH_SECONDS = 5;
+// "Currently typing" cutoff. Generous enough that one typing-ping
+// covers a few polling cycles (poll cadence is 2s), but short enough
+// that a user who actually stops typing has the indicator vanish
+// within ~one breath.
+const TYPING_FRESH_SECONDS = 8;
 
 export const GET: RequestHandler = async ({ params, platform, locals, url }) => {
 	if (!locals.user) throw error(401, 'Unauthorized');
