@@ -9,6 +9,7 @@
 		storePrivateKey,
 		storePublicKey,
 		getStoredPrivateKey,
+		getStoredPublicKey,
 		hasEncryptionKeys,
 		encryptMessage,
 		decryptMessage,
@@ -43,6 +44,12 @@
 		cipher_text: string;
 		aes_key: string;
 		iv: string;
+		// Sender-side copy: present on messages sent AFTER the
+		// dual-encryption rollout. Lets the sender decrypt their
+		// own outgoing messages on reload.
+		sender_cipher_text: string | null;
+		sender_aes_key: string | null;
+		sender_iv: string | null;
 		created_at: number;
 		read_at: number | null;
 		sender_username: string;
@@ -134,12 +141,32 @@
 			const decrypted: Message[] = [];
 			if (privateKey) {
 				for (const message of allMessages) {
-					try {
-						const encrypted: EncryptedMessage = {
+					// Pick the cipher copy that was encrypted to the
+					// viewer's pubkey. If we're the SENDER and a
+					// sender-side copy exists, use that; otherwise
+					// fall back to the recipient copy. (Old messages
+					// from before the dual-encryption rollout only
+					// have the recipient copy, so they remain
+					// undecryptable from the sender's side and get
+					// hidden as before.)
+					const isOwn = message.sender_id === data.user?.id;
+					const useSenderCopy =
+						isOwn &&
+						message.sender_cipher_text &&
+						message.sender_aes_key &&
+						message.sender_iv;
+					const encrypted: EncryptedMessage = useSenderCopy
+						? {
+							cipher_text: message.sender_cipher_text!,
+							aes_key: message.sender_aes_key!,
+							iv: message.sender_iv!
+						}
+						: {
 							cipher_text: message.cipher_text,
 							aes_key: message.aes_key,
 							iv: message.iv
 						};
+					try {
 						message.decrypted_text = await decryptMessage(encrypted, privateKey);
 						decrypted.push(message);
 					} catch {
@@ -195,8 +222,22 @@
 				);
 			}
 
-			// Encrypt message
+			// Encrypt the message twice — once to the recipient and
+			// once to the sender — so the sender can later decrypt
+			// their own outgoing message on reload. Without the
+			// second copy, the sender's loadMessages() can't open
+			// the cipher (it was sealed with the recipient's
+			// pubkey) and the message appears to vanish.
 			const encrypted = await encryptMessage(messageText, recipientPublicKey);
+			const senderPublicKey = getStoredPublicKey();
+			let senderEncrypted: EncryptedMessage | null = null;
+			if (senderPublicKey) {
+				try {
+					senderEncrypted = await encryptMessage(messageText, senderPublicKey);
+				} catch (err) {
+					console.warn('Sender-side encryption failed; outgoing copy will be unrecoverable on reload.', err);
+				}
+			}
 
 			// Send encrypted message
 			const response = await fetch('/api/messages/send', {
@@ -204,7 +245,12 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					recipient_id: selectedConversation.user_id,
-					...encrypted
+					cipher_text: encrypted.cipher_text,
+					aes_key: encrypted.aes_key,
+					iv: encrypted.iv,
+					sender_cipher_text: senderEncrypted?.cipher_text ?? null,
+					sender_aes_key: senderEncrypted?.aes_key ?? null,
+					sender_iv: senderEncrypted?.iv ?? null
 				})
 			});
 

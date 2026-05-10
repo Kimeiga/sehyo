@@ -13,7 +13,15 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	}
 
 	try {
-		const { recipient_id, cipher_text, aes_key, iv } = await request.json();
+		const {
+			recipient_id,
+			cipher_text,
+			aes_key,
+			iv,
+			sender_cipher_text,
+			sender_aes_key,
+			sender_iv
+		} = await request.json();
 
 		if (!recipient_id || !cipher_text || !aes_key || !iv) {
 			throw error(400, 'Missing required fields');
@@ -31,14 +39,33 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 			throw error(400, 'Recipient has not set up encryption');
 		}
 
-		// Create message
+		// Persist BOTH the recipient-encrypted copy and the sender-
+		// encrypted copy so the sender can later decrypt their own
+		// outgoing message. Without the sender copy, the sender's
+		// loadMessages() can't open the recipient cipher_text — it
+		// was sealed with the recipient's pubkey — and the message
+		// silently disappears from their UI on reload.
 		const messageId = crypto.randomUUID();
 		await db
 			.prepare(
-				`INSERT INTO messages (id, sender_id, recipient_id, cipher_text, aes_key, iv, created_at)
-				 VALUES (?, ?, ?, ?, ?, ?, unixepoch())`
+				`INSERT INTO messages (
+					id, sender_id, recipient_id,
+					cipher_text, aes_key, iv,
+					sender_cipher_text, sender_aes_key, sender_iv,
+					created_at
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch())`
 			)
-			.bind(messageId, locals.user.id, recipient_id, cipher_text, aes_key, iv)
+			.bind(
+				messageId,
+				locals.user.id,
+				recipient_id,
+				cipher_text,
+				aes_key,
+				iv,
+				sender_cipher_text ?? null,
+				sender_aes_key ?? null,
+				sender_iv ?? null
+			)
 			.run();
 
 		return json({
