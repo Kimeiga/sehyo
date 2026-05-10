@@ -520,6 +520,9 @@
 			loading="lazy"
 			draggable="false"
 		/>
+		{#if !revealed}
+			<span class="tw-avatar-tooltip">Reply to them to reveal what they look like</span>
+		{/if}
 	</span>
 {/snippet}
 
@@ -976,6 +979,34 @@
 	.tw-avatar.locked .tw-avatar-img {
 		filter: blur(8px);
 		transform: scale(1.18);
+	}
+	/* Hover label on locked avatars: a small gray pill explaining
+	   how to reveal the face. Fades in after a short hover-hold so
+	   it doesn't flash on quick passes. Pointer-events:none so the
+	   label itself doesn't block clicks on whatever wraps the
+	   avatar (the @-handle link, etc.). */
+	.tw-avatar-tooltip {
+		position: absolute;
+		left: 50%;
+		top: calc(100% + 6px);
+		transform: translate(-50%, -2px);
+		background: var(--muted);
+		color: var(--muted-foreground);
+		font-size: 11px;
+		font-weight: 500;
+		padding: 4px 10px;
+		border-radius: 999px;
+		white-space: nowrap;
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity 180ms ease, transform 180ms ease;
+		transition-delay: 0ms;
+		z-index: 10;
+	}
+	.tw-avatar:hover .tw-avatar-tooltip {
+		opacity: 1;
+		transform: translate(-50%, 0);
+		transition-delay: 350ms;
 	}
 	/* Drop line below the avatar. flex:1 so the line stretches with
 	   the content column, even when the content column grows from
