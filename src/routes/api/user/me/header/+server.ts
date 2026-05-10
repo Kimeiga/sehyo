@@ -38,6 +38,29 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	return json({ header_image_url: url });
 };
 
+/**
+ * PATCH — store the vertical anchor for the header image as a 0..100
+ * percentage. Used by the "Reposition" UI on the profile page.
+ */
+export const PATCH: RequestHandler = async ({ request, platform, locals }) => {
+	if (!locals.user) throw error(401, 'Unauthorized');
+	const env = platform?.env;
+	if (!env?.DB) throw error(500, 'Database not available');
+
+	const { position_y } = (await request.json()) as { position_y?: number };
+	if (typeof position_y !== 'number' || Number.isNaN(position_y)) {
+		throw error(400, 'position_y must be a number 0..100');
+	}
+	const clamped = Math.max(0, Math.min(100, Math.round(position_y)));
+
+	await env.DB
+		.prepare('UPDATE user SET header_image_position_y = ? WHERE id = ?')
+		.bind(clamped, locals.user.id)
+		.run();
+
+	return json({ header_image_position_y: clamped });
+};
+
 export const DELETE: RequestHandler = async ({ platform, locals }) => {
 	if (!locals.user) throw error(401, 'Unauthorized');
 	const env = platform?.env;

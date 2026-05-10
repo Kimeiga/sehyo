@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
 	import { goto, invalidateAll } from '$app/navigation';
-	import { Pencil, Check, X, Camera, Trash2, UserPlus, MessageCircle } from 'lucide-svelte';
+	import { Pencil, Check, X, Camera, Trash2, UserPlus, MessageCircle, MoveVertical } from 'lucide-svelte';
 	import { gradientFor } from '$lib/header-gradient';
 
 	let { data }: PageProps = $props();
@@ -72,11 +72,86 @@
 		}
 	}
 
+	// Vertical crop anchor for an uploaded header image. Owners can
+	// drag the banner in repositioning mode (see further down) to
+	// shift the anchor live; outside of that mode we fall back to
+	// whatever value is saved on the user row.
+	let positionY = $state<number>(50);
+	$effect(() => {
+		positionY = u.header_image_position_y ?? 50;
+	});
+
 	const headerStyle = $derived(
 		u.header_image_url
-			? `background-image: url(${JSON.stringify(u.header_image_url)}); background-size: cover; background-position: center;`
+			? `background-image: url(${JSON.stringify(u.header_image_url)}); background-size: cover; background-position: 50% ${positionY}%;`
 			: `background: ${gradientFor(u.id)};`
 	);
+
+	// ─────────────────────────────────────────────────────────────
+	// Reposition mode: while active, dragging anywhere on the
+	// banner shifts the vertical anchor, and the cursor flips to
+	// ns-resize. Save sends the final value to the server; Cancel
+	// reverts to whatever was saved before.
+	// ─────────────────────────────────────────────────────────────
+	let repositioning = $state(false);
+	let repositionSaving = $state(false);
+	let repositionStartY = $state(0);
+	let repositionStartPos = $state(50);
+	let bannerEl = $state<HTMLDivElement>();
+	let dragActive = $state(false);
+
+	function startReposition() {
+		repositioning = true;
+	}
+
+	function cancelReposition() {
+		positionY = u.header_image_position_y ?? 50;
+		repositioning = false;
+	}
+
+	async function saveReposition() {
+		if (repositionSaving) return;
+		repositionSaving = true;
+		try {
+			const res = await fetch('/api/user/me/header', {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ position_y: positionY })
+			});
+			if (!res.ok) throw new Error('save failed');
+			repositioning = false;
+			await invalidateAll();
+		} catch (err) {
+			console.error('Save header position failed:', err);
+			alert('Could not save the new position. Try again.');
+		} finally {
+			repositionSaving = false;
+		}
+	}
+
+	function onBannerPointerDown(e: PointerEvent) {
+		if (!repositioning || !bannerEl) return;
+		dragActive = true;
+		repositionStartY = e.clientY;
+		repositionStartPos = positionY;
+		bannerEl.setPointerCapture(e.pointerId);
+	}
+	function onBannerPointerMove(e: PointerEvent) {
+		if (!dragActive || !bannerEl) return;
+		const rect = bannerEl.getBoundingClientRect();
+		// Translate vertical drag into background-position-y change.
+		// One full banner-height of drag = 100% of the position
+		// range; tighter feels too sensitive, looser feels mushy.
+		const delta = ((e.clientY - repositionStartY) / rect.height) * 100;
+		const next = repositionStartPos + delta;
+		positionY = Math.max(0, Math.min(100, next));
+	}
+	function onBannerPointerUp(e: PointerEvent) {
+		if (!dragActive || !bannerEl) return;
+		dragActive = false;
+		bannerEl.releasePointerCapture(e.pointerId);
+	}
 
 	let headerInput: HTMLInputElement | undefined = $state();
 	let uploadingHeader = $state(false);
@@ -249,7 +324,17 @@
 	<title>{u.name ?? `@${u.username}`} · Sehyo</title>
 </svelte:head>
 
-<div class="profile-banner" style={headerStyle} aria-hidden="true">
+<div
+	class="profile-banner"
+	class:repositioning
+	class:dragging={dragActive}
+	style={headerStyle}
+	bind:this={bannerEl}
+	onpointerdown={onBannerPointerDown}
+	onpointermove={onBannerPointerMove}
+	onpointerup={onBannerPointerUp}
+	role="presentation"
+>
 	{#if isOwnProfile}
 		<input
 			bind:this={headerInput}
@@ -259,25 +344,56 @@
 			class="hidden-input"
 		/>
 		<div class="banner-actions">
-			<button
-				type="button"
-				class="banner-button"
-				onclick={pickHeaderImage}
-				disabled={uploadingHeader}
-				aria-label={uploadingHeader ? 'Uploading…' : 'Change header image'}
-			>
-				<Camera size="16" strokeWidth="1.8" />
-				<span>{uploadingHeader ? 'Uploading…' : 'Change'}</span>
-			</button>
-			{#if u.header_image_url}
+			{#if repositioning}
 				<button
 					type="button"
 					class="banner-button"
-					onclick={clearHeader}
-					aria-label="Remove header image"
+					onclick={saveReposition}
+					disabled={repositionSaving}
+					aria-label="Save banner position"
 				>
-					<Trash2 size="16" strokeWidth="1.8" />
+					<Check size="16" strokeWidth="2.2" />
+					<span>{repositionSaving ? 'Saving…' : 'Save'}</span>
 				</button>
+				<button
+					type="button"
+					class="banner-button"
+					onclick={cancelReposition}
+					disabled={repositionSaving}
+					aria-label="Cancel reposition"
+				>
+					<X size="16" strokeWidth="2.2" />
+				</button>
+			{:else}
+				<button
+					type="button"
+					class="banner-button"
+					onclick={pickHeaderImage}
+					disabled={uploadingHeader}
+					aria-label={uploadingHeader ? 'Uploading…' : 'Change header image'}
+				>
+					<Camera size="16" strokeWidth="1.8" />
+					<span>{uploadingHeader ? 'Uploading…' : 'Change'}</span>
+				</button>
+				{#if u.header_image_url}
+					<button
+						type="button"
+						class="banner-button"
+						onclick={startReposition}
+						aria-label="Reposition header image"
+					>
+						<MoveVertical size="16" strokeWidth="1.8" />
+						<span>Reposition</span>
+					</button>
+					<button
+						type="button"
+						class="banner-button"
+						onclick={clearHeader}
+						aria-label="Remove header image"
+					>
+						<Trash2 size="16" strokeWidth="1.8" />
+					</button>
+				{/if}
 			{/if}
 		</div>
 	{/if}
@@ -424,48 +540,52 @@
 	{:else}
 		<section class="feed">
 			{#each data.posts as p (p.id)}
-				<article class="entry">
-					{#if p.prompt_id && p.prompt_text}
-						<p class="entry-meta">
-							<span class="entry-tag">Answered</span>
-							<span class="entry-date">{formatDate(p.prompt_active_date)}</span>
-						</p>
-						<h3 class="entry-prompt">{p.prompt_text}</h3>
-						<p class="entry-body">{p.content}</p>
-					{:else if p.is_question}
-						<p class="entry-meta">
-							<span class="entry-tag">Asked</span>
-						</p>
-						<h3 class="entry-question">{p.content}</h3>
-					{:else}
-						<p class="entry-meta">
-							<span class="entry-tag">Posted</span>
-						</p>
-						<p class="entry-body">{p.content}</p>
-					{/if}
-					{#if p.comment_count > 0}
-						<p class="entry-foot">{p.comment_count} comment{p.comment_count === 1 ? '' : 's'}</p>
-					{/if}
-				</article>
+				<a class="entry-link" href="/post/{p.id}">
+					<article class="entry">
+						{#if p.prompt_id && p.prompt_text}
+							<p class="entry-meta">
+								<span class="entry-tag">Answered</span>
+								<span class="entry-date">{formatDate(p.prompt_active_date)}</span>
+							</p>
+							<h3 class="entry-prompt">{p.prompt_text}</h3>
+							<p class="entry-body">{p.content}</p>
+						{:else if p.is_question}
+							<p class="entry-meta">
+								<span class="entry-tag">Asked</span>
+							</p>
+							<h3 class="entry-question">{p.content}</h3>
+						{:else}
+							<p class="entry-meta">
+								<span class="entry-tag">Posted</span>
+							</p>
+							<p class="entry-body">{p.content}</p>
+						{/if}
+						{#if p.comment_count > 0}
+							<p class="entry-foot">{p.comment_count} comment{p.comment_count === 1 ? '' : 's'}</p>
+						{/if}
+					</article>
+				</a>
 			{/each}
 
 			{#if (data.comments?.length ?? 0) > 0}
 				<h2 class="feed-section-title">Comments</h2>
 				{#each data.comments as c (c.id)}
-					<article class="entry">
-						<p class="entry-meta">
-							<span class="entry-tag">Replied</span>
-							{#if c.parent_post_author_username}
-								<span class="entry-replied-to">
-									to <a href="/{c.parent_post_author_username}">@{c.parent_post_author_username}</a>
-								</span>
+					<a class="entry-link" href="/comment/{c.id}">
+						<article class="entry">
+							<p class="entry-meta">
+								<span class="entry-tag">Replied</span>
+								{#if c.reply_target_username}
+									<span class="entry-replied-to">
+										to <a class="entry-replied-handle" href="/{c.reply_target_username}" onclick={(e) => e.stopPropagation()}>@{c.reply_target_username}</a>
+									</span>
+								{/if}
+							</p>
+							{#if c.reply_target_excerpt}
+								<p class="entry-quote">"{c.reply_target_excerpt}"</p>
 							{/if}
-						</p>
-						{#if c.parent_post_excerpt}
-							<p class="entry-quote">"{c.parent_post_excerpt}"</p>
-						{/if}
-						<p class="entry-body">{c.content}</p>
-					</article>
+							<p class="entry-body">{c.content}</p>
+						</article>
+					</a>
 				{/each}
 			{/if}
 		</section>
@@ -485,8 +605,29 @@
 	.profile-banner {
 		position: relative;
 		width: 100%;
-		height: 200px;
+		height: 280px;
 		background-color: var(--card);
+		background-size: cover;
+		touch-action: pan-x;
+	}
+	.profile-banner.repositioning {
+		cursor: ns-resize;
+	}
+	.profile-banner.repositioning::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(
+			to bottom,
+			rgba(0, 0, 0, 0.25),
+			rgba(0, 0, 0, 0) 35%,
+			rgba(0, 0, 0, 0) 65%,
+			rgba(0, 0, 0, 0.25)
+		);
+		pointer-events: none;
+	}
+	.profile-banner.dragging {
+		cursor: grabbing;
 	}
 	.banner-actions {
 		position: absolute;
@@ -528,9 +669,13 @@
 	   button (when applicable) lives on the right of this row. */
 	.avatar-row {
 		display: flex;
-		align-items: flex-start;
+		align-items: flex-end;
 		justify-content: space-between;
-		margin-top: -56px;
+		/* Avatar's BOTTOM edge should sit on the banner's bottom
+		   edge. Avatar is 112×112 with a 4px border (≈120 visual
+		   tall); pull the row up by exactly that much so the
+		   bottom aligns flush with the banner bottom. */
+		margin-top: -120px;
 		margin-bottom: 16px;
 		min-height: 56px;
 	}
@@ -575,11 +720,13 @@
 
 	.friend-area {
 		position: relative;
-		margin-top: 64px;
 		flex-shrink: 0;
 		display: flex;
 		gap: 8px;
 		align-items: center;
+		/* avatar-row uses align-items: flex-end so this aligns to the
+		   avatar's bottom (which now sits on the banner bottom edge);
+		   no explicit offset needed. */
 	}
 
 	/* Circular message button. Same vertical extent as the
@@ -905,6 +1052,19 @@
 		font-size: 12px;
 		color: var(--muted-foreground);
 		margin: 10px 0 0;
+	}
+
+	.entry-link {
+		display: block;
+		text-decoration: none;
+		color: inherit;
+	}
+	.entry-link .entry {
+		transition: background-color 120ms ease;
+		border-radius: 8px;
+	}
+	.entry-link:hover .entry {
+		background-color: var(--muted);
 	}
 
 	.feed-section-title {
