@@ -37,5 +37,32 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 		.bind(messageId, locals.user.id, recipient_id, trimmed)
 		.run();
 
-	return json({ success: true, message_id: messageId });
+	// Return the freshly-inserted row joined to its sender so the
+	// client can append it directly to the visible list without a
+	// follow-up GET / page reload. We re-query (cheap) so created_at
+	// reflects the actual unixepoch() value the DB just stamped.
+	const inserted = await db
+		.prepare(
+			`SELECT
+				m.id, m.sender_id, m.recipient_id, m.content,
+				m.created_at, m.read_at,
+				u.username as sender_username,
+				u.name as sender_display_name,
+				u.image as sender_profile_picture
+			FROM messages m
+			JOIN user u ON u.id = m.sender_id
+			WHERE m.id = ?`
+		)
+		.bind(messageId)
+		.first();
+
+	// Sender just sent — they are no longer "typing" toward this
+	// recipient. Clear the indicator so the other party doesn't see
+	// a phantom typing dot for the next few seconds.
+	await db
+		.prepare(`DELETE FROM typing_indicators WHERE user_id = ? AND recipient_id = ?`)
+		.bind(locals.user.id, recipient_id)
+		.run();
+
+	return json({ success: true, message: inserted });
 };
