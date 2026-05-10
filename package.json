@@ -43,7 +43,6 @@
 		"wrangler": "^4.43.0"
 	},
 	"dependencies": {
-		"@chatereum/react-e2ee": "^3.0.1",
 		"@chenglou/pretext": "^0.0.7",
 		"@radix-ui/react-slot": "^1.2.3",
 		"better-auth": "^1.3.27",
