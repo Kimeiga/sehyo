@@ -10,6 +10,7 @@ interface ProfileUser {
 	bot_id: string | null;
 	isAnonymous: number | null;
 	createdAt: number;
+	header_image_url: string | null;
 }
 
 interface ProfilePost {
@@ -32,7 +33,7 @@ export const load: PageServerLoad = async ({ params, platform }) => {
 
 	const profileUser = await db
 		.prepare(
-			`SELECT id, name, username, bio, bot_id, isAnonymous, createdAt
+			`SELECT id, name, username, bio, bot_id, isAnonymous, createdAt, header_image_url
 			 FROM user
 			 WHERE LOWER(username) = ?
 			 LIMIT 1`

@@ -1,11 +1,71 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
 	import { goto, invalidateAll } from '$app/navigation';
-	import { Pencil, Check, X } from 'lucide-svelte';
+	import { Pencil, Check, X, Camera, Trash2 } from 'lucide-svelte';
+	import { gradientFor } from '$lib/header-gradient';
 
 	let { data }: PageProps = $props();
 	const u = $derived(data.profileUser);
 	const isOwnProfile = $derived(!!data.user && data.user.id === u.id);
+
+	const headerStyle = $derived(
+		u.header_image_url
+			? `background-image: url(${JSON.stringify(u.header_image_url)}); background-size: cover; background-position: center;`
+			: `background: ${gradientFor(u.id)};`
+	);
+
+	let headerInput: HTMLInputElement | undefined = $state();
+	let uploadingHeader = $state(false);
+
+	async function pickHeaderImage() {
+		headerInput?.click();
+	}
+
+	async function uploadHeader(e: Event) {
+		const input = e.target as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file || uploadingHeader) return;
+		uploadingHeader = true;
+		try {
+			const fd = new FormData();
+			fd.append('image', file);
+			const res = await fetch('/api/user/me/header', {
+				method: 'POST',
+				credentials: 'include',
+				body: fd
+			});
+			if (!res.ok) {
+				const body = await res.json().catch(() => ({}));
+				alert(body?.message ?? `Upload failed (HTTP ${res.status}).`);
+				return;
+			}
+			await invalidateAll();
+		} catch (err) {
+			console.error('Header upload failed:', err);
+			alert('Upload failed. Try again.');
+		} finally {
+			uploadingHeader = false;
+			if (input) input.value = '';
+		}
+	}
+
+	async function clearHeader() {
+		if (!u.header_image_url) return;
+		if (!confirm('Remove your header image and revert to the gradient?')) return;
+		try {
+			const res = await fetch('/api/user/me/header', {
+				method: 'DELETE',
+				credentials: 'include'
+			});
+			if (!res.ok) {
+				alert(`Could not remove (HTTP ${res.status}).`);
+				return;
+			}
+			await invalidateAll();
+		} catch (err) {
+			console.error('Header delete failed:', err);
+		}
+	}
 
 	let editing = $state(false);
 	let draft = $state('');
@@ -124,6 +184,40 @@
 <svelte:head>
 	<title>{u.name ?? `@${u.username}`} · Sehyo</title>
 </svelte:head>
+
+<div class="profile-banner" style={headerStyle} aria-hidden="true">
+	{#if isOwnProfile}
+		<input
+			bind:this={headerInput}
+			type="file"
+			accept="image/jpeg,image/png,image/webp,image/gif"
+			onchange={uploadHeader}
+			class="hidden-input"
+		/>
+		<div class="banner-actions">
+			<button
+				type="button"
+				class="banner-button"
+				onclick={pickHeaderImage}
+				disabled={uploadingHeader}
+				aria-label={uploadingHeader ? 'Uploading…' : 'Change header image'}
+			>
+				<Camera size="16" strokeWidth="1.8" />
+				<span>{uploadingHeader ? 'Uploading…' : 'Change'}</span>
+			</button>
+			{#if u.header_image_url}
+				<button
+					type="button"
+					class="banner-button"
+					onclick={clearHeader}
+					aria-label="Remove header image"
+				>
+					<Trash2 size="16" strokeWidth="1.8" />
+				</button>
+			{/if}
+		</div>
+	{/if}
+</div>
 
 <main class="page">
 	<header class="profile-header">
@@ -252,7 +346,51 @@
 	.page {
 		max-width: 640px;
 		margin: 0 auto;
-		padding: 120px 24px 96px;
+		padding: 32px 24px 96px;
+	}
+
+	/* Mesh-gradient banner (or uploaded image) at the top of the
+	   profile. Spans the viewport edge-to-edge so it reads as a
+	   true header, not a card. */
+	.profile-banner {
+		position: relative;
+		width: 100%;
+		height: 200px;
+		background-color: var(--card);
+	}
+	.banner-actions {
+		position: absolute;
+		bottom: 12px;
+		right: 12px;
+		display: flex;
+		gap: 8px;
+	}
+	.banner-button {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		appearance: none;
+		border: 0;
+		padding: 8px 12px;
+		border-radius: 999px;
+		background: rgba(0, 0, 0, 0.55);
+		color: white;
+		font: inherit;
+		font-size: 13px;
+		font-weight: 500;
+		cursor: pointer;
+		backdrop-filter: blur(6px);
+		-webkit-backdrop-filter: blur(6px);
+	}
+	.banner-button:hover { background: rgba(0, 0, 0, 0.7); }
+	.banner-button:disabled { opacity: 0.6; cursor: not-allowed; }
+	.hidden-input {
+		position: absolute;
+		left: -9999px;
+		width: 1px;
+		height: 1px;
+		opacity: 0;
+		pointer-events: none;
 	}
 
 	.profile-header {
@@ -270,11 +408,11 @@
 	.handle {
 		font-size: 15px;
 		color: var(--muted-foreground);
-		margin: 0 0 16px;
+		margin: 0 0 14px;
 		font-weight: 500;
 		display: inline-flex;
 		align-items: center;
-		gap: 8px;
+		gap: 2px;
 	}
 	.edit-handle {
 		appearance: none;
@@ -363,6 +501,7 @@
 		flex-wrap: wrap;
 	}
 	.add-bio {
+		display: block;
 		appearance: none;
 		border: 0;
 		background: transparent;
@@ -370,7 +509,7 @@
 		font: inherit;
 		font-size: 14px;
 		padding: 4px 0;
-		margin: 0 0 12px;
+		margin: 4px 0 12px;
 		cursor: pointer;
 		text-align: left;
 	}
