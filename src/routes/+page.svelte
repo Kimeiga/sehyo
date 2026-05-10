@@ -49,6 +49,46 @@
 	let freeValue = $state('');
 	let postingFree = $state(false);
 
+	// "Ask a question" composer in the World section.
+	let questionValue = $state('');
+	let postingQuestion = $state(false);
+
+	// Browser-notification permission state. The actual web-push
+	// subscription wiring is a Phase 2 follow-up; for now we just hold
+	// the permission so the UI can reflect it.
+	let notificationPermission = $state<NotificationPermission | 'unsupported' | null>(null);
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		if (!('Notification' in window)) {
+			notificationPermission = 'unsupported';
+			return;
+		}
+		notificationPermission = Notification.permission;
+	});
+
+	async function enableNotifications() {
+		if (typeof window === 'undefined') return;
+		if (!('Notification' in window)) {
+			alert('Your browser does not support notifications.');
+			return;
+		}
+		try {
+			const result = await Notification.requestPermission();
+			notificationPermission = result;
+			if (result === 'granted') {
+				// TODO(phase2): subscribe to web-push and persist on server
+				// so the cron worker can send "new prompt" / "new comment"
+				// pushes to this device.
+				new Notification('Sehyo notifications enabled', {
+					body: 'You’ll be told when a new question is posited.',
+					icon: '/pwa-192x192.png'
+				});
+			}
+		} catch (err) {
+			console.error('Permission request failed:', err);
+		}
+	}
+
 	// Inline comment composer state.
 	let openCommentFor = $state<string | null>(null);
 	let commentValue = $state('');
@@ -171,6 +211,29 @@
 			alert('Could not post. Try again.');
 		} finally {
 			postingFree = false;
+		}
+	}
+
+	async function submitQuestion(e: SubmitEvent) {
+		e.preventDefault();
+		const content = questionValue.trim();
+		if (!content || postingQuestion) return;
+		postingQuestion = true;
+		try {
+			const res = await fetch('/api/posts/question', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ content })
+			});
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			questionValue = '';
+			await invalidateAll();
+		} catch (err) {
+			console.error('Question post failed:', err);
+			alert('Could not post question. Try again.');
+		} finally {
+			postingQuestion = false;
 		}
 	}
 
@@ -367,6 +430,18 @@
 		</section>
 
 		{#if data.myAnswer}
+			<p class="nudge">
+				A new question will be posited tomorrow.
+				{#if notificationPermission === 'granted'}
+					<span class="nudge-state">Notifications on.</span>
+				{:else if notificationPermission === 'denied' || notificationPermission === 'unsupported'}
+					<span class="nudge-state">Notifications unavailable.</span>
+				{:else}
+					<button type="button" class="nudge-cta" onclick={enableNotifications}>Enable notifications</button>
+					to be notified when it's posited.
+				{/if}
+			</p>
+
 			<!-- Transition into the global posting space. Full-width line +
 			     a quiet word announces this isn't the daily prompt. -->
 			<hr class="world-divider" />
@@ -390,10 +465,31 @@
 					</div>
 				</form>
 
+				<form class="composer" onsubmit={submitQuestion}>
+					<textarea
+						bind:value={questionValue}
+						placeholder="Ask a question…"
+						rows="2"
+						maxlength="280"
+						disabled={postingQuestion}
+					></textarea>
+					<div class="composer-bar">
+						<button
+							type="submit"
+							class="post-button"
+							disabled={postingQuestion || questionValue.trim().length === 0}
+						>{postingQuestion ? 'Asking…' : 'Ask'}</button>
+					</div>
+				</form>
+
 				{#if data.todayFreePosts.length > 0}
-					<div class="answers">
+					<div class="world-feed">
 						{#each data.todayFreePosts as p (p.id)}
-							{@render postCard(p)}
+							{#if p.is_question}
+								{@render userQuestionCard(p)}
+							{:else}
+								{@render postCard(p)}
+							{/if}
 						{/each}
 					</div>
 				{/if}
@@ -422,6 +518,53 @@
 		{/if}
 	{/if}
 </main>
+
+{#snippet userQuestionCard(q: { id: string; content: string; display_name: string | null; bot_id: string | null; comment_count: number })}
+	<article class="user-question">
+		<p class="user-question-from">From <span class="user-question-name author-mask">{q.display_name ?? 'Anonymous'}</span></p>
+		<h3 class="user-question-text">{q.content}</h3>
+		<footer class="answer-foot">
+			<button
+				type="button"
+				class="comment-button"
+				onclick={() => toggleCommentBox(q.id)}
+				aria-label="Reply"
+			>
+				<MessageCircle size="18" strokeWidth="1.7" />
+				{#if q.comment_count > 0}<span class="count">{q.comment_count}</span>{/if}
+			</button>
+		</footer>
+
+		{#if openCommentFor === q.id}
+			<div class="comment-thread">
+				{#if commentsByPost[q.id]?.length}
+					<ul class="comment-list">
+						{#each commentsByPost[q.id] as c (c.id)}
+							<li class="comment">
+								<span class="comment-author author-mask">{c.user?.display_name ?? 'Anonymous'}</span>
+								<span class="comment-body">{c.content}</span>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+				<form class="comment-composer" onsubmit={(e) => submitComment(q.id, e)}>
+					<textarea
+						bind:value={commentValue}
+						placeholder="Reply…"
+						rows="2"
+						maxlength="1000"
+						disabled={submittingComment}
+					></textarea>
+					<button
+						type="submit"
+						class="post-button small"
+						disabled={submittingComment || commentValue.trim().length === 0}
+					>{submittingComment ? '…' : 'Reply'}</button>
+				</form>
+			</div>
+		{/if}
+	</article>
+{/snippet}
 
 {#snippet postCard(a: { id: string; content: string; display_name: string | null; bot_id: string | null; comment_count: number })}
 	<article class="answer">
@@ -718,6 +861,36 @@
 		min-height: 60px;
 	}
 
+	/* Soft gray nudge that surfaces below the answers feed once the
+	   viewer has answered today. The "Enable notifications" verb stays
+	   white so it reads as the actionable bit. */
+	.nudge {
+		max-width: 640px;
+		margin: 32px auto 0;
+		padding: 0 0 8px;
+		text-align: center;
+		color: var(--muted-foreground);
+		font-size: 14px;
+		line-height: 1.6;
+	}
+	.nudge-cta {
+		appearance: none;
+		border: 0;
+		background: transparent;
+		color: var(--foreground);
+		font: inherit;
+		font-weight: 500;
+		text-decoration: underline;
+		text-underline-offset: 3px;
+		cursor: pointer;
+		padding: 0;
+	}
+	.nudge-cta:hover { opacity: 0.7; }
+	.nudge-state {
+		color: var(--foreground);
+		font-weight: 500;
+	}
+
 	/* Full-width section divider between the daily prompt zone and the
 	   global "World" zone. Negative side margins break out of the
 	   page's 24px padding so the line spans edge-to-edge of the
@@ -741,6 +914,41 @@
 	.free-section {
 		margin-top: 0;
 	}
+
+	/* User-asked questions in the World feed render with the same thin
+	   headline treatment as the daily prompt, but with a "From X" tag
+	   above so they read as user content, not system content. */
+	.user-question {
+		max-width: 640px;
+		margin: 0 auto;
+		padding: 28px 0;
+		border-top: 1px solid var(--border);
+	}
+	.user-question-from {
+		font-size: 12px;
+		font-weight: 500;
+		color: var(--muted-foreground);
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		margin: 0 0 12px;
+	}
+	.user-question-name {
+		color: var(--foreground);
+		text-transform: none;
+		letter-spacing: 0;
+		font-weight: 600;
+	}
+	.user-question-text {
+		font-family: var(--font-sans);
+		font-weight: 100;
+		letter-spacing: -0.022em;
+		font-size: clamp(28px, 5vw, 44px);
+		line-height: 1.1;
+		color: var(--foreground);
+		margin: 0;
+	}
+
+	.world-feed { display: flex; flex-direction: column; }
 
 	.past {
 		margin-top: 96px;
