@@ -25,8 +25,23 @@ export const load: LayoutServerLoad = async ({ platform, locals, url }) => {
 			user: locals.user,
 			prompt: null,
 			answers: [] as AnswerRow[],
-			namesBlurred: !locals.user
+			namesBlurred: !locals.user,
+			unreadMessageCount: 0
 		};
+	}
+
+	// Unread DM count for the navbar indicator. Cheap COUNT(*) so it's
+	// fine to run on every layout load. Anonymous + signed-out viewers
+	// don't receive DMs, so we skip the query entirely.
+	let unreadMessageCount = 0;
+	if (locals.user && !locals.user.isAnonymous) {
+		const r = await db
+			.prepare(
+				'SELECT COUNT(*) AS n FROM messages WHERE recipient_id = ? AND read_at IS NULL'
+			)
+			.bind(locals.user.id)
+			.first<{ n: number }>();
+		unreadMessageCount = r?.n ?? 0;
 	}
 
 	const date = todayUTC();
@@ -117,7 +132,8 @@ export const load: LayoutServerLoad = async ({ platform, locals, url }) => {
 		myAnswer,
 		namesBlurred,
 		unlockedAvatars,
-		todayCommentsByPost
+		todayCommentsByPost,
+		unreadMessageCount
 	};
 };
 
