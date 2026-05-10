@@ -1,4 +1,7 @@
 import type { D1Database, Ai } from '@cloudflare/workers-types';
+import { drizzle } from 'drizzle-orm/d1';
+import { and, desc, eq, inArray, like } from 'drizzle-orm';
+import { user, dailyPrompts, posts, comments, botProfiles } from './db/schema';
 
 // 8B was too literal — it parroted the system prompt's poetic-flourish
 // banned-list and still hit them. 70B handles nuance better. We
@@ -31,7 +34,7 @@ Constraints:
 - 6-18 words.
 - No quotation marks. No preamble. Output ONLY the question.`;
 
-const PROMPT_GENERATION_USER = 'Give me today\'s question.';
+const PROMPT_GENERATION_USER = "Give me today's question.";
 
 function answersSystemPrompt(authors: SeedAuthor[]) {
 	const n = authors.length;
@@ -133,30 +136,66 @@ export interface SeedAuthor {
 	personality: string | null;
 }
 
-export async function getSeedAuthors(db: D1Database): Promise<SeedAuthor[]> {
+export async function getSeedAuthors(d1: D1Database): Promise<SeedAuthor[]> {
 	// Personality is purely LLM-side guidance and lives on bot_profiles
 	// (not on the public user.bio, which now holds a normal-person bio).
+	const db = drizzle(d1);
 	const rows = await db
-		.prepare(
-			`SELECT u.id AS user_id, u.bot_id, u.name, bp.personality
-			 FROM user u
-			 LEFT JOIN bot_profiles bp ON bp.user_id = u.id
-			 WHERE u.bot_id LIKE 'seed_%'`
-		)
-		.all<{ user_id: string; bot_id: string; name: string; personality: string | null }>();
-	return rows.results ?? [];
+		.select({
+			user_id: user.id,
+			bot_id: user.bot_id,
+			name: user.name,
+			personality: botProfiles.personality
+		})
+		.from(user)
+		.leftJoin(botProfiles, eq(botProfiles.user_id, user.id))
+		.where(like(user.bot_id, 'seed_%'));
+	// bot_id is filtered non-null by the LIKE; we also require name to be
+	// present so the SeedAuthor contract holds.
+	return rows.filter((r): r is SeedAuthor => r.bot_id !== null && r.name !== null);
 }
 
-export async function generatePromptText(ai: Ai): Promise<string> {
+/**
+ * Generate one daily prompt question via the LLM.
+ *
+ * `recentPrompts` is the list of recently-used questions (most-recent first).
+ * They get appended to the system message as an avoid-list so the LLM is
+ * less likely to produce a near-duplicate. Pass `[]` to skip the avoid
+ * section entirely.
+ */
+export async function generatePromptText(ai: Ai, recentPrompts: string[]): Promise<string> {
+	const systemContent =
+		recentPrompts.length === 0
+			? PROMPT_GENERATION_SYSTEM
+			: `${PROMPT_GENERATION_SYSTEM}
+
+═══ AVOID REPEATING RECENT QUESTIONS ═══
+The following questions were used in the last ${recentPrompts.length} days. Your new question must NOT be similar in topic, framing, or angle to any of these — pick something meaningfully different:
+${recentPrompts.map((q, i) => `${i + 1}. ${q}`).join('\n')}`;
+
 	const res = (await ai.run(PROMPT_MODEL, {
 		messages: [
-			{ role: 'system', content: PROMPT_GENERATION_SYSTEM },
+			{ role: 'system', content: systemContent },
 			{ role: 'user', content: PROMPT_GENERATION_USER }
 		],
-		temperature: 0.9,
+		temperature: 1.0,
 		max_tokens: 80
 	})) as { response?: string };
 	return cleanLine(res.response ?? '');
+}
+
+/**
+ * Fetch the text of the N most recent daily prompts, newest first. Used as
+ * an avoid-list when generating a new prompt. Pure read; no side effects.
+ */
+async function getRecentPromptTexts(d1: D1Database, limit: number): Promise<string[]> {
+	const db = drizzle(d1);
+	const rows = await db
+		.select({ prompt_text: dailyPrompts.prompt_text })
+		.from(dailyPrompts)
+		.orderBy(desc(dailyPrompts.created_at))
+		.limit(limit);
+	return rows.map((r) => r.prompt_text);
 }
 
 export async function generateSeedAnswers(
@@ -317,31 +356,40 @@ async function generateBotComment(ai: Ai, ctx: CommentContext): Promise<string |
  * comments. Calls run in parallel (Workers AI handles concurrency).
  */
 async function runMultiPassComments(
-	db: D1Database,
+	d1: D1Database,
 	ai: Ai,
 	prompt: { id: string; prompt_text: string },
 	authors: SeedAuthor[]
 ): Promise<{ pass2: number; pass3: number }> {
-	// Load the answers we just inserted (so we have post ids + content).
-	const postsRes = await db
-		.prepare(
-			`SELECT id, user_id, content
-			 FROM posts
-			 WHERE prompt_id = ?
-			   AND user_id IN (SELECT id FROM user WHERE bot_id LIKE 'seed_%')`
-		)
-		.bind(prompt.id)
-		.all<{ id: string; user_id: string; content: string }>();
-	const posts = postsRes.results ?? [];
-	if (posts.length === 0) return { pass2: 0, pass3: 0 };
+	const db = drizzle(d1);
+	// Load the seed-bot answers we just inserted (so we have post ids +
+	// content). The IN-subquery filters posts to those authored by a seed bot.
+	const seedPosts = await db
+		.select({ id: posts.id, user_id: posts.user_id, content: posts.content })
+		.from(posts)
+		.where(
+			and(
+				eq(posts.prompt_id, prompt.id),
+				inArray(
+					posts.user_id,
+					db.select({ id: user.id }).from(user).where(like(user.bot_id, 'seed_%'))
+				)
+			)
+		);
+	if (seedPosts.length === 0) return { pass2: 0, pass3: 0 };
 
 	const authorById = new Map<string, SeedAuthor>();
 	for (const a of authors) authorById.set(a.user_id, a);
 
 	// ── Pass 2: top-level inter-bot comments on the answers ──────────
-	const pass2Plan: Array<{ commenter: SeedAuthor; parentPostId: string; parentText: string; parentAuthorName: string }> = [];
+	const pass2Plan: Array<{
+		commenter: SeedAuthor;
+		parentPostId: string;
+		parentText: string;
+		parentAuthorName: string;
+	}> = [];
 	for (let i = 0; i < INTERBOT_COMMENT_COUNT; i++) {
-		const post = posts[Math.floor(Math.random() * posts.length)];
+		const post = seedPosts[Math.floor(Math.random() * seedPosts.length)];
 		const parentAuthor = authorById.get(post.user_id);
 		const candidates = authors.filter((a) => a.user_id !== post.user_id);
 		const commenter = candidates[Math.floor(Math.random() * candidates.length)];
@@ -369,12 +417,12 @@ async function runMultiPassComments(
 
 	for (const c of pass2Inserted) {
 		try {
-			await db
-				.prepare(
-					'INSERT INTO comments (id, post_id, user_id, content) VALUES (?, ?, ?, ?)'
-				)
-				.bind(c.commentId, c.parentPostId, c.commenter.user_id, c.text)
-				.run();
+			await db.insert(comments).values({
+				id: c.commentId,
+				post_id: c.parentPostId,
+				user_id: c.commenter.user_id,
+				content: c.text
+			});
 		} catch (err) {
 			console.error('pass2 insert failed', err);
 		}
@@ -419,12 +467,13 @@ async function runMultiPassComments(
 
 	for (const c of pass3Inserted) {
 		try {
-			await db
-				.prepare(
-					'INSERT INTO comments (id, post_id, user_id, content, parent_comment_id) VALUES (?, ?, ?, ?, ?)'
-				)
-				.bind(c.commentId, c.parentPostId, c.commenter.user_id, c.text, c.parentCommentId)
-				.run();
+			await db.insert(comments).values({
+				id: c.commentId,
+				post_id: c.parentPostId,
+				user_id: c.commenter.user_id,
+				content: c.text,
+				parent_comment_id: c.parentCommentId
+			});
 		} catch (err) {
 			console.error('pass3 insert failed', err);
 		}
@@ -439,15 +488,16 @@ async function runMultiPassComments(
  * for guests. Runs in parallel.
  */
 export async function generateBotRepliesOnUserAnswer(
-	db: D1Database,
+	d1: D1Database,
 	ai: Ai,
 	postId: string,
 	postContent: string,
 	postAuthorName: string
 ): Promise<number> {
-	const authors = await getSeedAuthors(db);
+	const authors = await getSeedAuthors(d1);
 	if (authors.length === 0) return 0;
 
+	const db = drizzle(d1);
 	const picked = shuffle(authors).slice(0, REPLIES_ON_USER_ANSWER);
 	const results = await Promise.all(
 		picked.map((commenter) =>
@@ -464,10 +514,12 @@ export async function generateBotRepliesOnUserAnswer(
 	for (const r of results) {
 		if (!r) continue;
 		try {
-			await db
-				.prepare('INSERT INTO comments (id, post_id, user_id, content) VALUES (?, ?, ?, ?)')
-				.bind(crypto.randomUUID(), postId, r.commenter.user_id, r.text)
-				.run();
+			await db.insert(comments).values({
+				id: crypto.randomUUID(),
+				post_id: postId,
+				user_id: r.commenter.user_id,
+				content: r.text
+			});
 			inserted++;
 		} catch (err) {
 			console.error('user-reply insert failed', err);
@@ -482,28 +534,34 @@ export async function generateBotRepliesOnUserAnswer(
  * dev iteration when the LLM prompt or model changes.
  */
 export async function regenerateSeedAnswersForToday(
-	db: D1Database,
+	d1: D1Database,
 	ai: Ai
 ): Promise<{ prompt_id: string; prompt_text: string; answers_inserted: number }> {
+	const db = drizzle(d1);
 	const date = todayUTC();
-	const prompt = await db
-		.prepare('SELECT id, prompt_text FROM daily_prompts WHERE active_date = ?')
-		.bind(date)
-		.first<{ id: string; prompt_text: string }>();
+	const [prompt] = await db
+		.select({ id: dailyPrompts.id, prompt_text: dailyPrompts.prompt_text })
+		.from(dailyPrompts)
+		.where(eq(dailyPrompts.active_date, date))
+		.orderBy(desc(dailyPrompts.created_at))
+		.limit(1);
 	if (!prompt) throw new Error('No prompt for today');
 
 	// Drop only seed-author posts attached to this prompt. User content
 	// stays.
 	await db
-		.prepare(
-			`DELETE FROM posts
-			 WHERE prompt_id = ?
-			   AND user_id IN (SELECT id FROM user WHERE bot_id LIKE 'seed_%')`
-		)
-		.bind(prompt.id)
-		.run();
+		.delete(posts)
+		.where(
+			and(
+				eq(posts.prompt_id, prompt.id),
+				inArray(
+					posts.user_id,
+					db.select({ id: user.id }).from(user).where(like(user.bot_id, 'seed_%'))
+				)
+			)
+		);
 
-	const authors = await getSeedAuthors(db);
+	const authors = await getSeedAuthors(d1);
 	const n = Math.min(ANSWER_COUNT, authors.length);
 	const picked = pickAuthors(authors, n);
 	const answers = await generateSeedAnswers(ai, prompt.prompt_text, picked);
@@ -514,11 +572,12 @@ export async function regenerateSeedAnswersForToday(
 		const author = picked[i];
 		if (!a || !author) continue;
 		try {
-			const postId = crypto.randomUUID();
-			await db
-				.prepare('INSERT INTO posts (id, user_id, prompt_id, content) VALUES (?, ?, ?, ?)')
-				.bind(postId, author.user_id, prompt.id, a)
-				.run();
+			await db.insert(posts).values({
+				id: crypto.randomUUID(),
+				user_id: author.user_id,
+				prompt_id: prompt.id,
+				content: a
+			});
 			inserted++;
 		} catch (err) {
 			console.error('Seed insert failed for', author.name, err);
@@ -526,8 +585,8 @@ export async function regenerateSeedAnswersForToday(
 	}
 
 	// Pass 2 + Pass 3: inter-bot comments to make the thread look alive.
-	const allAuthors = await getSeedAuthors(db);
-	const passes = await runMultiPassComments(db, ai, prompt, allAuthors);
+	const allAuthors = await getSeedAuthors(d1);
+	const passes = await runMultiPassComments(d1, ai, prompt, allAuthors);
 	return {
 		prompt_id: prompt.id,
 		prompt_text: prompt.prompt_text,
@@ -537,37 +596,35 @@ export async function regenerateSeedAnswersForToday(
 }
 
 /**
- * Pick (or generate) today's prompt and seed it with N short answers, each
- * attributed to a different randomly-chosen seed author. Idempotent on the
- * active_date — if today's prompt already exists this returns it without
- * regenerating.
+ * Generate a new prompt for today and seed it with N short bot answers,
+ * each attributed to a different randomly-chosen seed author. This is NOT
+ * idempotent — every call burns a fresh LLM generation and writes a new
+ * `daily_prompts` row. Throttling (e.g. once per day) is the caller's
+ * responsibility; running it back-to-back during dev is intentional so
+ * iteration doesn't return cached output.
  */
-export async function rotatePromptIfNeeded(db: D1Database, ai: Ai): Promise<{
+export async function rotatePrompt(
+	d1: D1Database,
+	ai: Ai
+): Promise<{
 	prompt_id: string;
 	prompt_text: string;
-	created: boolean;
 	answers_inserted: number;
 }> {
+	const db = drizzle(d1);
 	const date = todayUTC();
 
-	const existing = await db
-		.prepare('SELECT id, prompt_text FROM daily_prompts WHERE active_date = ?')
-		.bind(date)
-		.first<{ id: string; prompt_text: string }>();
-
-	if (existing) {
-		return { prompt_id: existing.id, prompt_text: existing.prompt_text, created: false, answers_inserted: 0 };
-	}
-
-	const promptText = await generatePromptText(ai);
+	const recentPrompts = await getRecentPromptTexts(d1, 10);
+	const promptText = await generatePromptText(ai, recentPrompts);
 	const promptId = crypto.randomUUID();
 
-	await db
-		.prepare(`INSERT INTO daily_prompts (id, prompt_text, active_date) VALUES (?, ?, ?)`)
-		.bind(promptId, promptText, date)
-		.run();
+	await db.insert(dailyPrompts).values({
+		id: promptId,
+		prompt_text: promptText,
+		active_date: date
+	});
 
-	const authors = await getSeedAuthors(db);
+	const authors = await getSeedAuthors(d1);
 	const n = Math.min(ANSWER_COUNT, authors.length);
 	const picked = pickAuthors(authors, n);
 	const answers = await generateSeedAnswers(ai, promptText, picked);
@@ -578,11 +635,12 @@ export async function rotatePromptIfNeeded(db: D1Database, ai: Ai): Promise<{
 		const author = picked[i];
 		if (!a || !author) continue;
 		try {
-			const postId = crypto.randomUUID();
-			await db
-				.prepare(`INSERT INTO posts (id, user_id, prompt_id, content) VALUES (?, ?, ?, ?)`)
-				.bind(postId, author.user_id, promptId, a)
-				.run();
+			await db.insert(posts).values({
+				id: crypto.randomUUID(),
+				user_id: author.user_id,
+				prompt_id: promptId,
+				content: a
+			});
 			inserted++;
 		} catch (err) {
 			console.error('Seed insert failed for', author.name, err);
@@ -590,7 +648,7 @@ export async function rotatePromptIfNeeded(db: D1Database, ai: Ai): Promise<{
 	}
 
 	const passes = await runMultiPassComments(
-		db,
+		d1,
 		ai,
 		{ id: promptId, prompt_text: promptText },
 		authors
