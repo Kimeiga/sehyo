@@ -228,7 +228,7 @@
 </script>
 
 <svelte:head>
-	<title>製 SEHYO</title>
+	<title>Sehyo — share your thoughts</title>
 </svelte:head>
 
 <main class="page">

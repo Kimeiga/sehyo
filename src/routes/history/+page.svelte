@@ -18,7 +18,7 @@
 </script>
 
 <svelte:head>
-	<title>History · 製 SEHYO</title>
+	<title>History · Sehyo</title>
 </svelte:head>
 
 <main class="page">

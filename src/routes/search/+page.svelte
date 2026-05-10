@@ -79,7 +79,7 @@
 </script>
 
 <svelte:head>
-	<title>Search · 製 SEHYO</title>
+	<title>Search · Sehyo</title>
 </svelte:head>
 
 <div class="page">
