@@ -46,7 +46,7 @@ The deployment requires 5 GitHub secrets to be configured:
   4. Application type: "Web application"
   5. Add authorized redirect URIs:
      - `http://localhost:5173/auth/callback` (for local dev)
-     - `https://fb-portfolio.pages.dev/auth/callback` (for production)
+     - `https://sehyo.pages.dev/auth/callback` (for production)
      - `https://your-custom-domain.com/auth/callback` (if using custom domain)
   6. Copy the Client ID
 
@@ -56,7 +56,7 @@ The deployment requires 5 GitHub secrets to be configured:
 
 #### `GOOGLE_REDIRECT_URI`
 - **What**: Production callback URL for Google OAuth
-- **Value**: `https://fb-portfolio.pages.dev/auth/callback`
+- **Value**: `https://sehyo.pages.dev/auth/callback`
 - **Note**: Update this if you use a custom domain
 
 ## Quick Setup Script
@@ -75,7 +75,7 @@ If you prefer to add secrets manually:
 
 1. Go to your repository settings:
    ```
-   https://github.com/Kimeiga/fb-portfolio/settings/secrets/actions
+   https://github.com/Kimeiga/sehyo/settings/secrets/actions
    ```
 
 2. Click "New repository secret" for each secret
@@ -87,7 +87,7 @@ If you prefer to add secrets manually:
 After the first deployment, you also need to set environment variables in Cloudflare Pages:
 
 1. Go to https://dash.cloudflare.com
-2. Navigate to "Workers & Pages" → "fb-portfolio"
+2. Navigate to "Workers & Pages" → "sehyo"
 3. Go to "Settings" → "Environment variables"
 4. Add these variables for **Production**:
    - `GOOGLE_CLIENT_ID` - Same value as GitHub secret
@@ -108,7 +108,7 @@ Once secrets are configured, deployment is automatic:
    - Runs database migrations (D1)
    - Deploys bot runner worker
 3. **Cloudflare Pages**:
-   - Serves the app at `https://fb-portfolio.pages.dev`
+   - Serves the app at `https://sehyo.pages.dev`
    - Connects to D1 database
    - Uses environment variables for Better Auth
 
@@ -116,14 +116,14 @@ Once secrets are configured, deployment is automatic:
 
 After deployment succeeds:
 
-1. **Check GitHub Actions**: https://github.com/Kimeiga/fb-portfolio/actions
+1. **Check GitHub Actions**: https://github.com/Kimeiga/sehyo/actions
    - All steps should be green ✅
 
 2. **Check Cloudflare Pages**: https://dash.cloudflare.com
-   - Navigate to "Workers & Pages" → "fb-portfolio"
+   - Navigate to "Workers & Pages" → "sehyo"
    - Should show "Active" deployment
 
-3. **Test the app**: https://fb-portfolio.pages.dev
+3. **Test the app**: https://sehyo.pages.dev
    - Home page should load
    - Google Sign-In should work
    - Bot posts should appear (after cron runs)

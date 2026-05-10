@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "🔐 Setting up GitHub Secrets for fb-portfolio"
+echo "🔐 Setting up GitHub Secrets for sehyo"
 echo ""
 echo "This script will help you add all required secrets to GitHub."
 echo "You'll need to provide the following values:"
@@ -9,7 +9,7 @@ echo "1. CLOUDFLARE_API_TOKEN - Get from: https://dash.cloudflare.com/profile/ap
 echo "2. CLOUDFLARE_ACCOUNT_ID - Found in Cloudflare dashboard URL or Workers & Pages overview"
 echo "3. GOOGLE_CLIENT_ID - From Google Cloud Console OAuth credentials"
 echo "4. GOOGLE_CLIENT_SECRET - From Google Cloud Console OAuth credentials"
-echo "5. GOOGLE_REDIRECT_URI - Production callback URL (e.g., https://fb-portfolio.pages.dev/auth/callback)"
+echo "5. GOOGLE_REDIRECT_URI - Production callback URL (e.g., https://sehyo.com/api/auth/callback/google)"
 echo ""
 echo "Press Enter to continue or Ctrl+C to cancel..."
 read
@@ -39,7 +39,7 @@ echo ""
 echo "✅ All secrets have been set!"
 echo ""
 echo "🚀 Next steps:"
-echo "1. Go to https://github.com/Kimeiga/fb-portfolio/actions"
+echo "1. Go to https://github.com/Kimeiga/sehyo/actions"
 echo "2. Click on the latest failed workflow run"
 echo "3. Click 'Re-run all jobs'"
 echo ""

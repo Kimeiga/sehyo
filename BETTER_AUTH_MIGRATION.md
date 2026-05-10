@@ -247,7 +247,7 @@ emailAndPassword: {
 
 ```bash
 # Run migration on production database
-npx wrangler d1 execute portfolio-facebook-db --remote --file=./migrations/0003_better_auth.sql
+npx wrangler d1 execute sehyo-db --remote --file=./migrations/0003_better_auth.sql
 
 # Set production secrets
 npx wrangler secret put GOOGLE_CLIENT_ID

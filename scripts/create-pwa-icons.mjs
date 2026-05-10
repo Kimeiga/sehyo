@@ -9,7 +9,7 @@ import { createCanvas } from 'canvas';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
 
-const THEME_COLOR = '#1877f2'; // Facebook blue
+const THEME_COLOR = '#1877f2';
 const TEXT_COLOR = '#ffffff';
 
 function createIcon(size, filename) {
@@ -20,12 +20,12 @@ function createIcon(size, filename) {
 	ctx.fillStyle = THEME_COLOR;
 	ctx.fillRect(0, 0, size, size);
 
-	// Add "PF" text (Portfolio Facebook)
+	// Add "S" text (Sehyo)
 	ctx.fillStyle = TEXT_COLOR;
-	ctx.font = `bold ${size * 0.4}px Arial`;
+	ctx.font = `bold ${size * 0.5}px Arial`;
 	ctx.textAlign = 'center';
 	ctx.textBaseline = 'middle';
-	ctx.fillText('PF', size / 2, size / 2);
+	ctx.fillText('S', size / 2, size / 2);
 
 	// Save to file
 	const buffer = canvas.toBuffer('image/png');

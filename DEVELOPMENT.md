@@ -1,6 +1,6 @@
 # Development Guide
 
-This guide covers the development workflow and testing procedures for the Portfolio Facebook application.
+This guide covers the development workflow and testing procedures for the Sehyo application.
 
 ## Quick Start for Development
 
@@ -27,19 +27,19 @@ You need to create the following Cloudflare resources:
 #### D1 Database
 
 ```bash
-npx wrangler d1 create portfolio-facebook-db
+npx wrangler d1 create sehyo-db
 ```
 
 Update `wrangler.toml` with the database ID, then run migrations:
 
 ```bash
-npx wrangler d1 execute portfolio-facebook-db --file=./migrations/0001_initial_schema.sql
+npx wrangler d1 execute sehyo-db --file=./migrations/0001_initial_schema.sql
 ```
 
 #### R2 Bucket
 
 ```bash
-npx wrangler r2 bucket create portfolio-facebook-images
+npx wrangler r2 bucket create sehyo-images
 ```
 
 #### KV Namespace
@@ -159,7 +159,7 @@ Key tables:
 Execute SQL queries locally:
 
 ```bash
-npx wrangler d1 execute portfolio-facebook-db --command="SELECT * FROM users LIMIT 5"
+npx wrangler d1 execute sehyo-db --command="SELECT * FROM users LIMIT 5"
 ```
 
 ### Working with R2 Storage
@@ -167,7 +167,7 @@ npx wrangler d1 execute portfolio-facebook-db --command="SELECT * FROM users LIM
 List objects in bucket:
 
 ```bash
-npx wrangler r2 object list portfolio-facebook-images
+npx wrangler r2 object list sehyo-images
 ```
 
 ### Debugging
