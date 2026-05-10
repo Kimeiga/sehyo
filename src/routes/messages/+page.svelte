@@ -242,7 +242,7 @@
 	});
 </script>
 
-<div class="container mx-auto px-4 py-8 max-w-6xl">
+<div class="messages-root container mx-auto px-4 py-8 max-w-6xl">
 	{#if !data.user}
 		<!-- Sign in prompt for non-authenticated users -->
 		<Card>
@@ -356,11 +356,13 @@
 								<CardTitle class="text-lg">{selectedConversation.display_name}</CardTitle>
 								<p class="text-sm text-muted-foreground">@{selectedConversation.username}</p>
 							</div>
-							<div class="flex items-center gap-1 text-xs text-green-600">
-								<Lock class="size-3" />
-								<span>Encrypted</span>
-							</div>
 						</div>
+						<p
+							class="mt-3 text-xs text-muted-foreground flex items-center justify-center gap-1.5"
+						>
+							<Lock class="size-3" />
+							Messages are end-to-end encrypted. Only you and {selectedConversation.display_name} can read them.
+						</p>
 					</CardHeader>
 
 					<!-- Messages -->
@@ -424,7 +426,10 @@
 						{/if}
 					</CardContent>
 
-					<!-- Message Input -->
+					<!-- Message Input — no E2EE notice here; that lives at
+					     the top of the conversation now. No bottom padding;
+					     the form sits flush against the bottom edge of the
+					     card. -->
 					<div class="border-t p-4">
 						<form
 							onsubmit={(e) => {
@@ -435,7 +440,7 @@
 						>
 							<Input
 								bind:value={newMessage}
-								placeholder="Type a message... (encrypted)"
+								placeholder="Type a message…"
 								disabled={isSending}
 								class="flex-1"
 							/>
@@ -447,11 +452,6 @@
 								{/if}
 							</Button>
 						</form>
-						<p class="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-							<Lock class="size-3" />
-							Messages are end-to-end encrypted. Only you and {selectedConversation.display_name} can read
-							them.
-						</p>
 					</div>
 				{:else}
 					<CardContent class="flex-1 flex items-center justify-center">
@@ -468,4 +468,23 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	/* Force the messages page to use Sehyo's black background instead
+	   of the shadcn card-on-muted look. We override the CSS custom
+	   property locally so every Card / Input / button-bg-card-muted
+	   inside this page renders flat against --background, matching
+	   the rest of the app. */
+	.messages-root {
+		--card: var(--background);
+		--popover: var(--background);
+		--muted: oklch(0.16 0 0);
+	}
+	.messages-root :global(.bg-card) {
+		background-color: var(--background) !important;
+	}
+	.messages-root :global(.bg-muted) {
+		background-color: oklch(0.16 0 0) !important;
+	}
+</style>
 

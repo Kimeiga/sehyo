@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
 	import { invalidateAll } from '$app/navigation';
+	import { tick } from 'svelte';
 	import { authClient } from '$lib/auth-client';
 	import { promptSignIn } from '$lib/stores/sign-in-modal';
 	import { MessageCircle, Pencil, MoreHorizontal, Check } from 'lucide-svelte';
@@ -254,9 +255,22 @@
 		}
 	}
 
-	function focusComposer(postId: string) {
+	async function focusComposer(postId: string) {
 		commentingOnPost = postId;
 		commentValue = '';
+		// Wait for the composer to render, then scroll it into view +
+		// focus the textarea so a long thread doesn't bury the
+		// "Add a comment" field.
+		await tick();
+		if (typeof document === 'undefined') return;
+		const form = document.querySelector<HTMLFormElement>(
+			`form.comment-composer[data-for-post="${postId}"]`
+		);
+		if (form) {
+			form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+			const ta = form.querySelector('textarea');
+			ta?.focus({ preventScroll: true });
+		}
 	}
 
 	async function submitComment(postId: string, e: SubmitEvent) {
@@ -706,7 +720,7 @@
 		{/if}
 
 		{#if commentingOnPost === a.id && !guestLocked}
-			<form class="comment-composer" onsubmit={(e) => submitComment(a.id, e)}>
+			<form class="comment-composer" data-for-post={a.id} onsubmit={(e) => submitComment(a.id, e)}>
 				<textarea
 					bind:value={commentValue}
 					placeholder="Add a comment…"
@@ -1375,4 +1389,35 @@
 		padding: 0;
 	}
 	.toast-link:hover { opacity: 0.85; }
+
+	/* ── Mobile threading: tighter avatar column + halved hook ────
+	   On narrow viewports we shrink the avatar gutter (avatar 40
+	   → 32, gap 8 → 4) and recompute the hook + cover so replies
+	   take less horizontal real estate, leaving more screen for
+	   the actual text. The avatar's own size is kept ≥ 32 so it
+	   still reads as a face, not a dot. */
+	@media (max-width: 600px) {
+		.tw-item { gap: 4px; }
+		.tw-left { width: 32px; }
+		.tw-avatar,
+		.tw-avatar-link {
+			width: 32px;
+			height: 32px;
+		}
+		/* Hook: parent's line at parent.x:16 (= 32/2). Children
+		   start at parent.x:36 (32 + 4 gap). Distance from line
+		   to child's avatar left = 36 − 16 − 1 = 19 ≈ 20px. So
+		   hook left:-20, width:20. Avatar center y = 12 padding +
+		   16 half-avatar = 28. */
+		.tw-item.is-reply::before {
+			left: -20px;
+			width: 20px;
+			top: 28px;
+		}
+		.tw-children > .tw-item.is-reply:last-child::after {
+			left: -22px;
+			top: 28px;
+		}
+		.comment-composer { margin-left: 36px; }
+	}
 </style>

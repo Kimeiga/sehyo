@@ -25,6 +25,15 @@ interface ProfilePost {
 	comment_count: number;
 }
 
+interface ProfileComment {
+	id: string;
+	content: string;
+	created_at: number;
+	post_id: string;
+	parent_post_author_username: string | null;
+	parent_post_excerpt: string | null;
+}
+
 export const load: PageServerLoad = async ({ params, platform, locals }) => {
 	const username = params.username.toLowerCase();
 	if (RESERVED_USERNAMES.has(username)) throw error(404, 'Not found');
@@ -102,9 +111,33 @@ export const load: PageServerLoad = async ({ params, platform, locals }) => {
 		.bind(profileUser.id)
 		.all<ProfilePost>();
 
+	// Their last 50 comments — joined to the parent post + author so we
+	// can show "Replied to <username>: <excerpt>" on the profile feed.
+	// Without this, bots / users who only comment (and don't post)
+	// have completely empty profiles, even though they're active.
+	const commentsRes = await db
+		.prepare(
+			`SELECT
+				c.id,
+				c.content,
+				c.created_at,
+				c.post_id,
+				pu.username AS parent_post_author_username,
+				substr(p.content, 1, 140) AS parent_post_excerpt
+			FROM comments c
+			JOIN posts p ON p.id = c.post_id
+			LEFT JOIN user pu ON pu.id = p.user_id
+			WHERE c.user_id = ?
+			ORDER BY c.created_at DESC
+			LIMIT 50`
+		)
+		.bind(profileUser.id)
+		.all<ProfileComment>();
+
 	return {
 		profileUser,
 		posts: postsRes.results ?? [],
+		comments: commentsRes.results ?? [],
 		hasCommented,
 		friendshipStatus
 	};
