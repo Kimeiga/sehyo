@@ -104,9 +104,6 @@
 		}
 	}
 
-	// Comments are eagerly hydrated by the server. The composer is opened
-	// by clicking the "comment" button on a post; the threads themselves
-	// always render.
 	let commentingOnPost = $state<string | null>(null);
 	let commentValue = $state('');
 	let submittingComment = $state(false);
@@ -482,16 +479,26 @@
 </main>
 
 <!-- ─────────────────────────────────────────────────────────────────
-	 Twitter-style row. Avatar in a fixed-width left column, name +
-	 @handle + body + actions stacked in the right column. Used for
-	 every post and every comment. The optional `hasThread` flag
-	 grows the avatar column into a dropping vertical line so child
-	 replies can hook into it visually.
+	 Twitter-style row. The container is `tw-item`, a flex row of:
+	   • tw-left  – fixed-width avatar column. When the row has
+	                replies underneath, a flex:1 line drops below the
+	                avatar and stretches with the parent's content
+	                so children visually nest under the same line.
+	   • tw-main  – name + handle + body + actions, then optional
+	                tw-children list. Children indent NATURALLY by
+	                living inside tw-main; the parent's avatar
+	                column keeps the line in the gutter.
 	 ───────────────────────────────────────────────────────────────── -->
 {#snippet avatar(userId: string, image: string | null | undefined)}
 	{@const revealed = isAvatarRevealed(userId)}
 	<span class="tw-avatar" class:locked={!revealed} aria-hidden="true">
-		<img src={avatarFor(image, userId)} alt="" class="tw-avatar-img" loading="lazy" />
+		<img
+			src={avatarFor(image, userId)}
+			alt=""
+			class="tw-avatar-img"
+			loading="lazy"
+			draggable="false"
+		/>
 	</span>
 {/snippet}
 
@@ -521,62 +528,61 @@
 	{@const kids = childrenOf(all, c.id)}
 	{@const hasKids = kids.length > 0}
 	{@const ownComment = !!data.user && c.user_id === data.user.id}
-	<li class="tw-item" class:has-thread={hasKids}>
-		<div class="tw-row tw-row-comment is-reply">
-			<div class="tw-left">
-				{#if c.user?.username}
-					<a class="tw-avatar-link" href="/{c.user.username}" aria-label={c.user.display_name ?? 'Profile'}>
-						{@render avatar(c.user_id, c.user?.profile_picture_url)}
-					</a>
-				{:else}
+	<li class="tw-item is-reply">
+		<div class="tw-left">
+			{#if c.user?.username}
+				<a class="tw-avatar-link" href="/{c.user.username}" aria-label={c.user.display_name ?? 'Profile'}>
 					{@render avatar(c.user_id, c.user?.profile_picture_url)}
-				{/if}
-			</div>
-			<div class="tw-main">
-				{@render authorMeta(c.user?.display_name, c.user?.username, ownComment)}
-				<p class="tw-body">{c.content}</p>
-				<footer class="tw-foot">
-					<button
-						type="button"
-						class="tw-action"
-						onclick={() => toggleReply(c.id)}
-						aria-label={replyingTo === c.id ? 'Cancel reply' : 'Reply'}
-					>
-						<MessageCircle size="16" strokeWidth="1.7" />
-						{#if hasKids}<span class="count">{kids.length}</span>{/if}
-					</button>
-				</footer>
-
-				{#if replyingTo === c.id}
-					<form class="reply-composer" onsubmit={(e) => submitReply(postId, c.id, e)}>
-						<textarea
-							bind:value={replyValue}
-							placeholder="Reply…"
-							rows="2"
-							maxlength="1000"
-							disabled={submittingReply}
-						></textarea>
-						<button
-							type="submit"
-							class="post-button small"
-							disabled={submittingReply || replyValue.trim().length === 0}
-						>{submittingReply ? '…' : 'Reply'}</button>
-					</form>
-				{/if}
-			</div>
+				</a>
+			{:else}
+				{@render avatar(c.user_id, c.user?.profile_picture_url)}
+			{/if}
+			{#if hasKids}<div class="tw-line"></div>{/if}
 		</div>
+		<div class="tw-main">
+			{@render authorMeta(c.user?.display_name, c.user?.username, ownComment)}
+			<p class="tw-body">{c.content}</p>
+			<footer class="tw-foot">
+				<button
+					type="button"
+					class="tw-action"
+					onclick={() => toggleReply(c.id)}
+					aria-label={replyingTo === c.id ? 'Cancel reply' : 'Reply'}
+				>
+					<MessageCircle size="16" strokeWidth="1.7" />
+					{#if hasKids}<span class="count">{kids.length}</span>{/if}
+				</button>
+			</footer>
 
-		{#if hasKids}
-			<ul class="tw-children" class:capped={depth + 1 >= MAX_NEST_DEPTH}>
-				{#each kids as child (child.id)}
-					{#if depth + 1 < MAX_NEST_DEPTH}
-						{@render commentNode(child, postId, depth + 1)}
-					{:else}
-						{@render commentNode(child, postId, depth)}
-					{/if}
-				{/each}
-			</ul>
-		{/if}
+			{#if replyingTo === c.id}
+				<form class="reply-composer" onsubmit={(e) => submitReply(postId, c.id, e)}>
+					<textarea
+						bind:value={replyValue}
+						placeholder="Reply…"
+						rows="2"
+						maxlength="1000"
+						disabled={submittingReply}
+					></textarea>
+					<button
+						type="submit"
+						class="post-button small"
+						disabled={submittingReply || replyValue.trim().length === 0}
+					>{submittingReply ? '…' : 'Reply'}</button>
+				</form>
+			{/if}
+
+			{#if hasKids}
+				<ul class="tw-children" class:capped={depth + 1 >= MAX_NEST_DEPTH}>
+					{#each kids as child (child.id)}
+						{#if depth + 1 < MAX_NEST_DEPTH}
+							{@render commentNode(child, postId, depth + 1)}
+						{:else}
+							{@render commentNode(child, postId, depth)}
+						{/if}
+					{/each}
+				</ul>
+			{/if}
+		</div>
 	</li>
 {/snippet}
 
@@ -589,16 +595,25 @@
 	{@const tops = topLevelOf(all)}
 	{@const hasTops = tops.length > 0}
 	{@const guestLocked = isMine && hasTops && !isFullySignedIn}
-	<article class="tw-item tw-post" class:has-thread={hasTops || isMine || commentingOnPost === a.id}>
-		{#if isMine && editing}
-			<div class="tw-row tw-row-post">
-				<div class="tw-left">
+	<article class="tw-post">
+		<div class="tw-item is-post">
+			<div class="tw-left">
+				{#if isMine && editing}
 					{#if data.user}
 						{@render avatar(data.user.id, (data.user as { image?: string | null }).image)}
 					{/if}
-				</div>
-				<div class="tw-main">
-					{@render authorMeta(a.display_name, a.username, true)}
+				{:else if a.username}
+					<a class="tw-avatar-link" href="/{a.username}" aria-label={a.display_name ?? 'Profile'}>
+						{@render avatar(a.user_id, a.image)}
+					</a>
+				{:else}
+					{@render avatar(a.user_id, a.image)}
+				{/if}
+				{#if hasTops}<div class="tw-line"></div>{/if}
+			</div>
+			<div class="tw-main">
+				{@render authorMeta(a.display_name, a.username, isMine)}
+				{#if isMine && editing}
 					<textarea
 						bind:value={editValue}
 						rows="3"
@@ -645,21 +660,7 @@
 							{/if}
 						</div>
 					</div>
-				</div>
-			</div>
-		{:else}
-			<div class="tw-row tw-row-post">
-				<div class="tw-left">
-					{#if a.username}
-						<a class="tw-avatar-link" href="/{a.username}" aria-label={a.display_name ?? 'Profile'}>
-							{@render avatar(a.user_id, a.image)}
-						</a>
-					{:else}
-						{@render avatar(a.user_id, a.image)}
-					{/if}
-				</div>
-				<div class="tw-main">
-					{@render authorMeta(a.display_name, a.username, isMine)}
+				{:else}
 					<p class="tw-body">{a.content}</p>
 					<footer class="tw-foot">
 						<button
@@ -682,25 +683,25 @@
 							</button>
 						{/if}
 					</footer>
-				</div>
+				{/if}
+
+				{#if hasTops}
+					<ul class="tw-children" class:guest-locked={guestLocked}>
+						{#each tops as c (c.id)}
+							{@render commentNode(c, a.id, 0)}
+						{/each}
+					</ul>
+				{/if}
 			</div>
-		{/if}
+		</div>
 
-		{#if hasTops}
-			<ul class="tw-children" class:guest-locked={guestLocked}>
-				{#each tops as c (c.id)}
-					{@render commentNode(c, a.id, 0)}
-				{/each}
-			</ul>
-
-			{#if guestLocked}
-				<div class="guest-locked-cta">
-					<span class="guest-locked-text">
-						<button type="button" class="guest-locked-link" onclick={() => promptSignIn('Sign in to read the comments on your response.')}>Sign in</button>
-						to read the comments on your response.
-					</span>
-				</div>
-			{/if}
+		{#if hasTops && guestLocked}
+			<div class="guest-locked-cta">
+				<span class="guest-locked-text">
+					<button type="button" class="guest-locked-link" onclick={() => promptSignIn('Sign in to read the comments on your response.')}>Sign in</button>
+					to read the comments on your response.
+				</span>
+			</div>
 		{/if}
 
 		{#if commentingOnPost === a.id && !guestLocked}
@@ -726,8 +727,8 @@
 	{@const all = commentsByPost[q.id] ?? []}
 	{@const tops = topLevelOf(all)}
 	{@const hasTops = tops.length > 0}
-	<article class="tw-item user-question" class:has-thread={hasTops || commentingOnPost === q.id}>
-		<div class="tw-row tw-row-post">
+	<article class="tw-post user-question">
+		<div class="tw-item is-post">
 			<div class="tw-left">
 				{#if q.username}
 					<a class="tw-avatar-link" href="/{q.username}" aria-label={q.display_name ?? 'Profile'}>
@@ -736,6 +737,7 @@
 				{:else}
 					{@render avatar(q.user_id, q.image)}
 				{/if}
+				{#if hasTops}<div class="tw-line"></div>{/if}
 			</div>
 			<div class="tw-main">
 				{@render authorMeta(q.display_name, q.username, false)}
@@ -751,16 +753,16 @@
 						{#if q.comment_count > 0}<span class="count">{q.comment_count}</span>{/if}
 					</button>
 				</footer>
+
+				{#if hasTops}
+					<ul class="tw-children">
+						{#each tops as c (c.id)}
+							{@render commentNode(c, q.id, 0)}
+						{/each}
+					</ul>
+				{/if}
 			</div>
 		</div>
-
-		{#if hasTops}
-			<ul class="tw-children">
-				{#each tops as c (c.id)}
-					{@render commentNode(c, q.id, 0)}
-				{/each}
-			</ul>
-		{/if}
 
 		{#if commentingOnPost === q.id}
 			<form class="comment-composer" onsubmit={(e) => submitComment(q.id, e)}>
@@ -785,16 +787,16 @@
 	.page {
 		max-width: none;
 		margin: 0 auto;
-		padding: 120px 24px 96px;
+		padding: 120px 12px 96px;
 	}
 
 	.composer,
 	.answers,
 	.free-section,
 	.past-date,
-	.tw-post,
-	.user-question {
+	.tw-post {
 		max-width: 640px;
+		width: 100%;
 		margin-left: auto;
 		margin-right: auto;
 	}
@@ -875,35 +877,38 @@
 	.post-button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 	/* ──────────────────────────────────────────────────────────────
-	   Twitter-style row
-	   tw-item is the recursive container (post OR comment). It holds
-	   one tw-row plus optional tw-children (replies). Avatar lives in
-	   the left column at a fixed width; everything else (name, body,
-	   actions) stacks in the right column. Sizes match across posts
-	   and comments by design — comments are not "smaller posts".
-
-	   Threading: an item with replies grows a vertical line in its
-	   left column (left:21px, descending from below the avatar). Each
-	   reply hooks into that line via an L-connector with a rounded
-	   bottom-left corner.
+	   tw-post – article wrapper. Adds the divider stroke between
+	   consecutive posts and clears float-style stacking.
 	   ────────────────────────────────────────────────────────────── */
-	.tw-item {
-		list-style: none;
-		position: relative;
-		padding: 0;
-	}
 	.tw-post {
-		padding: 18px 0;
+		padding: 16px 0 8px;
 		border-top: 1px solid var(--border);
 	}
-	.tw-row {
+	.answers > .tw-post:first-child { border-top: 0; }
+	.world-feed > .tw-post:first-child { border-top: 0; }
+
+	/* tw-item – the flex container for ONE row of avatar + content.
+	   Used for both top-level posts and nested comments. The
+	   tw-left stretches vertically (align-items:stretch) so the
+	   line-down element can fill the whole height including any
+	   nested children inside tw-main. */
+	.tw-item {
 		display: flex;
 		gap: 12px;
-		align-items: flex-start;
+		align-items: stretch;
+		width: 100%;
 	}
+	.tw-item.is-reply {
+		list-style: none;
+		padding-top: 12px;
+	}
+
 	.tw-left {
 		flex-shrink: 0;
 		width: 44px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
 	}
 	.tw-avatar-link {
 		display: block;
@@ -911,6 +916,8 @@
 		height: 44px;
 		border-radius: 999px;
 		overflow: hidden;
+		flex-shrink: 0;
+		-webkit-user-drag: none;
 	}
 	.tw-avatar {
 		display: block;
@@ -920,6 +927,10 @@
 		overflow: hidden;
 		background: var(--muted);
 		position: relative;
+		flex-shrink: 0;
+		user-select: none;
+		-webkit-user-drag: none;
+		-webkit-touch-callout: none;
 	}
 	.tw-avatar-img {
 		display: block;
@@ -927,11 +938,33 @@
 		height: 100%;
 		object-fit: cover;
 		transition: filter 220ms ease, transform 220ms ease;
+		pointer-events: none;
+		user-select: none;
+		-webkit-user-drag: none;
 	}
 	.tw-avatar.locked .tw-avatar-img {
 		filter: blur(8px);
 		transform: scale(1.18);
 	}
+	/* Drop line below the avatar. flex:1 so the line stretches with
+	   the content column, even when the content column grows from
+	   nested replies inside tw-main. The bottom fades out so the
+	   tail past the last child blends rather than dangles. */
+	.tw-line {
+		flex: 1;
+		width: 2px;
+		min-height: 6px;
+		margin-top: 6px;
+		margin-bottom: 0;
+		background: linear-gradient(
+			to bottom,
+			var(--border) 0,
+			var(--border) calc(100% - 16px),
+			transparent 100%
+		);
+		border-radius: 999px;
+	}
+
 	.tw-main {
 		flex: 1;
 		min-width: 0;
@@ -941,7 +974,7 @@
 		align-items: baseline;
 		gap: 6px;
 		flex-wrap: wrap;
-		margin-bottom: 2px;
+		margin: 0 0 2px;
 	}
 	.tw-name {
 		font-weight: 600;
@@ -990,73 +1023,43 @@
 	.tw-action:hover { color: var(--foreground); background: var(--muted); }
 	.count { font-weight: 600; line-height: 1; }
 
-	/* Threading: vertical line in the left column extending below
-	   the avatar to the bottom of the item (which contains the
-	   children). Each child reply gets an L-connector hooking into
-	   this line. */
-	.tw-item.has-thread::before {
-		content: '';
-		position: absolute;
-		left: 21px;
-		top: 60px;
-		bottom: 0;
-		width: 2px;
-		background: var(--border);
-		border-radius: 999px;
-		pointer-events: none;
-	}
-
+	/* tw-children – list of replies. Inside tw-main, no extra
+	   indent. Each reply is itself a .tw-item with its own avatar
+	   column at child.x:0. Parent's avatar+line live in PARENT's
+	   tw-left, which is to the left of children's tw-main, so the
+	   parent's line passes through the gutter as the children
+	   stack. The L-connector below hooks each child to that line. */
 	.tw-children {
 		list-style: none;
 		padding: 0;
-		margin: 12px 0 0 56px; /* indent past parent's avatar+gap */
+		margin: 8px 0 0;
+	}
+
+	/* L-connector. Drawn ABSOLUTELY against this child's tw-item.
+	   Vertical stub on the left + horizontal at the bottom + curve
+	   in the bottom-left corner. Bottom edge sits at the avatar's
+	   vertical center (avatar 44px + 12px padding-top = center at
+	   y:34). The vertical stub merges with parent's drop-line at
+	   x:-34 (since parent.line at parent.x:22 = child.x:-34). */
+	.tw-item.is-reply {
 		position: relative;
 	}
-	.tw-children > .tw-item {
-		padding: 12px 0;
-	}
-	/* L-connector from parent's vertical line into this reply's
-	   avatar mid-height. Drawn as a small box with two borders +
-	   rounded corner. */
-	.tw-children > .tw-item::after {
+	.tw-item.is-reply::before {
 		content: '';
 		position: absolute;
-		left: -35px;
-		top: -12px;
-		width: 35px;
+		left: -34px;
+		top: -2px;
+		width: 34px;
 		height: 36px;
 		border-left: 2px solid var(--border);
 		border-bottom: 2px solid var(--border);
 		border-bottom-left-radius: 14px;
 		pointer-events: none;
 	}
-	/* The last child gets the L too, but we hide the parent's
-	   continuation line below it by overlaying a same-color block. */
-	.tw-children > .tw-item:last-child::before {
-		content: '';
-		position: absolute;
-		left: -36px;
-		top: 22px;
-		bottom: -2px;
-		width: 4px;
-		background: var(--background);
-		pointer-events: none;
-		z-index: 1;
-	}
-	/* But if THIS child has its own replies, it needs its own
-	   ::before for its own vertical line — the override above
-	   would clobber that. Re-establish it inside this scope.
-	   We use :where to keep specificity low. */
-	.tw-children > .tw-item.has-thread:last-child::before {
-		left: 21px;
-		top: 60px;
-		bottom: 0;
-		background: var(--border);
-		width: 2px;
-		z-index: 0;
-	}
+
 	.tw-children.capped {
-		margin-left: 56px; /* same indent at depth cap */
+		/* At the depth cap we render flat at this level; no further
+		   visual indent change. */
 	}
 
 	.reply-composer,
@@ -1064,7 +1067,7 @@
 		display: flex;
 		gap: 8px;
 		align-items: flex-end;
-		margin: 12px 0 0 56px;
+		margin: 12px 0 0;
 	}
 	.reply-composer { margin-top: 8px; }
 	.reply-composer textarea, .comment-composer textarea {
@@ -1072,7 +1075,6 @@
 		min-height: 54px;
 	}
 
-	/* My-answer edit-mode textarea reuses the look of regular composer */
 	.edit-textarea {
 		width: 100%;
 		font-family: var(--font-sans);
@@ -1186,7 +1188,7 @@
 	.world-divider {
 		border: 0;
 		border-top: 1px solid var(--border);
-		margin: 64px -24px 0;
+		margin: 64px -12px 0;
 	}
 	.world-label {
 		font-family: var(--font-sans);
@@ -1227,10 +1229,6 @@
 		border-bottom-color: var(--foreground);
 	}
 
-	.user-question {
-		padding: 22px 0;
-		border-top: 1px solid var(--border);
-	}
 	.user-question-text {
 		font-family: var(--font-sans);
 		font-weight: 100;
@@ -1278,7 +1276,6 @@
 		font-style: italic;
 	}
 
-	/* Guest sees their own comments thread but blurred. */
 	.tw-children.guest-locked {
 		filter: blur(5px);
 		user-select: none;

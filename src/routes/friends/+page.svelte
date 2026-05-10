@@ -111,7 +111,7 @@
 {#snippet avatarMd(userId: string, image: string | null | undefined)}
 	{@const revealed = isAvatarRevealed(userId)}
 	<span class="avatar-frame" class:locked={!revealed} aria-hidden="true">
-		<img src={avatarFor(image, userId)} alt="" class="avatar-img" loading="lazy" />
+		<img src={avatarFor(image, userId)} alt="" class="avatar-img" loading="lazy" draggable="false" />
 	</span>
 {/snippet}
 
@@ -357,6 +357,13 @@
 		height: 100%;
 		object-fit: cover;
 		transition: filter 220ms ease, transform 220ms ease;
+		pointer-events: none;
+		user-select: none;
+		-webkit-user-drag: none;
+	}
+	.avatar-frame {
+		-webkit-touch-callout: none;
+		user-select: none;
 	}
 	.avatar-frame.locked .avatar-img {
 		filter: blur(8px);
