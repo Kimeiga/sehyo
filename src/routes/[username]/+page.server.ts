@@ -25,7 +25,7 @@ interface ProfilePost {
 	comment_count: number;
 }
 
-export const load: PageServerLoad = async ({ params, platform }) => {
+export const load: PageServerLoad = async ({ params, platform, locals }) => {
 	const username = params.username.toLowerCase();
 	if (RESERVED_USERNAMES.has(username)) throw error(404, 'Not found');
 

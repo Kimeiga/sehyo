@@ -54,9 +54,18 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
 			.bind(locals.user.id)
 			.all();
 
-		// Get all users (excluding anonymous users and current user),
-		// ordered by most recent activity (latest post or comment) so
-		// the Find tab feels alive instead of frozen at "newest signups".
+		// Friends Find tab list. Filters intentionally:
+		//   - Skip the current user.
+		//   - Skip anonymous-session users entirely (anon can't be
+		//     friended without first becoming a real account, and
+		//     surfacing them just clutters the list).
+		//   - Skip the legacy "Guest1234"-style users that were
+		//     created by the old auth flow before the random-name
+		//     anonymous plugin landed.
+		//   - Among bots, only include the active seed authors.
+		//     The deactivated tech/writer/fitness bots stay out.
+		// Order: humans first (sorted by latest post/comment, then
+		// signup), then bots after.
 		const allUsersResult = await platform.env.DB.prepare(
 			`SELECT
 				u.id,
@@ -64,6 +73,7 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
 				u.username,
 				u.image as profile_picture_url,
 				u.bio,
+				u.bot_id,
 				u.createdAt as created_at,
 				COALESCE(
 					MAX(p.created_at),
@@ -75,8 +85,15 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
 			LEFT JOIN comments c ON c.user_id = u.id
 			WHERE u.id != ?
 			  AND (u.isAnonymous IS NULL OR u.isAnonymous = 0)
+			  AND (
+			    -- Real human accounts (no bot, not "Guest..." legacy)
+			    (u.bot_id IS NULL AND (u.name IS NULL OR u.name NOT LIKE 'Guest%'))
+			    OR
+			    -- Active seed bots only
+			    (u.bot_id LIKE 'seed_%')
+			  )
 			GROUP BY u.id
-			ORDER BY last_activity DESC
+			ORDER BY (u.bot_id IS NOT NULL) ASC, last_activity DESC
 			LIMIT 100`
 		)
 			.bind(locals.user.id)

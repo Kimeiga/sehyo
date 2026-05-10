@@ -8,6 +8,15 @@
 	type Tab = 'friends' | 'requests' | 'find';
 	let activeTab = $state<Tab>('friends');
 
+	const unlockedSet = $derived(new Set(data.unlockedAvatars ?? []));
+	function isAvatarRevealed(userId: string): boolean {
+		if (data.user?.id === userId) return true;
+		return unlockedSet.has(userId);
+	}
+	function avatarFor(image: string | null | undefined, seed: string): string {
+		return image ?? `https://i.pravatar.cc/200?u=${encodeURIComponent(seed)}`;
+	}
+
 	let searchQuery = $state('');
 	let searchResults = $state<
 		Array<{
@@ -99,6 +108,13 @@
 	const requests = $derived(data.requests ?? []);
 </script>
 
+{#snippet avatarMd(userId: string, image: string | null | undefined)}
+	{@const revealed = isAvatarRevealed(userId)}
+	<span class="avatar-frame" class:locked={!revealed} aria-hidden="true">
+		<img src={avatarFor(image, userId)} alt="" class="avatar-img" loading="lazy" />
+	</span>
+{/snippet}
+
 <svelte:head>
 	<title>Friends · Sehyo</title>
 </svelte:head>
@@ -147,9 +163,12 @@
 					{#each friends as f (f.id)}
 						<li class="row">
 							<a class="row-main" href={f.username ? `/${f.username}` : `/profile/${f.friend_id}`}>
-								<p class="row-title">{f.display_name ?? 'Anonymous'}</p>
-								{#if f.username}<p class="row-sub">@{f.username}</p>{/if}
-								{#if f.bio}<p class="row-bio">{f.bio}</p>{/if}
+								{@render avatarMd(f.friend_id, f.profile_picture_url)}
+								<div class="row-text">
+									<p class="row-title">{f.display_name ?? 'Anonymous'}</p>
+									{#if f.username}<p class="row-sub">@{f.username}</p>{/if}
+									{#if f.bio}<p class="row-bio">{f.bio}</p>{/if}
+								</div>
 							</a>
 							<button type="button" class="ghost-button" onclick={() => removeFriend(f.id)}>Remove</button>
 						</li>
@@ -164,9 +183,12 @@
 					{#each requests as r (r.id)}
 						<li class="row">
 							<a class="row-main" href={r.username ? `/${r.username}` : `/profile/${r.requester_id}`}>
-								<p class="row-title">{r.display_name ?? 'Anonymous'}</p>
-								{#if r.username}<p class="row-sub">@{r.username}</p>{/if}
-								{#if r.bio}<p class="row-bio">{r.bio}</p>{/if}
+								{@render avatarMd(r.requester_id, r.profile_picture_url)}
+								<div class="row-text">
+									<p class="row-title">{r.display_name ?? 'Anonymous'}</p>
+									{#if r.username}<p class="row-sub">@{r.username}</p>{/if}
+									{#if r.bio}<p class="row-bio">{r.bio}</p>{/if}
+								</div>
 							</a>
 							<div class="row-actions">
 								<button type="button" class="primary-button" onclick={() => patchRequest(r.id, 'accept')}>Accept</button>
@@ -196,9 +218,12 @@
 						{#each searchResults as u (u.id)}
 							<li class="row">
 								<a class="row-main" href={u.username ? `/${u.username}` : `/profile/${u.id}`}>
-									<p class="row-title">{u.display_name ?? 'Anonymous'}</p>
-									{#if u.username}<p class="row-sub">@{u.username}</p>{/if}
-									{#if u.bio}<p class="row-bio">{u.bio}</p>{/if}
+									{@render avatarMd(u.id, (u as { profile_picture_url?: string | null }).profile_picture_url)}
+									<div class="row-text">
+										<p class="row-title">{u.display_name ?? 'Anonymous'}</p>
+										{#if u.username}<p class="row-sub">@{u.username}</p>{/if}
+										{#if u.bio}<p class="row-bio">{u.bio}</p>{/if}
+									</div>
 								</a>
 								<button type="button" class="primary-button" onclick={() => sendRequest(u.id)}>Add</button>
 							</li>
@@ -306,13 +331,37 @@
 		min-width: 0;
 		text-decoration: none;
 		color: var(--foreground);
-		display: block;
+		display: flex;
+		gap: 12px;
+		align-items: flex-start;
 	}
-	.row-main:hover { opacity: 0.8; }
+	.row-main:hover { opacity: 0.85; }
+	.row-text { flex: 1; min-width: 0; }
 	.row-title { font-weight: 600; font-size: 16px; margin: 0; }
 	.row-sub { font-size: 13px; color: var(--muted-foreground); margin: 2px 0 0; }
 	.row-bio { font-size: 14px; color: var(--muted-foreground); margin: 6px 0 0; }
 	.row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+	.avatar-frame {
+		display: inline-block;
+		flex-shrink: 0;
+		width: 44px;
+		height: 44px;
+		border-radius: 999px;
+		overflow: hidden;
+		background: var(--muted);
+	}
+	.avatar-img {
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		transition: filter 220ms ease, transform 220ms ease;
+	}
+	.avatar-frame.locked .avatar-img {
+		filter: blur(8px);
+		transform: scale(1.18);
+	}
 
 	.empty {
 		text-align: center;
