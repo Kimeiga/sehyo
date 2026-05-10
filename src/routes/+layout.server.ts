@@ -10,6 +10,7 @@ interface AnswerRow {
 	username: string | null;
 	bot_id: string | null;
 	comment_count: number;
+	image: string | null;
 }
 
 export const load: LayoutServerLoad = async ({ platform, locals, url }) => {
@@ -46,6 +47,7 @@ export const load: LayoutServerLoad = async ({ platform, locals, url }) => {
 					u.name as display_name,
 					u.username,
 					u.bot_id,
+					u.image,
 					(SELECT COUNT(*) FROM comments WHERE post_id = p.id) AS comment_count
 				FROM posts p
 				JOIN user u ON u.id = p.user_id
@@ -81,12 +83,29 @@ export const load: LayoutServerLoad = async ({ platform, locals, url }) => {
 	}
 	const namesBlurred = !locals.user || !hasInteracted;
 
+	// Set of user_ids the viewer has commented on at least one post by.
+	// This drives the avatar unblur and the "add friend" gate. We pass it
+	// as a plain array since svelte:data must be JSON-serialisable.
+	let unlockedAvatars: string[] = [];
+	if (locals.user) {
+		const r = await db
+			.prepare(
+				`SELECT DISTINCT p.user_id FROM comments c
+				 JOIN posts p ON p.id = c.post_id
+				 WHERE c.user_id = ?`
+			)
+			.bind(locals.user.id)
+			.all<{ user_id: string }>();
+		unlockedAvatars = (r.results ?? []).map((row) => row.user_id);
+	}
+
 	return {
 		user: locals.user,
 		prompt: prompt ? { id: prompt.id, text: prompt.prompt_text, active_date: prompt.active_date } : null,
 		answers,
 		myAnswer,
-		namesBlurred
+		namesBlurred,
+		unlockedAvatars
 	};
 };
 

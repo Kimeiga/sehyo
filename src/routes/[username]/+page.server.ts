@@ -11,6 +11,7 @@ interface ProfileUser {
 	isAnonymous: number | null;
 	createdAt: number;
 	header_image_url: string | null;
+	image: string | null;
 }
 
 interface ProfilePost {
@@ -33,7 +34,7 @@ export const load: PageServerLoad = async ({ params, platform }) => {
 
 	const profileUser = await db
 		.prepare(
-			`SELECT id, name, username, bio, bot_id, isAnonymous, createdAt, header_image_url
+			`SELECT id, name, username, bio, bot_id, isAnonymous, createdAt, header_image_url, image
 			 FROM user
 			 WHERE LOWER(username) = ?
 			 LIMIT 1`
@@ -42,6 +43,41 @@ export const load: PageServerLoad = async ({ params, platform }) => {
 		.first<ProfileUser>();
 
 	if (!profileUser) throw error(404, 'Not found');
+
+	// "Have I commented on any of their posts?" — drives both the
+	// avatar unblur and the friend-add gate.
+	let hasCommented = false;
+	let friendshipStatus: 'none' | 'pending_outgoing' | 'pending_incoming' | 'accepted' = 'none';
+	if (locals.user && locals.user.id !== profileUser.id) {
+		const r = await db
+			.prepare(
+				`SELECT 1 FROM comments c
+				 JOIN posts p ON p.id = c.post_id
+				 WHERE c.user_id = ?1 AND p.user_id = ?2
+				 LIMIT 1`
+			)
+			.bind(locals.user.id, profileUser.id)
+			.first<{ '1': number }>();
+		hasCommented = !!r;
+
+		const f = await db
+			.prepare(
+				`SELECT requester_id, addressee_id, status FROM friendships
+				 WHERE (requester_id = ?1 AND addressee_id = ?2)
+				    OR (requester_id = ?2 AND addressee_id = ?1)
+				 LIMIT 1`
+			)
+			.bind(locals.user.id, profileUser.id)
+			.first<{ requester_id: string; addressee_id: string; status: string }>();
+		if (f) {
+			if (f.status === 'accepted') friendshipStatus = 'accepted';
+			else if (f.status === 'pending') {
+				friendshipStatus = f.requester_id === locals.user.id
+					? 'pending_outgoing'
+					: 'pending_incoming';
+			}
+		}
+	}
 
 	// Their last 50 posts (any kind: prompt answers, free-form, questions),
 	// joined with the daily_prompt for the prompt-answer case so the
@@ -68,6 +104,8 @@ export const load: PageServerLoad = async ({ params, platform }) => {
 
 	return {
 		profileUser,
-		posts: postsRes.results ?? []
+		posts: postsRes.results ?? [],
+		hasCommented,
+		friendshipStatus
 	};
 };
