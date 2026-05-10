@@ -202,10 +202,26 @@
 		}
 	}
 
-	// Select a conversation
+	// Select a conversation. Mirrors the selection into the URL as
+	// `?with=<userId>` so the page can be reloaded / shared / opened
+	// in a new tab and land on the same conversation. Uses
+	// replaceState so the back button still walks the user out of
+	// /messages naturally instead of pogo-sticking through every
+	// conversation they clicked.
 	function selectConversation(conversation: Conversation) {
 		selectedConversation = conversation;
 		loadMessages(conversation.user_id);
+		if (typeof window !== 'undefined') {
+			const url = new URL(window.location.href);
+			url.searchParams.set('with', conversation.user_id);
+			// Drop any one-shot stub-creation params so the URL is
+			// the canonical form going forward.
+			url.searchParams.delete('to');
+			url.searchParams.delete('name');
+			url.searchParams.delete('handle');
+			url.searchParams.delete('pic');
+			history.replaceState({}, '', url.toString());
+		}
 	}
 
 	// Send a message
@@ -274,41 +290,44 @@
 		}
 	}
 
-	// If we arrive here with `?to=<userId>&name=…&handle=…&pic=…` (e.g.
-	// from the "Message" button on a profile page), splice that user
-	// in as a stub conversation at the top of the list and auto-select
-	// it so the user can immediately type. The actual conversation row
-	// is created server-side once the first message is sent.
-	async function consumeProfileHandoff() {
+	// On mount, look at the URL and auto-select the right conversation.
+	// Two flavors of input we handle:
+	//   • `?with=<userId>` — canonical form, written by selectConversation
+	//     when the user clicks a row. Used for reload / share / back.
+	//   • `?to=<userId>&name=…&handle=…&pic=…` — the legacy "Message"
+	//     button handoff from /[username]: we may not have a
+	//     conversations row yet, so we splice in a stub from the
+	//     extras until the first message persists it server-side.
+	async function applyUrlSelection() {
 		if (typeof window === 'undefined') return;
 		const params = new URLSearchParams(window.location.search);
-		const to = params.get('to');
-		if (!to) return;
+		const target = params.get('with') ?? params.get('to');
+		if (!target) return;
+
+		const existing = conversations.find((c) => c.user_id === target);
+		if (existing) {
+			selectConversation(existing);
+			return;
+		}
+
+		// No conversation row yet — only valid for the profile
+		// handoff path, which carries the display-name extras.
 		const stub: Conversation = {
-			user_id: to,
+			user_id: target,
 			username: params.get('handle') ?? '',
 			display_name: params.get('name') ?? params.get('handle') ?? 'New conversation',
 			profile_picture_url: params.get('pic') || null,
 			last_message_at: Date.now(),
 			unread_count: 0
 		};
-		const existing = conversations.find((c) => c.user_id === to);
-		if (existing) {
-			selectConversation(existing);
-		} else {
-			conversations = [stub, ...conversations];
-			selectConversation(stub);
-		}
-		// Strip the params so a refresh doesn't keep re-handing-off.
-		const url = new URL(window.location.href);
-		url.search = '';
-		history.replaceState({}, '', url.toString());
+		conversations = [stub, ...conversations];
+		selectConversation(stub);
 	}
 
 	onMount(async () => {
 		await setupEncryption();
 		await loadConversations();
-		await consumeProfileHandoff();
+		await applyUrlSelection();
 	});
 </script>
 
