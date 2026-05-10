@@ -14,23 +14,36 @@ interface AnswerRow {
 	image: string | null;
 }
 
-interface DayBucket {
-	prompt: { id: string; text: string; active_date: string };
+interface PastPrompt {
+	id: string;
+	text: string;
+	active_date: string;
+	created_at: number;
 	answers: AnswerRow[];
 }
 
-const PAST_DAYS_LIMIT = 14;
+// A single timeline node, sorted chronologically. The home page
+// renders these below the "World" section so older daily questions
+// and older user posts are interleaved by recency, the way an
+// activity feed normally would.
+type TimelineItem =
+	| { kind: 'prompt'; created_at: number; data: PastPrompt }
+	| { kind: 'post'; created_at: number; data: AnswerRow };
+
+const PAST_DAYS_LIMIT = 30;
+const PAST_FREE_POSTS_LIMIT = 200;
 
 export const load: PageServerLoad = async ({ platform }) => {
 	const db = platform?.env?.DB;
 	if (!db) {
-		return { pastDays: [] as DayBucket[], todayFreePosts: [] as AnswerRow[] };
+		return { timeline: [] as TimelineItem[], todayFreePosts: [] as AnswerRow[] };
 	}
 
 	const today = todayUTC();
+	const startOfTodayUtc = Math.floor(Date.parse(today + 'T00:00:00Z') / 1000);
+	const startOfTomorrowUtc = startOfTodayUtc + 86400;
 
-	// Last N daily prompts before today, with their answers, in one query.
-	// We fetch up to PAST_DAYS_LIMIT prompt ids first, then their posts.
+	// ── Past daily prompts (everything before today) ─────────────────
 	const promptRowsRes = await db
 		.prepare(
 			`SELECT id, prompt_text, active_date
@@ -43,7 +56,7 @@ export const load: PageServerLoad = async ({ platform }) => {
 		.all<{ id: string; prompt_text: string; active_date: string }>();
 	const pastPrompts = promptRowsRes.results ?? [];
 
-	let pastDays: DayBucket[] = [];
+	let pastDays: PastPrompt[] = [];
 	if (pastPrompts.length > 0) {
 		const placeholders = pastPrompts.map(() => '?').join(',');
 		const ids = pastPrompts.map((p) => p.id);
@@ -58,7 +71,7 @@ export const load: PageServerLoad = async ({ platform }) => {
 					u.name as display_name,
 					u.username,
 					u.bot_id,
-				u.image,
+					u.image,
 					(SELECT COUNT(*) FROM comments WHERE post_id = p.id) AS comment_count
 				FROM posts p
 				JOIN user u ON u.id = p.user_id
@@ -76,17 +89,20 @@ export const load: PageServerLoad = async ({ platform }) => {
 		}
 
 		pastDays = pastPrompts.map((p) => ({
-			prompt: { id: p.id, text: p.prompt_text, active_date: p.active_date },
+			id: p.id,
+			text: p.prompt_text,
+			active_date: p.active_date,
+			// active_date is YYYY-MM-DD UTC. Treat the prompt as
+			// "appearing" at the start of its day in unix seconds so
+			// it sorts naturally alongside user posts that have a
+			// real created_at timestamp.
+			created_at: Math.floor(Date.parse(p.active_date + 'T00:00:00Z') / 1000),
 			answers: grouped.get(p.id) ?? []
 		}));
 	}
 
-	// Today's free-form posts (prompt_id IS NULL, created today UTC).
-	// SQLite stores created_at as unix seconds; convert today's UTC date to a window.
-	const startOfTodayUtc = Math.floor(Date.parse(today + 'T00:00:00Z') / 1000);
-	const startOfTomorrowUtc = startOfTodayUtc + 86400;
-
-	const freeRowsRes = await db
+	// ── Today's free-form posts (rendered inside the World section) ──
+	const todayFreeRes = await db
 		.prepare(
 			`SELECT
 				p.id,
@@ -109,22 +125,55 @@ export const load: PageServerLoad = async ({ platform }) => {
 		)
 		.bind(startOfTodayUtc, startOfTomorrowUtc)
 		.all<AnswerRow>();
+	const todayFreePosts = todayFreeRes.results ?? [];
 
-	const todayFreePosts = freeRowsRes.results ?? [];
+	// ── Older free-form posts (everything before today) ──────────────
+	// These will be interleaved with past daily prompts in the
+	// chronological timeline below the World section.
+	const pastFreeRes = await db
+		.prepare(
+			`SELECT
+				p.id,
+				p.user_id,
+				p.content,
+				p.created_at,
+				p.is_question,
+				u.name as display_name,
+				u.username,
+				u.bot_id,
+				u.image,
+				(SELECT COUNT(*) FROM comments WHERE post_id = p.id) AS comment_count
+			FROM posts p
+			JOIN user u ON u.id = p.user_id
+			WHERE p.prompt_id IS NULL
+			  AND p.created_at < ?
+			ORDER BY p.created_at DESC
+			LIMIT ?`
+		)
+		.bind(startOfTodayUtc, PAST_FREE_POSTS_LIMIT)
+		.all<AnswerRow>();
+	const pastFreePosts = pastFreeRes.results ?? [];
 
-	// Eagerly hydrate comments for everything visible on this page so
-	// threads paint without a click + roundtrip:
-	//   • each past-day's answers
-	//   • today's free-form posts and questions
+	// ── Build the unified timeline ──────────────────────────────────
+	const timeline: TimelineItem[] = [
+		...pastDays.map<TimelineItem>((d) => ({ kind: 'prompt', created_at: d.created_at, data: d })),
+		...pastFreePosts.map<TimelineItem>((p) => ({ kind: 'post', created_at: p.created_at, data: p }))
+	].sort((a, b) => b.created_at - a.created_at);
+
+	// Eagerly hydrate comments for everything visible on this page.
 	const allPostIds: string[] = [];
-	for (const day of pastDays) {
-		for (const a of day.answers) allPostIds.push(a.id);
+	for (const item of timeline) {
+		if (item.kind === 'prompt') {
+			for (const a of item.data.answers) allPostIds.push(a.id);
+		} else {
+			allPostIds.push(item.data.id);
+		}
 	}
 	for (const p of todayFreePosts) allPostIds.push(p.id);
 	const commentsByPost = await loadCommentsForPosts(db, allPostIds);
 
 	return {
-		pastDays,
+		timeline,
 		todayFreePosts,
 		commentsByPost
 	};
