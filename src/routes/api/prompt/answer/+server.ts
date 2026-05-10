@@ -1,5 +1,6 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { generateBotRepliesOnUserAnswer } from '$lib/server/ai-bots';
 
 const MAX_LEN = 2000;
 
@@ -44,7 +45,29 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 		.bind(postId, locals.user.id, prompt.id, content)
 		.run();
 
-	return json({ id: postId, prompt_id: prompt.id }, { status: 201 });
+	// Generate ~4 bot replies on the user's answer in parallel. This
+	// powers the "X people responded — sign in to read" engagement
+	// loop. Adds ~5s of latency to submit; acceptable for the value
+	// it provides. If the AI binding is missing or any reply fails
+	// individually, we still return success — the post itself has
+	// already been saved.
+	const ai = platform?.env?.AI;
+	let bot_replies = 0;
+	if (ai) {
+		try {
+			bot_replies = await generateBotRepliesOnUserAnswer(
+				db,
+				ai,
+				postId,
+				content,
+				locals.user.name ?? 'Anonymous'
+			);
+		} catch (err) {
+			console.error('Bot reply generation failed:', err);
+		}
+	}
+
+	return json({ id: postId, prompt_id: prompt.id, bot_replies }, { status: 201 });
 };
 
 function todayUTC(): string {

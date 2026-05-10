@@ -142,6 +142,7 @@
 	let submittingReply = $state(false);
 
 	const isAnon = $derived(!!data.user && !!data.user.isAnonymous);
+	const isFullySignedIn = $derived(!!data.user && !data.user.isAnonymous);
 
 	const unlockedSet = $derived(new Set(data.unlockedAvatars ?? []));
 	function isAvatarRevealed(userId: string | undefined | null): boolean {
@@ -487,7 +488,19 @@
 						</button>
 					</footer>
 
-					{#if openCommentFor === data.myAnswer.id}
+					{#if data.myAnswer.comment_count > 0 && !isFullySignedIn}
+						<!-- Guest preview: render the thread but blur EVERY
+						     comment until the user signs in with Google. -->
+						<div class="guest-locked">
+							{@render commentThread(data.myAnswer.id)}
+							<div class="guest-locked-cta">
+								<span class="guest-locked-text">
+									<button type="button" class="guest-locked-link" onclick={() => promptSignIn('Sign in to read the comments on your response.')}>Sign in</button>
+									to read the comments on your response.
+								</span>
+							</div>
+						</div>
+					{:else if openCommentFor === data.myAnswer.id || (data.myAnswer.comment_count > 0 && isFullySignedIn)}
 						{@render commentThread(data.myAnswer.id)}
 					{/if}
 				{/if}
@@ -577,6 +590,16 @@
 					</div>
 				{/if}
 			</section>
+		{/if}
+
+		<!-- Sign-in toast: when the viewer's own answer has bot replies
+		     they can't read because they're not Google-signed-in. -->
+		{#if !isFullySignedIn && data.myAnswer && data.myAnswer.comment_count > 0}
+			<div class="signin-toast" role="status">
+				<span>{data.myAnswer.comment_count} {data.myAnswer.comment_count === 1 ? 'person' : 'people'} responded to your answer.</span>
+				<button type="button" class="toast-link" onclick={() => promptSignIn('Sign in to read what they said.')}>Sign in</button>
+				<span>to read what they said.</span>
+			</div>
 		{/if}
 
 		<!-- Past days, scroll-back style. -->
@@ -1453,4 +1476,74 @@
 		line-height: 1.5;
 		font-style: italic;
 	}
+
+	/* Guest-locked comment thread on the viewer's own answer: blur
+	   names, avatars, comment text. The italic gray "sign in" line
+	   sits underneath, with the verb itself in white so it reads as
+	   the action. */
+	.guest-locked > :global(.comment-thread) {
+		filter: blur(5px);
+		user-select: none;
+		pointer-events: none;
+	}
+	.guest-locked-cta {
+		text-align: center;
+		padding: 16px 0 4px;
+	}
+	.guest-locked-text {
+		font-size: 14px;
+		font-style: italic;
+		color: var(--muted-foreground);
+		line-height: 1.5;
+	}
+	.guest-locked-link {
+		appearance: none;
+		border: 0;
+		background: transparent;
+		color: var(--foreground);
+		font: inherit;
+		font-style: normal;
+		font-weight: 500;
+		text-decoration: underline;
+		text-underline-offset: 3px;
+		cursor: pointer;
+		padding: 0;
+	}
+	.guest-locked-link:hover { opacity: 0.85; }
+
+	/* Bottom-of-screen toast: stays visible while the viewer hasn't
+	   signed in but their own answer has replies. Acts as the
+	   conversion-prompt that pushes them through Google sign-in. */
+	.signin-toast {
+		position: fixed;
+		left: 50%;
+		bottom: 20px;
+		transform: translateX(-50%);
+		z-index: 60;
+		max-width: calc(100vw - 32px);
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 12px 18px;
+		background: color-mix(in oklab, var(--card) 95%, var(--foreground));
+		color: var(--foreground);
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		font-size: 14px;
+		line-height: 1.4;
+		box-shadow: 0 12px 32px -10px rgba(0, 0, 0, 0.4);
+	}
+	.toast-link {
+		appearance: none;
+		border: 0;
+		background: transparent;
+		color: var(--foreground);
+		font: inherit;
+		font-weight: 600;
+		text-decoration: underline;
+		text-underline-offset: 3px;
+		cursor: pointer;
+		padding: 0;
+	}
+	.toast-link:hover { opacity: 0.85; }
 </style>
