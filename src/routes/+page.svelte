@@ -471,22 +471,28 @@
 			</div>
 		{/if}
 
-		{#if data.pastDays.length > 0}
+		{#if data.timeline?.length}
 			<div class="past">
-				{#each data.pastDays as day (day.prompt.id)}
-					<section class="past-day">
-						<p class="past-date">{formatDate(day.prompt.active_date)}</p>
-						<h2 class="prompt prompt-past">{day.prompt.text}</h2>
-						{#if day.answers.length > 0}
-							<div class="answers">
-								{#each day.answers as a (a.id)}
-									{@render postArticle(a, { isMine: false })}
-								{/each}
-							</div>
-						{:else}
-							<p class="empty small">No answers.</p>
-						{/if}
-					</section>
+				{#each data.timeline as item (item.kind === 'prompt' ? `q-${item.data.id}` : `p-${item.data.id}`)}
+					{#if item.kind === 'prompt'}
+						<section class="past-day">
+							<p class="past-date">{formatDate(item.data.active_date)}</p>
+							<h2 class="prompt prompt-past">{item.data.text}</h2>
+							{#if item.data.answers.length > 0}
+								<div class="answers">
+									{#each item.data.answers as a (a.id)}
+										{@render postArticle(a, { isMine: false })}
+									{/each}
+								</div>
+							{:else}
+								<p class="empty small">No answers.</p>
+							{/if}
+						</section>
+					{:else if item.data.is_question}
+						{@render userQuestionCard(item.data)}
+					{:else}
+						{@render postArticle(item.data, { isMine: false })}
+					{/if}
 				{/each}
 			</div>
 		{/if}
@@ -844,12 +850,12 @@
 	.prompt-past {
 		font-family: var(--font-sans);
 		font-weight: 100;
-		letter-spacing: -0.022em;
-		font-size: clamp(28px, 5vw, 44px);
-		line-height: 1.1;
+		letter-spacing: -0.018em;
+		font-size: clamp(20px, 3.4vw, 30px);
+		line-height: 1.18;
 		color: var(--foreground);
-		margin: 0 auto 24px;
-		max-width: 720px;
+		margin: 0 auto 12px;
+		max-width: 640px;
 	}
 
 	.composer { margin-bottom: 56px; }
@@ -1292,16 +1298,21 @@
 
 	.world-feed { display: flex; flex-direction: column; }
 
-	.past { margin-top: 96px; }
+	/* Below the World section: a chronological timeline of past
+	   daily questions interleaved with past user posts/questions.
+	   Tighter padding than today's prompt + answers above so the
+	   World section reads as the foreground and the timeline as
+	   archive. */
+	.past { margin-top: 56px; }
 	.past-day {
-		max-width: 720px;
+		max-width: 640px;
 		margin: 0 auto;
-		padding-top: 56px;
-		padding-bottom: 16px;
+		padding-top: 24px;
+		padding-bottom: 8px;
 		border-top: 1px solid var(--border);
 	}
 	.past-date {
-		font-size: 12px;
+		font-size: 11px;
 		font-weight: 600;
 		color: var(--muted-foreground);
 		letter-spacing: 0.06em;
