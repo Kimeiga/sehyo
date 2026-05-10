@@ -459,6 +459,9 @@
 					<header class="author-row">
 						<span class="author-inline">
 							<span class="author">{data.user?.name ?? 'You'}</span>
+							{#if data.user?.username}
+								<a class="handle" href="/{data.user.username}">@{data.user.username}</a>
+							{/if}
 							{#if isAnon}
 								<button
 									type="button"
@@ -504,6 +507,10 @@
 				{@render postCard(a)}
 			{/each}
 		</section>
+
+		{#if !data.myAnswer}
+			<p class="locked-cta">Answer today's question to explore the world.</p>
+		{/if}
 
 		{#if data.myAnswer}
 			<p class="nudge">
@@ -616,10 +623,14 @@
 {#snippet commentNode(c: CommentRow, postId: string, depth: number)}
 	{@const all = commentsByPost[postId] ?? []}
 	{@const kids = childrenOf(all, c.id)}
+	{@const hasKids = kids.length > 0}
 	{@const ownComment = !!data.user && c.user_id === data.user.id}
-	<li class="comment">
-		<div class="comment-row">
+	<li class="comment-card" class:has-children={hasKids}>
+		<header class="comment-header">
 			<span class="comment-author author-mask">{c.user?.display_name ?? 'Anonymous'}</span>
+			{#if c.user?.username}
+				<a class="handle handle-small" href="/{c.user.username}">@{c.user.username}</a>
+			{/if}
 			{#if ownComment && isAnon}
 				<button
 					type="button"
@@ -630,14 +641,19 @@
 					<Pencil size="11" strokeWidth="1.8" />
 				</button>
 			{/if}
-			<span class="comment-body">{c.content}</span>
-		</div>
-		<div class="comment-foot">
-			<button type="button" class="reply-button" onclick={() => toggleReply(c.id)}>
-				<CornerUpLeft size="13" strokeWidth="1.7" />
-				{replyingTo === c.id ? 'Cancel' : 'Reply'}
+		</header>
+		<p class="comment-body">{c.content}</p>
+		<footer class="comment-card-foot">
+			<button
+				type="button"
+				class="comment-button"
+				onclick={() => toggleReply(c.id)}
+				aria-label={replyingTo === c.id ? 'Cancel reply' : 'Reply'}
+			>
+				<MessageCircle size="16" strokeWidth="1.7" />
+				{#if hasKids}<span class="count">{kids.length}</span>{/if}
 			</button>
-		</div>
+		</footer>
 
 		{#if replyingTo === c.id}
 			<form class="reply-composer" onsubmit={(e) => submitReply(postId, c.id, e)}>
@@ -656,8 +672,8 @@
 			</form>
 		{/if}
 
-		{#if kids.length > 0}
-			<ul class="comment-list nested" class:capped={depth + 1 >= MAX_NEST_DEPTH}>
+		{#if hasKids}
+			<ul class="reply-list" class:capped={depth + 1 >= MAX_NEST_DEPTH}>
 				{#each kids as child (child.id)}
 					{#if depth + 1 < MAX_NEST_DEPTH}
 						{@render commentNode(child, postId, depth + 1)}
@@ -675,7 +691,7 @@
 	{@const tops = all.filter((c) => c.parent_comment_id === null).sort((a, b) => a.created_at - b.created_at)}
 	<div class="comment-thread">
 		{#if tops.length > 0}
-			<ul class="comment-list">
+			<ul class="comment-tree">
 				{#each tops as c (c.id)}
 					{@render commentNode(c, postId, 0)}
 				{/each}
@@ -698,9 +714,14 @@
 	</div>
 {/snippet}
 
-{#snippet userQuestionCard(q: { id: string; content: string; display_name: string | null; bot_id: string | null; comment_count: number })}
+{#snippet userQuestionCard(q: { id: string; content: string; display_name: string | null; username?: string | null; bot_id: string | null; comment_count: number })}
 	<article class="user-question">
-		<p class="user-question-from">From <span class="user-question-name author-mask">{q.display_name ?? 'Anonymous'}</span></p>
+		<p class="user-question-from">
+			From <span class="user-question-name author-mask">{q.display_name ?? 'Anonymous'}</span>
+			{#if q.username}
+				<a class="handle handle-inline" href="/{q.username}">@{q.username}</a>
+			{/if}
+		</p>
 		<h3 class="user-question-text">{q.content}</h3>
 		<footer class="answer-foot">
 			<button
@@ -720,10 +741,15 @@
 	</article>
 {/snippet}
 
-{#snippet postCard(a: { id: string; content: string; display_name: string | null; bot_id: string | null; comment_count: number })}
+{#snippet postCard(a: { id: string; content: string; display_name: string | null; username?: string | null; bot_id: string | null; comment_count: number })}
 	<article class="answer">
 		<header class="author-row">
-			<span class="author author-mask">{a.display_name ?? 'Anonymous'}</span>
+			<span class="author-inline">
+				<span class="author author-mask">{a.display_name ?? 'Anonymous'}</span>
+				{#if a.username}
+					<a class="handle" href="/{a.username}">@{a.username}</a>
+				{/if}
+			</span>
 		</header>
 		<p class="answer-body">{a.content}</p>
 		<footer class="answer-foot">
@@ -959,26 +985,87 @@
 		padding-top: 14px;
 		border-top: 1px dashed var(--border);
 	}
-	.comment-list {
+	/* ─────────────────────────────────────────────────────────────────
+	   Threaded comments. Each comment is a small post: header on top,
+	   body below, comment-button at the bottom-right.
+	   When a comment has replies, a vertical line drops down its left
+	   side, and each direct reply gets a horizontal hook connecting
+	   it to that line — the Reddit / HN threading idiom.
+	   ───────────────────────────────────────────────────────────────── */
+
+	.comment-tree {
 		list-style: none;
 		padding: 0;
-		margin: 0 0 12px;
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
+		margin: 0 0 16px;
 	}
-	.comment {
+
+	.reply-list {
+		list-style: none;
+		padding: 0;
+		/* Indent for the threading line + hook to live in. The same
+		   indent applies whether or not a vertical line is drawn, so
+		   replies always sit at the same x-offset. */
+		margin: 6px 0 0 28px;
+	}
+	.reply-list.capped { margin-left: 28px; } /* same indent at depth cap */
+
+	.comment-card {
+		position: relative;
+		padding: 12px 0 8px 0;
+	}
+
+	/* Vertical thread line: only drawn when this comment has children
+	   underneath. Lives at left:11px, descending from below the
+	   header through the entire reply-list block. */
+	.comment-card.has-children::before {
+		content: '';
+		position: absolute;
+		left: 11px;
+		top: 30px;
+		bottom: 6px;
+		width: 1px;
+		background: var(--border);
+	}
+
+	/* Each reply (child of a reply-list) draws a small horizontal
+	   hook from the parent's vertical line into the reply's content
+	   area. */
+	.reply-list > .comment-card::after {
+		content: '';
+		position: absolute;
+		left: -17px;
+		top: 22px;
+		width: 14px;
+		height: 1px;
+		background: var(--border);
+		border-bottom-left-radius: 6px;
+	}
+
+	.comment-header {
+		display: flex;
+		align-items: baseline;
+		gap: 6px;
+		flex-wrap: wrap;
+		margin-bottom: 4px;
+	}
+	.comment-author {
+		font-size: 14px;
+		font-weight: 600;
+		color: var(--foreground);
+	}
+	.comment-body {
+		font-family: var(--font-sans);
 		font-size: 14px;
 		line-height: 1.5;
 		color: var(--foreground);
+		margin: 0;
+		white-space: pre-wrap;
 	}
-	.comment-author {
-		font-size: 12px;
-		font-weight: 600;
-		color: var(--muted-foreground);
-		margin-right: 8px;
+	.comment-card-foot {
+		margin-top: 6px;
+		display: flex;
+		justify-content: flex-end;
 	}
-	.comment-body { white-space: pre-wrap; }
 	.comment-composer {
 		display: flex;
 		gap: 8px;
@@ -1052,7 +1139,20 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 6px;
+		flex-wrap: wrap;
 	}
+	.handle {
+		font-size: 12px;
+		color: var(--muted-foreground);
+		text-decoration: none;
+		font-weight: 500;
+	}
+	.handle:hover {
+		color: var(--foreground);
+		text-decoration: underline;
+	}
+	.handle-small { font-size: 11px; }
+	.handle-inline { margin-left: 4px; text-transform: none; letter-spacing: 0; }
 	.edit-name {
 		appearance: none;
 		border: 0;
@@ -1187,4 +1287,15 @@
 		padding: 40px 0;
 	}
 	.empty.small { padding: 16px 0; font-size: 14px; }
+
+	.locked-cta {
+		max-width: 640px;
+		margin: 56px auto 0;
+		padding: 0 0 24px;
+		text-align: center;
+		color: var(--muted-foreground);
+		font-size: 15px;
+		line-height: 1.5;
+		font-style: italic;
+	}
 </style>
