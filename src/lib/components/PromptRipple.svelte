@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, type Snippet } from 'svelte';
 
-	let { text }: { text: string } = $props();
+	let { text, children }: { text: string; children?: Snippet } = $props();
 
 	let host: HTMLDivElement;
 	let h1El: HTMLHeadingElement;
@@ -180,9 +180,19 @@ void main() {
 
 		function renderTextToTexture() {
 			const dpr = Math.min(window.devicePixelRatio || 1, 2);
-			const rect = h1El.getBoundingClientRect();
-			cssW = Math.max(1, Math.round(rect.width));
-			cssH = Math.max(1, Math.round(rect.height));
+			/* Canvas is sized to the host (full hero), but the text
+			   inside it is positioned at the h1's actual location
+			   within the host — so the visible glyphs land exactly
+			   where the (invisible) DOM h1 would have rendered, even
+			   though the canvas itself extends well beyond it to
+			   cover the whole hero area. */
+			const hostRect = host.getBoundingClientRect();
+			const h1Rect = h1El.getBoundingClientRect();
+			cssW = Math.max(1, Math.round(hostRect.width));
+			cssH = Math.max(1, Math.round(hostRect.height));
+			const textX = h1Rect.left - hostRect.left;
+			const textY = h1Rect.top - hostRect.top;
+			const textW = Math.max(1, Math.round(h1Rect.width));
 			const cs = getComputedStyle(h1El);
 
 			const off = document.createElement('canvas');
@@ -220,7 +230,7 @@ void main() {
 			let current = '';
 			for (const word of words) {
 				const test = current ? `${current} ${word}` : word;
-				if (ctx.measureText(test).width > cssW && current) {
+				if (ctx.measureText(test).width > textW && current) {
 					lines.push(current);
 					current = word;
 				} else {
@@ -229,10 +239,10 @@ void main() {
 			}
 			if (current) lines.push(current);
 
-			const totalH = lines.length * lineH;
-			let y = (cssH - totalH) / 2;
+			let y = textY;
+			const centerX = textX + textW / 2;
 			for (const ln of lines) {
-				ctx.fillText(ln, cssW / 2, y);
+				ctx.fillText(ln, centerX, y);
 				y += lineH;
 			}
 
@@ -248,8 +258,6 @@ void main() {
 
 			canvas.width = off.width;
 			canvas.height = off.height;
-			canvas.style.width = cssW + 'px';
-			canvas.style.height = cssH + 'px';
 		}
 
 		let HW = 0;
@@ -434,8 +442,24 @@ void main() {
 
 		let raf = 0;
 		let destroyed = false;
+		let lastH1Top = -1;
+		let lastH1Left = -1;
 		function frame() {
 			if (destroyed) return;
+			/* Cheap per-frame check: if the h1 has shifted within the
+			   host (because children resized and the flex column
+			   re-centered), re-rasterize the text texture so the
+			   glyphs stay glued to the DOM h1's actual position.
+			   getBoundingClientRect is microsecond-cheap. */
+			const hr = host.getBoundingClientRect();
+			const h1r = h1El.getBoundingClientRect();
+			const top = Math.round(h1r.top - hr.top);
+			const left = Math.round(h1r.left - hr.left);
+			if (top !== lastH1Top || left !== lastH1Left) {
+				lastH1Top = top;
+				lastH1Left = left;
+				renderTextToTexture();
+			}
 			step();
 			render();
 			raf = requestAnimationFrame(frame);
@@ -466,23 +490,36 @@ void main() {
 			renderTextToTexture();
 		});
 
-		canvas.addEventListener('pointerdown', onPointerDown);
-		/* `pointermove` listens on window — not the canvas — so the
-		   ripple keeps tracking the cursor even when it's hovering
-		   the textarea, send button, navbar, or any other element on
-		   the page. `passive: true` because we never call
-		   preventDefault and we want the browser to optimize. */
+		/* Both pointerdown and pointermove listen on `window` (not
+		   the canvas). This way:
+		   - taps on the textarea, send button, or anywhere else on
+		     the page still ripple at the projected canvas position
+		     (instead of getting swallowed by whichever element is
+		     on top of the canvas);
+		   - on touch devices, the canvas doesn't have to absorb the
+		     gesture itself — the browser's default touch-action
+		     handles scrolling, and pointerdown/pointermove still
+		     fire for our ripple while the finger is active.
+		   `passive: true` lets the browser do its own gesture
+		   handling without us blocking it. */
+		window.addEventListener('pointerdown', onPointerDown, { passive: true });
 		window.addEventListener('pointermove', onPointerMove, { passive: true });
 
-		let lastW = cssW;
-		let lastH = cssH;
+		/* ResizeObserver handles canvas-pixel-size changes (viewport
+		   resizes the host, FBOs need to be recreated). h1 *position*
+		   shifts — caused by children below changing size and the
+		   flex layout re-centering — aren't size events, so they're
+		   handled in the frame loop via a cheap getBoundingClientRect
+		   delta check (see `frame()`). */
+		let lastHostW = cssW;
+		let lastHostH = cssH;
 		const ro = new ResizeObserver(() => {
-			const r = h1El.getBoundingClientRect();
-			const w = Math.round(r.width);
-			const h = Math.round(r.height);
-			if (w === lastW && h === lastH) return;
-			lastW = w;
-			lastH = h;
+			const hr = host.getBoundingClientRect();
+			const w = Math.round(hr.width);
+			const h = Math.round(hr.height);
+			if (w === lastHostW && h === lastHostH) return;
+			lastHostW = w;
+			lastHostH = h;
 			renderTextToTexture();
 			createHeightTextures();
 		});
@@ -491,7 +528,7 @@ void main() {
 		return () => {
 			destroyed = true;
 			cancelAnimationFrame(raf);
-			canvas.removeEventListener('pointerdown', onPointerDown);
+			window.removeEventListener('pointerdown', onPointerDown);
 			window.removeEventListener('pointermove', onPointerMove);
 			ro.disconnect();
 			for (const t of heightTexs) gl!.deleteTexture(t);
@@ -507,26 +544,70 @@ void main() {
 </script>
 
 <div class="ripple-host" bind:this={host}>
-	<h1 class="ripple-h1" class:is-faded={ready} bind:this={h1El}>{text}</h1>
 	<canvas class="ripple-canvas" class:ready bind:this={canvas} aria-hidden="true"></canvas>
+	<div class="ripple-content">
+		<h1 class="ripple-h1" class:is-faded={ready} bind:this={h1El}>{text}</h1>
+		{@render children?.()}
+	</div>
 </div>
 
 <style>
-	/* The wrapper takes over the layout role (max-width / centering /
-	   bottom margin) so the inner h1 can be sized to fit the wrapper
-	   exactly — that way the absolutely-positioned canvas overlays
-	   the h1's box cleanly with `inset: 0`. */
+	/* Host fills its parent (the .hero section) so the canvas can
+	   span the entire hero, not just the prompt text. The flex
+	   column vertically centers the content stack (h1 + composer)
+	   within the hero, matching the previous .hero-inner layout. */
 	.ripple-host {
 		position: relative;
-		max-width: 1000px;
-		margin: 0 auto 40px;
+		isolation: isolate;
+		width: 100%;
+		min-height: inherit;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		align-items: stretch;
 	}
-	/* The h1 styling matches the original .prompt-today rule from
-	   the parent page — duplicated here because Svelte scopes the
-	   parent's CSS to its own DOM, and the h1 now lives inside this
-	   component. The h1 stays in the DOM (a11y, SSR, no-JS fallback)
-	   and only fades to transparent once WebGL is up. */
-	.ripple-host > .ripple-h1 {
+	/* Canvas is the lowest layer — fills the host. Children render
+	   above it via .ripple-content's higher z-index. Pointer events
+	   are listened on `window` (not the canvas), so the canvas
+	   itself doesn't need `touch-action` overrides — the browser's
+	   default touch handling stays intact and users can scroll the
+	   page with a swipe over the canvas area on mobile. `pointer-
+	   events: none` makes that even more explicit: the canvas can't
+	   intercept anything, taps and swipes pass through to whatever
+	   element is at that position. */
+	.ripple-canvas {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		display: block;
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity 200ms ease;
+		z-index: 0;
+	}
+	.ripple-canvas.ready {
+		opacity: 1;
+	}
+	/* Content layer sits above the canvas. Stacks h1 and the
+	   composer (passed via the children snippet) in a centered
+	   column with a 40px gap between them. */
+	.ripple-content {
+		position: relative;
+		z-index: 1;
+		width: 100%;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 40px;
+		padding: 0 12px;
+	}
+	/* H1 styling matches the original .prompt-today rule from the
+	   parent page. The h1 stays in the DOM (a11y, SSR, no-JS
+	   fallback) and only fades to transparent once WebGL is up — the
+	   visible glyphs are then drawn into the canvas at the same
+	   on-page position. */
+	.ripple-content > .ripple-h1 {
 		font-family: var(--font-sans);
 		font-weight: 100;
 		letter-spacing: -0.025em;
@@ -535,24 +616,11 @@ void main() {
 		text-align: center;
 		color: var(--foreground);
 		margin: 0;
-		max-width: none;
-		transition: opacity 200ms ease;
-	}
-	.ripple-host > .ripple-h1.is-faded {
-		opacity: 0;
-	}
-	.ripple-canvas {
-		position: absolute;
-		inset: 0;
+		max-width: 1000px;
 		width: 100%;
-		height: 100%;
-		display: block;
-		opacity: 0;
-		cursor: crosshair;
-		touch-action: none;
 		transition: opacity 200ms ease;
 	}
-	.ripple-canvas.ready {
-		opacity: 1;
+	.ripple-content > .ripple-h1.is-faded {
+		opacity: 0;
 	}
 </style>

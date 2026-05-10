@@ -389,9 +389,7 @@
 		<p class="empty">No prompt today yet. Check back shortly.</p>
 	{:else}
 		<section class="hero">
-			<div class="hero-inner">
-				<PromptRipple text={data.prompt.text} />
-
+			<PromptRipple text={data.prompt.text}>
 				{#if !data.myAnswer}
 					<form class="composer" onsubmit={onComposerSubmit}>
 						<div class="composer-stack">
@@ -420,7 +418,7 @@
 						</div>
 					</form>
 				{/if}
-			</div>
+			</PromptRipple>
 		</section>
 
 		<section class="answers">
@@ -905,65 +903,45 @@
 		color: #000000;
 	}
 
-	/* Landing hero — 80% of viewport height, prompt + composer centered.
-	   `position: sticky` keeps it pinned to the top of the viewport
-	   while the rest of the page scrolls past. z-index:0 puts it
-	   behind everything below it (which gets z:1 + solid background
-	   via the `.hero ~ *` rule), so as you scroll the answers and
-	   other content cleanly cover the fading hero. */
+	/* Landing hero — 80% of viewport height. PromptRipple's host
+	   fills it (min-height: inherit picks up 80vh) and handles its
+	   own internal flex centering, so .hero just provides the box
+	   the canvas should span. Scroll-driven fade + sticky pinning
+	   temporarily disabled; the hero scrolls with the rest of the
+	   page like a normal section. The original styles are preserved
+	   below in comments so they can be re-enabled later. */
+	.hero {
+		min-height: 80vh;
+	}
+	/* The composer doesn't get its own bottom margin inside the
+	   hero — PromptRipple's flex layout handles spacing. */
+	.hero :global(.composer) {
+		margin-bottom: 0;
+	}
+
+	/* --- Sticky + scroll-fade — temporarily disabled. ---
+	   To re-enable: restore the rules below + the `.hero ~ *` rule.
+
 	.hero {
 		position: sticky;
 		top: 0;
 		z-index: 0;
-		min-height: 80vh;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 24px 0;
 	}
 	.hero-inner {
-		width: 100%;
-		max-width: 1000px;
-		transform-origin: center center;
-		/* Scroll-driven fade. As the viewport scrolls 0 → 80vh, the
-		   hero contents blur, fade, and shrink slightly. After 80vh
-		   they're effectively invisible and the content scrolling
-		   over them (z:1, opaque background) takes over the view.
-		   Requires Chrome 115+ / Safari 26+ / Firefox 142+; older
-		   browsers just see a static (un-faded) hero. */
 		animation: hero-fade linear both;
 		animation-timeline: scroll(root);
 		animation-range: 0 80vh;
 	}
 	@keyframes hero-fade {
-		from {
-			opacity: 1;
-			filter: blur(0);
-			transform: scale(1);
-		}
-		to {
-			/* Don't fully disappear — keep the hero recognisably
-			   present behind the scrolling content. */
-			opacity: 0.35;
-			filter: blur(6px);
-			transform: scale(0.88);
-		}
+		from { opacity: 1; filter: blur(0); transform: scale(1); }
+		to   { opacity: 0.35; filter: blur(6px); transform: scale(0.88); }
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.hero-inner { animation: none; }
 	}
-	.hero-inner .composer {
-		margin-bottom: 0;
-	}
-
-	/* Everything in .page after .hero scrolls OVER the partially-
-	   faded hero. z-index:1 puts them in front in stacking order,
-	   but no solid background — content is transparent so the hero
-	   stays visible peeking through behind. */
-	.hero ~ * {
-		position: relative;
-		z-index: 1;
-	}
+	.hero:has(textarea:focus) .hero-inner { animation: none; }
+	.hero ~ * { position: relative; z-index: 1; }
+	*/
 
 	.prompt-past {
 		font-family: var(--font-sans);
@@ -1000,6 +978,7 @@
 		border-radius: 28px;
 		filter: blur(28px);
 		opacity: 0.55;
+		transition: opacity 200ms ease;
 		pointer-events: none;
 		will-change: transform;
 	}
@@ -1031,6 +1010,13 @@
 	@media (prefers-reduced-motion: reduce) {
 		.composer-stack::before,
 		.composer-stack::after { animation: none; }
+	}
+	/* While the textarea is focused, fade the rainbow halo out so
+	   the user isn't typing into a glowing distracting box. The
+	   200ms transition above lets it ease away rather than snap. */
+	.composer-stack:has(textarea:focus)::before,
+	.composer-stack:has(textarea:focus)::after {
+		opacity: 0;
 	}
 	/* Skeuomorphic glass border. The `padding-box` layer is the
 	   solid card fill; the `border-box` layers paint a thin ring
@@ -1167,7 +1153,7 @@
 		       endpoint at the TOP of each vertical segment, where it
 		       approaches a profile pic or a T-junction. */
 		--line-strong: color-mix(in oklab, var(--muted-foreground), var(--border) 65%);
-		--line-soft: color-mix(in srgb, var(--line-strong) 50%, transparent);
+		--line-soft: color-mix(in srgb, var(--line-strong) 30%, transparent);
 	}
 
 	/* tw-item – vertical stack of [.tw-row, .tw-children]. The flex
@@ -1282,7 +1268,7 @@
 		background: linear-gradient(
 			to bottom,
 			var(--line-soft) 0,
-			var(--line-strong) 12px,
+			var(--line-strong) 22px,
 			var(--line-strong) 100%
 		);
 	}
@@ -1423,7 +1409,7 @@
 		background: linear-gradient(
 			to bottom,
 			var(--line-soft) 0,
-			var(--line-strong) 12px,
+			var(--line-strong) 22px,
 			var(--line-strong) 100%
 		);
 		pointer-events: none;
