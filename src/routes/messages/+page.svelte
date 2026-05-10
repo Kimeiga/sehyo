@@ -124,8 +124,14 @@
 			const response = await fetch(`/api/messages/${userId}`);
 			if (!response.ok) throw new Error('Failed to load messages');
 
-			const data = await response.json();
-			const allMessages = data.messages as Message[];
+			// IMPORTANT: do NOT name this `data` — that shadows the
+			// component-level `data` prop, and the sender-id check
+			// below reads .user.id off this response object instead
+			// of off the actual session, leaving every outgoing
+			// message looking "not mine" and falling back to the
+			// recipient cipher (which the sender can't decrypt).
+			const responseBody = await response.json();
+			const allMessages = responseBody.messages as Message[];
 
 			// Decrypt messages. We swallow per-message decrypt errors
 			// silently — they happen when an older message was
