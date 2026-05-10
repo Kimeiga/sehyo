@@ -85,9 +85,15 @@
 				credentials: 'include',
 				body: JSON.stringify({ action })
 			});
-			if (res.ok) await invalidateAll();
+			if (res.ok) {
+				await invalidateAll();
+			} else {
+				const body = await res.json().catch(() => ({}));
+				alert(body?.message ?? `Could not ${action}. Try again.`);
+			}
 		} catch (err) {
 			console.error(err);
+			alert(`Could not ${action}. Try again.`);
 		}
 	}
 
