@@ -65,16 +65,21 @@ export const load: LayoutServerLoad = async ({ platform, locals, url }) => {
 	}
 
 	// Names are blurred for signed-out viewers AND for signed-in viewers
-	// who haven't commented yet. Commenting is the unlock.
-	let hasCommented = false;
+	// who haven't authored anything yet. Either an answer to today's
+	// prompt OR a comment counts — any content you've created unlocks.
+	let hasInteracted = false;
 	if (locals.user) {
-		const c = await db
-			.prepare('SELECT COUNT(*) AS n FROM comments WHERE user_id = ?')
+		const r = await db
+			.prepare(
+				`SELECT
+					(EXISTS (SELECT 1 FROM posts    WHERE user_id = ?1)) +
+					(EXISTS (SELECT 1 FROM comments WHERE user_id = ?1)) AS n`
+			)
 			.bind(locals.user.id)
 			.first<{ n: number }>();
-		hasCommented = (c?.n ?? 0) > 0;
+		hasInteracted = (r?.n ?? 0) > 0;
 	}
-	const namesBlurred = !locals.user || !hasCommented;
+	const namesBlurred = !locals.user || !hasInteracted;
 
 	return {
 		user: locals.user,

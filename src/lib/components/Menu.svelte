@@ -28,8 +28,22 @@
 	});
 
 	async function navigate(path: string) {
-		closeMenu();
-		await goto(path);
+		// Hold the menu open until the destination has actually loaded so
+		// the user never sees a flash of the previous page. View
+		// Transitions API is used opportunistically when supported for a
+		// smoother fade between menu and the new page; otherwise we just
+		// fall back to plain navigation.
+		const startTransition = (document as any).startViewTransition?.bind(document);
+		if (typeof startTransition === 'function') {
+			const t = startTransition(async () => {
+				await goto(path);
+				closeMenu();
+			});
+			try { await t.finished; } catch { /* user cancelled; ignore */ }
+		} else {
+			await goto(path);
+			closeMenu();
+		}
 	}
 
 	async function signInGoogle() {
@@ -72,14 +86,14 @@
 
 	const items = $derived<Item[]>(
 		[
-			{ label: 'Pondering', onSelect: () => navigate('/'),                    show: true },
-			{ label: 'Search',    onSelect: () => navigate('/search'),              show: true },
-			{ label: 'Messages',  onSelect: () => navigate('/messages'),            show: isSignedIn },
-			{ label: 'Messages',  onSelect: showSignInGate,                         show: !isSignedIn, disabled: true },
-			{ label: 'Friends',   onSelect: () => navigate('/friends'),             show: isSignedIn },
-			{ label: 'Profile',   onSelect: () => user && navigate(`/profile/${user.id}`), show: isSignedIn },
-			{ label: 'Sign in',   onSelect: signInGoogle,                           show: !isSignedIn },
-			{ label: 'Sign out',  onSelect: signOut,                                show: isSignedIn }
+			{ label: 'Home',     onSelect: () => navigate('/'),                    show: true },
+			{ label: 'Search',   onSelect: () => navigate('/search'),              show: true },
+			{ label: 'Messages', onSelect: () => navigate('/messages'),            show: isSignedIn },
+			{ label: 'Messages', onSelect: showSignInGate,                         show: !isSignedIn, disabled: true },
+			{ label: 'Friends',  onSelect: () => navigate('/friends'),             show: isSignedIn },
+			{ label: 'Profile',  onSelect: () => user && navigate(`/profile/${user.id}`), show: isSignedIn },
+			{ label: 'Sign in',  onSelect: signInGoogle,                           show: !isSignedIn },
+			{ label: 'Sign out', onSelect: signOut,                                show: isSignedIn }
 		].filter((it) => it.show)
 	);
 </script>
@@ -130,8 +144,8 @@
 		background: transparent;
 		text-align: left;
 		font-family: var(--font-sans);
-		font-weight: 800;
-		letter-spacing: -0.04em;
+		font-weight: 100;
+		letter-spacing: -0.025em;
 		font-size: clamp(32px, 7vw, 48px);
 		line-height: 1.05;
 		color: var(--foreground);

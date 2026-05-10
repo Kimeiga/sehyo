@@ -20,21 +20,36 @@ Constraints:
 const PROMPT_GENERATION_USER = 'Give me today\'s question.';
 
 function answersSystemPrompt(n: number) {
-	return `Generate exactly ${n} short answers to a daily-question forum prompt, as if written by ${n} different anonymous people typing on their phones.
+	return `Generate exactly ${n} answers to a daily-question forum prompt, as if from ${n} different anonymous people typing on their phones.
 
-Each answer is ONE sentence, 6-22 words. Mix tones across the ${n} answers: some sincere and thoughtful, some funny and self-deprecating, some contrarian, some that sidestep the question with humor or admission of inexperience. Avoid clichés, motivational lines, hashtags, emoji, and quotation marks.
+Make them feel HUMAN, not machine-generated. Vary the following ACROSS the ${n} answers (do not make them uniform):
 
-Output format: ${n} lines total, one answer per line, no numbering, no bullets, no labels, no quotes.
+LENGTH: most are short (5-15 words). 1 or 2 should run longer (30-60 words) with more thought or a small personal anecdote. The shortest can be a fragment.
+
+STYLE: mix
+- lowercase-first sentences ("i think it's fine") with properly-capitalized ones
+- some answers ending in a period, some not, some trailing off with "..."
+- contractions without apostrophes ("dont", "its", "wont") sometimes
+- comma-spliced run-ons sometimes
+- the occasional very-short reply ("idk", "couldnt tell ya")
+- not every answer looks the same shape
+
+TONE: sincere, funny, contrarian, mildly self-deprecating, sidestep with humor, admit inexperience, push back on the premise. Disagreements between answers are great.
+
+AVOID: clichés, motivational-poster lines, hashtags, emoji, quotation marks, essay phrasing, every answer ending in a period.
+
+OUTPUT FORMAT: ${n} lines total. One answer per line. No numbering, bullets, labels, or signatures.
 
 Example for "How do you handle stress?":
 deep breaths and aggressively ignoring my email
-i don't really, i just absorb it like a sponge
-go for a walk, even though i hate walking
-stress doesn't go away, you just upgrade your tolerance for it
+honestly i just absorb it like a sponge
+go for a walk even though i hate walking
+The key isn't handling stress, it's letting it pass through you. Like rain through a screen door.
 my dog handles it for me, somehow
-why are you asking me, clearly i'm stressed
-control what you can, accept the rest, scream into a pillow occasionally
-sometimes i stare at the ceiling for an hour and call that a strategy
+why are you asking, im clearly stressed rn
+control what you can, accept the rest, occasionally scream into a pillow
+i used to think breathing exercises were dumb but i tried one during a panic attack last year and it actually worked. now i do them in elevators and stuff. weird how thats become a habit
+idk
 
 Now produce exactly ${n} answers for the actual question, in that format.`;
 }
@@ -81,7 +96,7 @@ function splitAnswers(raw: string, n: number): string[] {
 	const lines = raw
 		.split(/\r?\n/)
 		.map((l) => cleanLine(l))
-		.filter((l) => l.length > 0 && l.length <= 240);
+		.filter((l) => l.length > 0 && l.length <= 500);
 	// If the model returned more than n, take the first n. If fewer, return what we have.
 	return lines.slice(0, n);
 }
