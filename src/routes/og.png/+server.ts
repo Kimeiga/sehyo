@@ -54,13 +54,13 @@ export const GET: RequestHandler = async ({ platform }) => {
 	const safe = safeText(promptText);
 
 	const html = `
-		<div style="display:flex; flex-direction:column; justify-content:space-between; width:100%; height:100%; padding:72px 80px; background:white; font-family:Geist;">
-			<div style="display:flex; justify-content:space-between; align-items:flex-start;">
+		<div style="display:flex; flex-direction:column; justify-content:space-between; width:100%; height:100%; padding:72px 80px; background:#0a0a0a; font-family:Geist;">
+			<div style="display:flex; align-items:center; gap:24px;">
 				<div style="display:flex; align-items:center; justify-content:center; background:#00A5D8; border-radius:22px; width:88px; height:88px; font-family:'M PLUS 2'; font-weight:700; font-size:64px; color:white; line-height:1;">製</div>
-				<span style="font-size:26px; color:#888; font-weight:500;">Today on sehyo.com</span>
+				<span style="font-size:24px; color:#888; font-weight:500; letter-spacing:0.08em; text-transform:uppercase;">Today on sehyo.com</span>
 			</div>
 			<div style="display:flex; flex-direction:column;">
-				<h1 style="font-size:72px; font-weight:200; line-height:1.08; color:#111; margin:0; letter-spacing:-0.02em;">${safe}</h1>
+				<h1 style="font-size:72px; font-weight:200; line-height:1.08; color:#f5f5f5; margin:0; letter-spacing:-0.02em;">${safe}</h1>
 			</div>
 			<div style="display:flex; justify-content:flex-end;">
 				<span style="font-size:26px; color:#888; font-weight:500;">Share your thoughts on sehyo.com</span>
@@ -83,7 +83,10 @@ export const GET: RequestHandler = async ({ platform }) => {
 		status: response.status,
 		headers: {
 			...Object.fromEntries(response.headers),
-			'Cache-Control': 'public, max-age=3600, s-maxage=3600'
+			// Short cache so design iterations and the daily-prompt
+			// rollover surface within 5 minutes. Once the layout settles
+			// we can bump this back to an hour.
+			'Cache-Control': 'public, max-age=300, s-maxage=300'
 		}
 	});
 };
