@@ -131,7 +131,33 @@ export function createAuth(db: D1Database, env: {
 		// Plugins
 		plugins: [
 			anonymous({
-				generateName: () => generateRandomName()
+				generateName: () => generateRandomName(),
+				// When an anon user links to Google (or any social), migrate
+				// their content to the new account before the anon row is
+				// deleted. Without this, the FK CASCADE wipes out their
+				// posts and comments — which is the bug the user hit when
+				// answering anonymously then signing in.
+				onLinkAccount: async ({ anonymousUser, newUser }) => {
+					const oldId = anonymousUser.user.id;
+					const newId = newUser.user.id;
+					if (oldId === newId) return;
+					try {
+						await db
+							.prepare('UPDATE posts SET user_id = ? WHERE user_id = ?')
+							.bind(newId, oldId)
+							.run();
+						await db
+							.prepare('UPDATE comments SET user_id = ? WHERE user_id = ?')
+							.bind(newId, oldId)
+							.run();
+						await db
+							.prepare('UPDATE reactions SET user_id = ? WHERE user_id = ?')
+							.bind(newId, oldId)
+							.run();
+					} catch (err) {
+						console.error('onLinkAccount migration failed:', err);
+					}
+				}
 			})
 		]
 	});
