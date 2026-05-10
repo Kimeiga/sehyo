@@ -20,20 +20,23 @@ Constraints:
 const PROMPT_GENERATION_USER = 'Give me today\'s question.';
 
 function answersSystemPrompt(n: number) {
-	return `You write ${n} short answers to a daily-question forum prompt, as if from ${n} different anonymous people.
+	return `Generate exactly ${n} short answers to a daily-question forum prompt, as if written by ${n} different anonymous people typing on their phones.
 
-Each answer:
-- Is one sentence, 6-22 words.
-- Sounds like a real person typing on their phone, not an essay.
-- Has a clear, specific point. Profound where possible, but never lecturing.
-- Comes from a different angle than the others (skeptical / hopeful / contrarian / pragmatic / personal anecdote / aphoristic / questioning back / wry).
-- Avoids cliché, motivational-poster phrasing, hashtags, emoji, and quotation marks.
-- Does not start with "I think" or "Honestly" or "Actually".
+Each answer is ONE sentence, 6-22 words. Mix tones across the ${n} answers: some sincere and thoughtful, some funny and self-deprecating, some contrarian, some that sidestep the question with humor or admission of inexperience. Avoid clichés, motivational lines, hashtags, emoji, and quotation marks.
 
-Output format:
-- Exactly ${n} lines.
-- One answer per line.
-- No numbering, no bullets, no labels, no signatures.`;
+Output format: ${n} lines total, one answer per line, no numbering, no bullets, no labels, no quotes.
+
+Example for "How do you handle stress?":
+deep breaths and aggressively ignoring my email
+i don't really, i just absorb it like a sponge
+go for a walk, even though i hate walking
+stress doesn't go away, you just upgrade your tolerance for it
+my dog handles it for me, somehow
+why are you asking me, clearly i'm stressed
+control what you can, accept the rest, scream into a pillow occasionally
+sometimes i stare at the ceiling for an hour and call that a strategy
+
+Now produce exactly ${n} answers for the actual question, in that format.`;
 }
 
 export interface SeedAuthor {
@@ -68,7 +71,7 @@ export async function generateSeedAnswers(ai: Ai, promptText: string, n: number)
 			{ role: 'user', content: promptText }
 		],
 		temperature: 0.95,
-		max_tokens: 600
+		max_tokens: 800
 	})) as { response?: string };
 	const raw = res.response ?? '';
 	return splitAnswers(raw, n);

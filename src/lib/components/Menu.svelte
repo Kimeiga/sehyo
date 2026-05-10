@@ -10,6 +10,8 @@
 	}
 	let { user }: Props = $props();
 
+	let signingIn = $state(false);
+
 	$effect(() => {
 		if (!$menuOpen) return;
 		const prev = document.body.style.overflow;
@@ -30,6 +32,20 @@
 		await goto(path);
 	}
 
+	async function signInGoogle() {
+		if (signingIn) return;
+		signingIn = true;
+		try {
+			// authClient.signIn.social redirects the browser to Google. The
+			// callbackURL brings the user back to the home feed after auth.
+			await authClient.signIn.social({ provider: 'google', callbackURL: '/' });
+		} catch (err) {
+			console.error('Google sign-in failed:', err);
+			alert('Could not start sign-in. Try again.');
+			signingIn = false;
+		}
+	}
+
 	async function signOut() {
 		try {
 			await authClient.signOut();
@@ -41,28 +57,44 @@
 		}
 	}
 
+	function showSignInGate() {
+		alert('Please sign in to do that.');
+	}
+
 	const isSignedIn = $derived(!!user && !user.isAnonymous);
-	const items = $derived([
-		{ label: 'Home',     onSelect: () => navigate('/'),                         show: true },
-		{ label: 'History',  onSelect: () => navigate('/history'),                  show: true },
-		{ label: 'Search',   onSelect: () => navigate('/search'),                   show: true },
-		{ label: 'Profile',  onSelect: () => user && navigate(`/profile/${user.id}`), show: isSignedIn },
-		{ label: 'Messages', onSelect: () => navigate('/messages'),                 show: isSignedIn },
-		{ label: 'Friends',  onSelect: () => navigate('/friends'),                  show: isSignedIn },
-		{ label: 'Sign in',  onSelect: () => navigate('/auth/login'),               show: !isSignedIn },
-		{ label: 'Sign out', onSelect: signOut,                                     show: isSignedIn }
-	].filter((it) => it.show));
+
+	type Item = {
+		label: string;
+		onSelect: () => void | Promise<void>;
+		show: boolean;
+		disabled?: boolean;
+	};
+
+	const items = $derived<Item[]>(
+		[
+			{ label: 'Pondering', onSelect: () => navigate('/'),                    show: true },
+			{ label: 'Search',    onSelect: () => navigate('/search'),              show: true },
+			{ label: 'Messages',  onSelect: () => navigate('/messages'),            show: isSignedIn },
+			{ label: 'Messages',  onSelect: showSignInGate,                         show: !isSignedIn, disabled: true },
+			{ label: 'Friends',   onSelect: () => navigate('/friends'),             show: isSignedIn },
+			{ label: 'Profile',   onSelect: () => user && navigate(`/profile/${user.id}`), show: isSignedIn },
+			{ label: 'Sign in',   onSelect: signInGoogle,                           show: !isSignedIn },
+			{ label: 'Sign out',  onSelect: signOut,                                show: isSignedIn }
+		].filter((it) => it.show)
+	);
 </script>
 
 {#if $menuOpen}
 	<div class="menu" role="dialog" aria-modal="true" aria-label="Menu">
 		<nav class="nav-list">
-			{#each items as item, i (item.label)}
+			{#each items as item, i (item.label + (item.disabled ? ':d' : ''))}
 				<button
 					type="button"
 					class="nav-item"
+					class:disabled={item.disabled}
 					style="animation-delay: {30 + i * 28}ms"
 					onclick={item.onSelect}
+					disabled={signingIn}
 				>{item.label}</button>
 			{/each}
 		</nav>
@@ -112,6 +144,13 @@
 	}
 	.nav-item:hover {
 		opacity: 0.6;
+	}
+	.nav-item.disabled {
+		color: var(--muted-foreground);
+		opacity: 0.45;
+	}
+	.nav-item.disabled:hover {
+		opacity: 0.55;
 	}
 	@keyframes slideDown {
 		from { opacity: 0; transform: translateY(-14px); }
