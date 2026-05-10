@@ -201,9 +201,41 @@
 		}
 	}
 
-	onMount(() => {
-		setupEncryption();
-		loadConversations();
+	// If we arrive here with `?to=<userId>&name=…&handle=…&pic=…` (e.g.
+	// from the "Message" button on a profile page), splice that user
+	// in as a stub conversation at the top of the list and auto-select
+	// it so the user can immediately type. The actual conversation row
+	// is created server-side once the first message is sent.
+	async function consumeProfileHandoff() {
+		if (typeof window === 'undefined') return;
+		const params = new URLSearchParams(window.location.search);
+		const to = params.get('to');
+		if (!to) return;
+		const stub: Conversation = {
+			user_id: to,
+			username: params.get('handle') ?? '',
+			display_name: params.get('name') ?? params.get('handle') ?? 'New conversation',
+			profile_picture_url: params.get('pic') || null,
+			last_message_at: Date.now(),
+			unread_count: 0
+		};
+		const existing = conversations.find((c) => c.user_id === to);
+		if (existing) {
+			selectConversation(existing);
+		} else {
+			conversations = [stub, ...conversations];
+			selectConversation(stub);
+		}
+		// Strip the params so a refresh doesn't keep re-handing-off.
+		const url = new URL(window.location.href);
+		url.search = '';
+		history.replaceState({}, '', url.toString());
+	}
+
+	onMount(async () => {
+		await setupEncryption();
+		await loadConversations();
+		await consumeProfileHandoff();
 	});
 </script>
 

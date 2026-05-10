@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
 	import { goto, invalidateAll } from '$app/navigation';
-	import { Pencil, Check, X, Camera, Trash2, UserPlus } from 'lucide-svelte';
+	import { Pencil, Check, X, Camera, Trash2, UserPlus, MessageCircle } from 'lucide-svelte';
 	import { gradientFor } from '$lib/header-gradient';
 
 	let { data }: PageProps = $props();
@@ -30,6 +30,20 @@
 		friendTooltipOpen = true;
 		if (friendTooltipTimer) clearTimeout(friendTooltipTimer);
 		friendTooltipTimer = setTimeout(() => (friendTooltipOpen = false), 2800);
+	}
+
+	function openMessages() {
+		// Hand off to /messages with enough info to populate a stub
+		// conversation header before the first message is sent. The
+		// messages page will splice this into its conversations list
+		// if it isn't already there.
+		const params = new URLSearchParams({
+			to: u.id,
+			name: u.name ?? '',
+			handle: u.username ?? '',
+			pic: u.image ?? ''
+		});
+		goto(`/messages?${params.toString()}`);
 	}
 
 	async function addFriend() {
@@ -276,6 +290,16 @@
 		</div>
 		{#if !isOwnProfile && data.user}
 			<div class="friend-area">
+				<button
+					type="button"
+					class="message-button"
+					onclick={openMessages}
+					aria-label="Message {u.name ?? 'user'}"
+					data-testid="profile-message-button"
+				>
+					<MessageCircle size="16" strokeWidth="1.9" />
+					<span class="message-button-label" aria-hidden="true">Message</span>
+				</button>
 				<button
 					type="button"
 					class="friend-button"
@@ -533,6 +557,62 @@
 		position: relative;
 		margin-top: 64px;
 		flex-shrink: 0;
+		display: flex;
+		gap: 8px;
+		align-items: center;
+	}
+
+	/* Circular message button. Same vertical extent as the
+	   adjacent pill (height ~33px ≈ 8px+17px+8px), but circle.
+	   Hover lightens the bg with a 200ms tween. After a short
+	   hover-hold (600ms) a small gray pill labelled "Message"
+	   fades in below the button. */
+	.message-button {
+		position: relative;
+		appearance: none;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 33px;
+		height: 33px;
+		border-radius: 999px;
+		background: transparent;
+		color: var(--foreground);
+		border: 1px solid var(--border);
+		cursor: pointer;
+		padding: 0;
+		transition: background-color 200ms ease, border-color 200ms ease;
+	}
+	.message-button:hover {
+		background: var(--muted);
+		border-color: var(--muted-foreground);
+	}
+	.message-button:focus-visible {
+		outline: 2px solid var(--ring);
+		outline-offset: 2px;
+	}
+	.message-button-label {
+		position: absolute;
+		top: calc(100% + 8px);
+		left: 50%;
+		transform: translate(-50%, -4px);
+		background: var(--muted);
+		color: var(--muted-foreground);
+		font-size: 11px;
+		font-weight: 500;
+		padding: 4px 10px;
+		border-radius: 999px;
+		white-space: nowrap;
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity 180ms ease, transform 180ms ease;
+		transition-delay: 0ms;
+	}
+	.message-button:hover .message-button-label,
+	.message-button:focus-visible .message-button-label {
+		opacity: 1;
+		transform: translate(-50%, 0);
+		transition-delay: 500ms;
 	}
 	.friend-button {
 		appearance: none;

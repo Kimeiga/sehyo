@@ -1050,6 +1050,11 @@
 	.tw-item.is-reply {
 		position: relative;
 	}
+	/* Right-angle hook: vertical stub at x:-34 (overlaps parent's
+	   drop-line) + horizontal stub at y:34 (avatar's vertical
+	   center) hooking into the avatar's left edge. No curve — a
+	   clean right angle is more legible and easier to clip
+	   against. */
 	.tw-item.is-reply::before {
 		content: '';
 		position: absolute;
@@ -1059,29 +1064,22 @@
 		height: 36px;
 		border-left: 2px solid var(--border);
 		border-bottom: 2px solid var(--border);
-		border-bottom-left-radius: 14px;
 		pointer-events: none;
 	}
-	/* The parent's drop-line auto-extends to the bottom of the
-	   parent's tw-item (since tw-left stretches with tw-main's
-	   content). For the LAST direct reply, that means the line
-	   continues past its L-curve down through the rest of the
-	   subtree. Hide that tail with an opaque cover so the line
-	   visually terminates exactly at the curve.
-	   Width 4px @ x:-36 fully overlaps the 2px parent line at
-	   x:-34. Top:34 sits just below the curve hook (avatar
-	   center). Bottom:-9999 extends well past any nested
-	   descendants, so the cover is effective at any depth. */
+	/* Stop the parent's drop-line at this child's hook by drawing
+	   an opaque cover over the line tail from y:34 (after the
+	   hook) down to the bottom of THIS reply's li. Bounded to the
+	   li so the cover never bleeds into subsequent posts. */
 	.tw-children > .tw-item.is-reply:last-child::after {
 		content: '';
+		display: block;
 		position: absolute;
 		left: -36px;
 		top: 34px;
-		bottom: -9999px;
+		bottom: 0;
 		width: 4px;
 		background: var(--background);
 		pointer-events: none;
-		z-index: 1;
 	}
 
 	.tw-children.capped {
