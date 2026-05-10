@@ -50,6 +50,10 @@ export default defineConfig({
 				]
 			},
 			workbox: {
+				// Sehyo is fully SSR — no SPA shell to fall back to. Disable
+				// navigation precaching so workbox stops trying to serve "/"
+				// from the precache (which throws non-precached-url at runtime).
+				navigateFallback: null,
 				globPatterns: ['client/**/*.{js,css,ico,png,svg,webp,woff,woff2}'],
 				runtimeCaching: [
 					{
@@ -71,7 +75,7 @@ export default defineConfig({
 			devOptions: {
 				enabled: true,
 				type: 'module',
-				navigateFallback: '/'
+				navigateFallback: null
 			}
 		})
 	]
