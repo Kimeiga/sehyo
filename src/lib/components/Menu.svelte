@@ -93,7 +93,7 @@
 			{ label: 'Messages', onSelect: () => navigate('/messages'),            show: isSignedIn },
 			{ label: 'Messages', onSelect: showSignInGate,                         show: !isSignedIn, disabled: true },
 			{ label: 'Friends',  onSelect: () => navigate('/friends'),             show: isSignedIn },
-			{ label: 'Profile',  onSelect: () => user && navigate(`/profile/${user.id}`), show: isSignedIn },
+			{ label: 'Profile',  onSelect: () => user && navigate(user.username ? `/${user.username}` : `/profile/${user.id}`), show: isSignedIn },
 			{ label: 'Sign in',  onSelect: signInGoogle,                           show: !isSignedIn },
 			{ label: 'Sign out', onSelect: signOut,                                show: isSignedIn }
 		].filter((it) => it.show)

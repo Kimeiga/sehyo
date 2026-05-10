@@ -145,7 +145,7 @@
 			<div class="mt-4 space-y-3">
 				{#each searchResults as user}
 					<div class="flex items-center justify-between p-3 hover:bg-muted/50 rounded-lg">
-						<a href="/profile/{user.id}" class="flex items-center gap-3 flex-1">
+						<a href={user.username ? `/${user.username}` : `/profile/${user.id}`} class="flex items-center gap-3 flex-1">
 							{#if user.profile_picture_url}
 								<img
 									src={user.profile_picture_url}
@@ -215,7 +215,7 @@
 				<div class="divide-y divide-border">
 					{#each data.friends as friend}
 						<div class="p-4 flex items-center justify-between hover:bg-muted/50">
-							<a href="/profile/{friend.friend_id}" class="flex items-center gap-3 flex-1">
+							<a href={friend.username ? `/${friend.username}` : `/profile/${friend.friend_id}`} class="flex items-center gap-3 flex-1">
 								{#if friend.profile_picture_url}
 									<img
 										src={friend.profile_picture_url}
@@ -264,7 +264,7 @@
 				<div class="divide-y divide-border">
 					{#each data.requests as request}
 						<div class="p-4 flex items-center justify-between hover:bg-muted/50">
-							<a href="/profile/{request.requester_id}" class="flex items-center gap-3 flex-1">
+							<a href={request.username ? `/${request.username}` : `/profile/${request.requester_id}`} class="flex items-center gap-3 flex-1">
 								{#if request.profile_picture_url}
 									<img
 										src={request.profile_picture_url}
@@ -326,7 +326,7 @@
 			<div class="divide-y divide-border">
 				{#each data.allUsers as user}
 					<div class="p-4 flex items-center justify-between hover:bg-muted/50">
-						<a href="/profile/{user.id}" class="flex items-center gap-3 flex-1">
+						<a href={user.username ? `/${user.username}` : `/profile/${user.id}`} class="flex items-center gap-3 flex-1">
 							{#if user.profile_picture_url}
 								<img
 									src={user.profile_picture_url}
