@@ -11,6 +11,13 @@ export default defineConfig({
 			srcDir: './src',
 			mode: 'production',
 			strategies: 'generateSW',
+			// autoUpdate so a new deploy's service worker takes over
+			// without users needing to hard-refresh. Without this the
+			// previous SW continued serving the old precache for tabs
+			// that stayed open across deploys, leaving people on
+			// stale bundles for hours and making "wait, I deployed
+			// the fix, why is X still broken" a recurring pattern.
+			registerType: 'autoUpdate',
 			scope: '/',
 			base: '/',
 			selfDestroying: false,
@@ -54,6 +61,11 @@ export default defineConfig({
 				// navigation precaching so workbox stops trying to serve "/"
 				// from the precache (which throws non-precached-url at runtime).
 				navigateFallback: null,
+				// Activate the new SW the moment it installs and take over
+				// every open tab on the next event loop turn. Pairs with
+				// registerType: 'autoUpdate' above.
+				skipWaiting: true,
+				clientsClaim: true,
 				globPatterns: ['client/**/*.{js,css,ico,png,svg,webp,woff,woff2}'],
 				runtimeCaching: [
 					{
