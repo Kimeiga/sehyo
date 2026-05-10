@@ -17,6 +17,7 @@
 			id: string;
 			display_name: string | null;
 			username: string | null;
+			profile_picture_url?: string | null;
 		};
 	}
 
@@ -141,6 +142,16 @@
 	let submittingReply = $state(false);
 
 	const isAnon = $derived(!!data.user && !!data.user.isAnonymous);
+
+	const unlockedSet = $derived(new Set(data.unlockedAvatars ?? []));
+	function isAvatarRevealed(userId: string | undefined | null): boolean {
+		if (!userId) return false;
+		if (data.user?.id === userId) return true; // your own face is always visible
+		return unlockedSet.has(userId);
+	}
+	function avatarFor(image: string | null | undefined, seed: string): string {
+		return image ?? `https://i.pravatar.cc/200?u=${encodeURIComponent(seed)}`;
+	}
 
 	function changeMyName() {
 		promptSignIn('Sign in to change your name.');
@@ -432,7 +443,10 @@
 						</div>
 					</div>
 				{:else}
-					<header class="author-row">
+					<header class="author-row author-row-with-avatar">
+						{#if data.user}
+							{@render avatar(data.user.id, (data.user as { image?: string | null }).image, 'md')}
+						{/if}
 						<span class="author-inline">
 							{#if data.user?.username}
 								<a class="author author-link" href="/{data.user.username}">{data.user?.name ?? 'You'}</a>
@@ -588,6 +602,13 @@
 	{/if}
 </main>
 
+{#snippet avatar(userId: string, image: string | null | undefined, size: 'sm' | 'md' = 'md')}
+	{@const revealed = isAvatarRevealed(userId)}
+	<span class="avatar-frame avatar-{size}" class:locked={!revealed} aria-hidden="true">
+		<img src={avatarFor(image, userId)} alt="" class="avatar-img" loading="lazy" />
+	</span>
+{/snippet}
+
 {#snippet authorName(displayName: string | null, isOwn: boolean)}
 	<span class="author-inline">
 		<span class="author author-mask">{displayName ?? 'Anonymous'}</span>
@@ -611,6 +632,7 @@
 	{@const ownComment = !!data.user && c.user_id === data.user.id}
 	<li class="comment-card" class:has-children={hasKids}>
 		<header class="comment-header">
+			{@render avatar(c.user_id, c.user?.profile_picture_url, 'sm')}
 			{#if c.user?.username}
 				<a class="comment-author author-mask author-link" href="/{c.user.username}">{c.user.display_name ?? 'Anonymous'}</a>
 				<a class="handle handle-small" href="/{c.user.username}">@{c.user.username}</a>
@@ -700,16 +722,19 @@
 	</div>
 {/snippet}
 
-{#snippet worldPostCard(p: { id: string; content: string; display_name: string | null; username?: string | null; bot_id: string | null; comment_count: number })}
+{#snippet worldPostCard(p: { id: string; user_id: string; content: string; display_name: string | null; username?: string | null; bot_id: string | null; image?: string | null; comment_count: number })}
 	<article class="world-post">
-		<p class="world-post-from">
-			{#if p.username}
-				<a class="world-post-name author-mask author-link" href="/{p.username}">{p.display_name ?? 'Anonymous'}</a>
-				<a class="handle handle-inline" href="/{p.username}">@{p.username}</a>
-			{:else}
-				<span class="world-post-name author-mask">{p.display_name ?? 'Anonymous'}</span>
-			{/if}
-		</p>
+		<div class="world-post-head">
+			{@render avatar(p.user_id, p.image, 'md')}
+			<p class="world-post-from">
+				{#if p.username}
+					<a class="world-post-name author-mask author-link" href="/{p.username}">{p.display_name ?? 'Anonymous'}</a>
+					<a class="handle handle-inline" href="/{p.username}">@{p.username}</a>
+				{:else}
+					<span class="world-post-name author-mask">{p.display_name ?? 'Anonymous'}</span>
+				{/if}
+			</p>
+		</div>
 		<p class="world-post-text">{p.content}</p>
 		<footer class="answer-foot">
 			<button
@@ -729,17 +754,20 @@
 	</article>
 {/snippet}
 
-{#snippet userQuestionCard(q: { id: string; content: string; display_name: string | null; username?: string | null; bot_id: string | null; comment_count: number })}
+{#snippet userQuestionCard(q: { id: string; user_id: string; content: string; display_name: string | null; username?: string | null; bot_id: string | null; image?: string | null; comment_count: number })}
 	<article class="user-question">
-		<p class="user-question-from">
-			From
-			{#if q.username}
-				<a class="user-question-name author-mask author-link" href="/{q.username}">{q.display_name ?? 'Anonymous'}</a>
-				<a class="handle handle-inline" href="/{q.username}">@{q.username}</a>
-			{:else}
-				<span class="user-question-name author-mask">{q.display_name ?? 'Anonymous'}</span>
-			{/if}
-		</p>
+		<div class="world-post-head">
+			{@render avatar(q.user_id, q.image, 'md')}
+			<p class="user-question-from">
+				From
+				{#if q.username}
+					<a class="user-question-name author-mask author-link" href="/{q.username}">{q.display_name ?? 'Anonymous'}</a>
+					<a class="handle handle-inline" href="/{q.username}">@{q.username}</a>
+				{:else}
+					<span class="user-question-name author-mask">{q.display_name ?? 'Anonymous'}</span>
+				{/if}
+			</p>
+		</div>
 		<h3 class="user-question-text">{q.content}</h3>
 		<footer class="answer-foot">
 			<button
@@ -759,9 +787,10 @@
 	</article>
 {/snippet}
 
-{#snippet postCard(a: { id: string; content: string; display_name: string | null; username?: string | null; bot_id: string | null; comment_count: number })}
+{#snippet postCard(a: { id: string; user_id: string; content: string; display_name: string | null; username?: string | null; bot_id: string | null; image?: string | null; comment_count: number })}
 	<article class="answer">
-		<header class="author-row">
+		<header class="author-row author-row-with-avatar">
+			{@render avatar(a.user_id, a.image, 'md')}
 			<span class="author-inline">
 				{#if a.username}
 					<a class="author author-mask author-link" href="/{a.username}">{a.display_name ?? 'Anonymous'}</a>
@@ -1155,6 +1184,39 @@
 	}
 
 	/* Pencil affordance next to the user's own (anonymous) name. */
+	/* ── Avatars ─────────────────────────────────────────────────────
+	   Lives wherever a name is rendered. Small (24px) in comments,
+	   medium (40px) in posts. The .locked variant clips an over-
+	   sized blurred image so the blur fade doesn't show at the
+	   circle's edge. */
+	.avatar-frame {
+		display: inline-block;
+		flex-shrink: 0;
+		border-radius: 999px;
+		overflow: hidden;
+		background: var(--muted);
+		position: relative;
+	}
+	.avatar-md { width: 36px; height: 36px; }
+	.avatar-sm { width: 24px; height: 24px; }
+	.avatar-img {
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		transition: filter 220ms ease, transform 220ms ease;
+	}
+	.avatar-frame.locked .avatar-img {
+		filter: blur(8px);
+		transform: scale(1.18);
+	}
+
+	.author-row-with-avatar {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+
 	.author-inline {
 		display: inline-flex;
 		align-items: center;
@@ -1284,17 +1346,25 @@
 
 	/* Free-form World posts get the same thin-large headline treatment
 	   as user-asked questions, just without the "FROM" eyebrow.
-	   The author tag sits as a small line above the body. */
+	   The author tag sits as a small line above the body.
+	   Width is inherited from the .free-section parent (max-width
+	   640px); we don't constrain it again here, otherwise the flex
+	   parent (.world-feed) lets short posts shrink to content. */
 	.world-post {
-		max-width: 640px;
-		margin: 0 auto;
+		width: 100%;
 		padding: 28px 0;
 		border-top: 1px solid var(--border);
+	}
+	.world-post-head {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		margin: 0 0 10px;
 	}
 	.world-post-from {
 		font-size: 13px;
 		color: var(--muted-foreground);
-		margin: 0 0 10px;
+		margin: 0;
 		font-weight: 500;
 	}
 	.world-post-name {

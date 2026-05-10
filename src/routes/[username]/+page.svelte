@@ -1,12 +1,62 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
 	import { goto, invalidateAll } from '$app/navigation';
-	import { Pencil, Check, X, Camera, Trash2 } from 'lucide-svelte';
+	import { Pencil, Check, X, Camera, Trash2, UserPlus } from 'lucide-svelte';
 	import { gradientFor } from '$lib/header-gradient';
 
 	let { data }: PageProps = $props();
 	const u = $derived(data.profileUser);
 	const isOwnProfile = $derived(!!data.user && data.user.id === u.id);
+
+	// Avatar reveal: shown unblurred only after the viewer has commented
+	// on one of this user's posts (or it's their own profile).
+	const avatarRevealed = $derived(isOwnProfile || data.hasCommented);
+	const avatarUrl = $derived(u.image ?? `https://i.pravatar.cc/240?u=${encodeURIComponent(u.id)}`);
+
+	// Add-friend gate: must have commented; can't friend yourself or
+	// someone you're already pending/accepted with.
+	const friendGateMessage = $derived(
+		!data.user
+			? 'Sign in to add friends.'
+			: !data.hasCommented
+				? 'Comment on one of their posts to be able to add them as a friend.'
+				: ''
+	);
+	let addingFriend = $state(false);
+	let friendTooltipOpen = $state(false);
+	let friendTooltipTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function showFriendTooltip() {
+		friendTooltipOpen = true;
+		if (friendTooltipTimer) clearTimeout(friendTooltipTimer);
+		friendTooltipTimer = setTimeout(() => (friendTooltipOpen = false), 2800);
+	}
+
+	async function addFriend() {
+		if (!data.hasCommented || !data.user || isOwnProfile || addingFriend) {
+			showFriendTooltip();
+			return;
+		}
+		addingFriend = true;
+		try {
+			const res = await fetch('/api/friends', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ friend_id: u.id })
+			});
+			if (!res.ok) {
+				const body = await res.json().catch(() => ({}));
+				alert(body?.message ?? 'Could not send request.');
+				return;
+			}
+			await invalidateAll();
+		} catch (err) {
+			console.error('Add friend failed:', err);
+		} finally {
+			addingFriend = false;
+		}
+	}
 
 	const headerStyle = $derived(
 		u.header_image_url
@@ -220,6 +270,38 @@
 </div>
 
 <main class="page">
+	<div class="avatar-row">
+		<div class="profile-avatar-frame" class:locked={!avatarRevealed} aria-hidden="true">
+			<img src={avatarUrl} alt="" class="profile-avatar-img" loading="lazy" />
+		</div>
+		{#if !isOwnProfile && data.user}
+			<div class="friend-area">
+				<button
+					type="button"
+					class="friend-button"
+					class:disabled={!data.hasCommented || data.friendshipStatus !== 'none'}
+					onclick={addFriend}
+					disabled={addingFriend}
+					aria-label={data.friendshipStatus === 'accepted' ? 'Friends' : 'Add friend'}
+				>
+					{#if data.friendshipStatus === 'accepted'}
+						Friends
+					{:else if data.friendshipStatus === 'pending_outgoing'}
+						Requested
+					{:else if data.friendshipStatus === 'pending_incoming'}
+						Awaiting you
+					{:else}
+						<UserPlus size="14" strokeWidth="1.8" />
+						<span>Add friend</span>
+					{/if}
+				</button>
+				{#if friendTooltipOpen && friendGateMessage}
+					<div class="friend-tooltip" role="status">{friendGateMessage}</div>
+				{/if}
+			</div>
+		{/if}
+	</div>
+
 	<header class="profile-header">
 		<h1 class="display-name">{u.name ?? '—'}</h1>
 		{#if isOwnProfile && editing}
@@ -309,6 +391,10 @@
 		<p class="joined">Joined {formatJoined(u.createdAt)}</p>
 	</header>
 
+	{#if !isOwnProfile && !avatarRevealed}
+		<p class="reveal-hint">Comment on one of their posts to see what they look like.</p>
+	{/if}
+
 	{#if data.posts.length === 0}
 		<p class="empty">Nothing yet.</p>
 	{:else}
@@ -392,6 +478,92 @@
 		opacity: 0;
 		pointer-events: none;
 	}
+
+	/* Avatar row sits between the gradient banner and the display
+	   name. Avatar overlaps the bottom of the banner. The friend
+	   button (when applicable) lives on the right of this row. */
+	.avatar-row {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		margin-top: -56px;
+		margin-bottom: 16px;
+		min-height: 56px;
+	}
+	.profile-avatar-frame {
+		width: 112px;
+		height: 112px;
+		border-radius: 999px;
+		overflow: hidden;
+		background: var(--card);
+		border: 4px solid var(--background);
+		flex-shrink: 0;
+	}
+	.profile-avatar-img {
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		transition: filter 240ms ease, transform 240ms ease;
+	}
+	.profile-avatar-frame.locked .profile-avatar-img {
+		filter: blur(14px);
+		transform: scale(1.18);
+	}
+	.reveal-hint {
+		margin: 32px 0 24px;
+		padding: 14px 20px;
+		text-align: center;
+		font-size: 14px;
+		color: var(--muted-foreground);
+		font-style: italic;
+		border-top: 1px solid var(--border);
+		border-bottom: 1px solid var(--border);
+	}
+
+	.friend-area {
+		position: relative;
+		margin-top: 64px;
+		flex-shrink: 0;
+	}
+	.friend-button {
+		appearance: none;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 8px 16px;
+		border-radius: 999px;
+		background: var(--foreground);
+		color: var(--background);
+		border: 0;
+		font: inherit;
+		font-weight: 600;
+		font-size: 14px;
+		cursor: pointer;
+	}
+	.friend-button.disabled {
+		background: transparent;
+		color: var(--muted-foreground);
+		border: 1px solid var(--border);
+	}
+	.friend-button:hover { opacity: 0.92; }
+	.friend-tooltip {
+		position: absolute;
+		top: calc(100% + 8px);
+		right: 0;
+		max-width: 260px;
+		background: var(--card);
+		color: var(--foreground);
+		font-size: 12px;
+		line-height: 1.45;
+		padding: 8px 12px;
+		border-radius: 10px;
+		border: 1px solid var(--border);
+		box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.35);
+		z-index: 10;
+		animation: pop 200ms ease-out;
+	}
+	@keyframes pop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 
 	.profile-header {
 		margin-bottom: 56px;

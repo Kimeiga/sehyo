@@ -10,6 +10,7 @@ interface AnswerRow {
 	bot_id: string | null;
 	comment_count: number;
 	is_question?: number;
+	image: string | null;
 }
 
 interface DayBucket {
@@ -56,6 +57,7 @@ export const load: PageServerLoad = async ({ platform }) => {
 					u.name as display_name,
 					u.username,
 					u.bot_id,
+				u.image,
 					(SELECT COUNT(*) FROM comments WHERE post_id = p.id) AS comment_count
 				FROM posts p
 				JOIN user u ON u.id = p.user_id
@@ -94,6 +96,7 @@ export const load: PageServerLoad = async ({ platform }) => {
 				u.name as display_name,
 				u.username,
 				u.bot_id,
+				u.image,
 				(SELECT COUNT(*) FROM comments WHERE post_id = p.id) AS comment_count
 			FROM posts p
 			JOIN user u ON u.id = p.user_id

@@ -54,19 +54,29 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
 			.bind(locals.user.id)
 			.all();
 
-		// Get all users (excluding anonymous users and current user)
+		// Get all users (excluding anonymous users and current user),
+		// ordered by most recent activity (latest post or comment) so
+		// the Find tab feels alive instead of frozen at "newest signups".
 		const allUsersResult = await platform.env.DB.prepare(
 			`SELECT
-				id,
-				name as display_name,
-				username,
-				image as profile_picture_url,
-				bio,
-				createdAt as created_at
-			FROM user
-			WHERE id != ?
-			AND (isAnonymous IS NULL OR isAnonymous = 0)
-			ORDER BY createdAt DESC
+				u.id,
+				u.name as display_name,
+				u.username,
+				u.image as profile_picture_url,
+				u.bio,
+				u.createdAt as created_at,
+				COALESCE(
+					MAX(p.created_at),
+					MAX(c.created_at),
+					u.createdAt
+				) AS last_activity
+			FROM user u
+			LEFT JOIN posts p ON p.user_id = u.id
+			LEFT JOIN comments c ON c.user_id = u.id
+			WHERE u.id != ?
+			  AND (u.isAnonymous IS NULL OR u.isAnonymous = 0)
+			GROUP BY u.id
+			ORDER BY last_activity DESC
 			LIMIT 100`
 		)
 			.bind(locals.user.id)

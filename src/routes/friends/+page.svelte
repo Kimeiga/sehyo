@@ -186,25 +186,45 @@
 				spellcheck="false"
 				class="search-input"
 			/>
-			{#if !searchQuery.trim()}
-				<p class="empty">Type a name or username to find someone.</p>
-			{:else if isSearching && searchResults.length === 0}
-				<p class="empty">Searching…</p>
-			{:else if searchResults.length === 0}
-				<p class="empty">No results.</p>
+			{#if searchQuery.trim()}
+				{#if isSearching && searchResults.length === 0}
+					<p class="empty">Searching…</p>
+				{:else if searchResults.length === 0}
+					<p class="empty">No results.</p>
+				{:else}
+					<ul class="list">
+						{#each searchResults as u (u.id)}
+							<li class="row">
+								<a class="row-main" href={u.username ? `/${u.username}` : `/profile/${u.id}`}>
+									<p class="row-title">{u.display_name ?? 'Anonymous'}</p>
+									{#if u.username}<p class="row-sub">@{u.username}</p>{/if}
+									{#if u.bio}<p class="row-bio">{u.bio}</p>{/if}
+								</a>
+								<button type="button" class="primary-button" onclick={() => sendRequest(u.id)}>Add</button>
+							</li>
+						{/each}
+					</ul>
+				{/if}
 			{:else}
-				<ul class="list">
-					{#each searchResults as u (u.id)}
-						<li class="row">
-							<a class="row-main" href={u.username ? `/${u.username}` : `/profile/${u.id}`}>
-								<p class="row-title">{u.display_name ?? 'Anonymous'}</p>
-								{#if u.username}<p class="row-sub">@{u.username}</p>{/if}
-								{#if u.bio}<p class="row-bio">{u.bio}</p>{/if}
-							</a>
-							<button type="button" class="primary-button" onclick={() => sendRequest(u.id)}>Add</button>
-						</li>
-					{/each}
-				</ul>
+				<!-- Default: show every non-anonymous user, ordered by
+				     latest activity (most-recent post or comment), so
+				     the Find tab is browsable without typing. -->
+				{#if (data.allUsers ?? []).length === 0}
+					<p class="empty">No one to find yet.</p>
+				{:else}
+					<ul class="list">
+						{#each data.allUsers as u (u.id)}
+							<li class="row">
+								<a class="row-main" href={u.username ? `/${u.username}` : `/profile/${u.id}`}>
+									<p class="row-title">{u.display_name ?? 'Anonymous'}</p>
+									{#if u.username}<p class="row-sub">@{u.username}</p>{/if}
+									{#if u.bio}<p class="row-bio">{u.bio}</p>{/if}
+								</a>
+								<button type="button" class="primary-button" onclick={() => sendRequest(u.id)}>Add</button>
+							</li>
+						{/each}
+					</ul>
+				{/if}
 			{/if}
 		{/if}
 	{/if}
