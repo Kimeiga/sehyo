@@ -272,7 +272,7 @@
 <main class="page">
 	<div class="avatar-row">
 		<div class="profile-avatar-frame" class:locked={!avatarRevealed} aria-hidden="true">
-			<img src={avatarUrl} alt="" class="profile-avatar-img" loading="lazy" />
+			<img src={avatarUrl} alt="" class="profile-avatar-img" loading="lazy" draggable="false" />
 		</div>
 		{#if !isOwnProfile && data.user}
 			<div class="friend-area">
@@ -432,7 +432,7 @@
 	.page {
 		max-width: 640px;
 		margin: 0 auto;
-		padding: 32px 24px 96px;
+		padding: 32px 12px 96px;
 	}
 
 	/* Mesh-gradient banner (or uploaded image) at the top of the
@@ -500,6 +500,9 @@
 		background: var(--card);
 		border: 4px solid var(--background);
 		flex-shrink: 0;
+		user-select: none;
+		-webkit-user-drag: none;
+		-webkit-touch-callout: none;
 	}
 	.profile-avatar-img {
 		display: block;
@@ -507,6 +510,9 @@
 		height: 100%;
 		object-fit: cover;
 		transition: filter 240ms ease, transform 240ms ease;
+		pointer-events: none;
+		user-select: none;
+		-webkit-user-drag: none;
 	}
 	.profile-avatar-frame.locked .profile-avatar-img {
 		filter: blur(14px);

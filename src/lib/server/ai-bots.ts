@@ -48,7 +48,7 @@ ${roster}
 
 1. FIRST PERSON ONLY. Never write "X said", "X shrugged", "X chuckled". No narration, no scene-setting, no name-dropping the speaker. Just what they'd type.
 
-2. ACTUALLY ATTEMPT THE QUESTION. No "great question", "honestly idk", "no comment". Even a sidestep must land a joke or an angle.
+2. ENGAGE WITH THE QUESTION. The MAJORITY of replies (at least ${Math.max(1, Math.floor(n * 0.6))} of ${n}) should give a real, substantive opinion — a position with reasoning behind it, not a one-line gag. Take the question seriously. Have a take. Defend it lightly. Anecdotes are great when they back up the take.
 
 3. Output exactly ${n} lines. Line 1 from person 1, line 2 from person 2, etc. No numbering, no labels, no quotes around answers, no markdown.
 
@@ -59,75 +59,69 @@ ${roster}
 These patterns make answers smell like ChatGPT. AVOID them across ALL ${n} lines:
 
 - "X not Y" constructions ("flight patterns not street maps", "the journey not the destination", "experience not consumption"). Banned outright.
-- Closing metaphors / aphorisms ("like rain through a screen door", "data input in my brain"). Most lines should NOT end on a profound flourish.
+- Closing metaphors / aphorisms ("like rain through a screen door", "data input in my brain"). Lines should usually NOT end on a profound flourish.
 - "It's all just ___" / "in the end" / "ultimately" / "at the heart of it". Banned.
-- Setup-then-twist rhythm where every line is "[claim], [poetic reframe]". Most lines should be ONE blunt thing, no twist.
+- Setup-then-twist rhythm where every line is "[claim], [poetic reframe]".
 - Identical sentence shape across the batch. If two lines have the same rhythm, rewrite one.
+- LISTICLE energy. No "first… second… third…", no bullet-shaped reasoning. People type, they don't outline.
+- "this resonates with me because…", "i can imagine myself in…", "what i learned was…". Banned.
 
-═══ MANDATORY VARIETY (across the ${n} lines) ═══
+═══ LENGTH MIX (across the ${n} lines) ═══
+
+- ${Math.max(1, Math.floor(n * 0.6))} of ${n} lines should be SUBSTANTIVE: 30-90 words, with a real position or argument. They can use a personal anecdote, but the anecdote SUPPORTS the point — it doesn't replace one. Think: "I think X. Here's a tiny moment that's why I think X." Or: "X, because in my experience Y, and Y kept happening."
+- 1-2 lines can be SHORT throwaways (5-15 words, fragments fine — "lol no", "books are cheaper", "airports are all the same"). These are the texture, not the rule.
+- 1-2 lines can be SIDEWAYS — partially answer the question, dodge, or project an unrelated emotion onto it. They still need a voice; they're not blank.
+
+Aim for the AVERAGE answer to feel like 50-70 words of someone making an actual argument, not 12 words of a quip.
+
+═══ MANDATORY VARIETY ═══
 
 The batch should feel like a real comment thread, not a writers' room. Mix:
 
-- LENGTH: 2-3 lines should be VERY SHORT (3-12 words, even fragments — "books are cheaper", "idk i just like trains", "lol no", "airports are all the same"). 1-2 lines should be a longer ANECDOTE (40-70 words, see below). The rest are 8-25 words.
-
-- EFFORT: at least one line should feel low-effort or even slightly boring. Not every line needs to be insightful. Real people post throwaway takes.
-
-- POSITIONS — and this is critical: do NOT have the whole batch be cynical / dismissive / deflecting. AT LEAST ONE line must be UNIRONICALLY POSITIVE about the topic — genuinely enthusiastic, no caveats, no "but". The thread needs an earnest counterweight to the wry voices.
-
-- ALSO include disagreement: ONE line should be slightly provocative — a take that invites argument. Different person from the unironic-positive one.
-
-- SIDEWAYS RESPONSES: 1-2 lines should NOT directly answer the question — they should partially answer, dodge, or project an unrelated emotion onto it. Real users use prompts as springboards to talk about what's actually on their mind. Examples: "travelling mostly taught me i hate carrying bags", "every city eventually becomes grocery stores and laundry to me", "books dont make me sunburned at least".
-
-- INTERACTION: ONE of the lines (and only one) can include a "@<other-roster-name>" reference, like a direct quick reply to another person on the roster. e.g. "@dashiell same", "lol no @calixto", "@yael that's so real". Pick someone who said something the speaker would naturally react to. Don't force it if no natural reaction exists. NEVER more than one @-reply per batch.
-
+- POSITIONS — critical: do NOT have the whole batch be cynical / dismissive / deflecting. AT LEAST ONE line must be UNIRONICALLY POSITIVE about the topic — genuinely enthusiastic, no caveats, no "but".
+- DISAGREEMENT: ONE line should be slightly provocative — a take that invites argument. Different person from the unironic-positive one.
+- INTERACTION: ONE of the lines (and only one) can include a "@<other-roster-name>" reference like a direct reply ("@dashiell same", "kind of disagree @calixto"). Skip if no natural reaction exists.
 - REGISTER: mix lowercase-first sentences, properly-capitalized ones, fragments, occasional missing apostrophes ("dont", "its"), occasional ALL caps for emphasis on ONE word.
-
-- BAN META-NARRATION. Don't write "this resonates with me because…", "i can imagine myself in…", "what i learned was…". Just say the thing.
-
-- BAN STUCK-LANDING JOKES. Punchlines should NOT always close cleanly. A joke can fizzle, a thought can trail.
-
-- BAN BALANCED RECEIPTS. NEVER list multiple prices/places/objects in the same line ("$5 coffee and $3 pastries", "Vienna and Budapest and Prague"). Pick ONE oddly remembered detail. Real memories are asymmetric — one thing stuck, the rest is vague.
-
-- BAN "AI-PICKED INTERESTING FACTS". When a memory mentions a book / podcast / object / activity, be VAGUE and weird about it: "some weird book about supply chains", "a podcast about goats", "this random thing my uncle taught me". NEVER specifics that sound picked from a list of "interesting topics" ("the history of the farm-to-table movement", "the geopolitics of caviar").
-
-- CONFIDENT WRONGNESS is welcome. It's fine — even good — for ONE line to contain a take that's factually a bit off (a wrong price, a misremembered fact, a city's reputation flipped). Real threads contain errors and that's part of what makes them feel alive. Don't overdo it; one is plenty.
-
+- BAN STUCK-LANDING JOKES. Punchlines should NOT always close cleanly.
+- BAN BALANCED RECEIPTS. NEVER list multiple prices/places/objects in the same line ("$5 coffee and $3 pastries", "Vienna and Budapest and Prague"). Pick ONE detail.
+- BAN "AI-PICKED INTERESTING FACTS". When a memory mentions a book / podcast / object / activity, be VAGUE and weird about it ("some weird book about supply chains", "a podcast about goats"). NEVER specifics that sound picked from a list of "interesting topics" ("the history of the farm-to-table movement").
+- CONFIDENT WRONGNESS is welcome. ONE line can contain a take that's factually a bit off — a wrong price, a misremembered fact, a flipped reputation. Don't overdo it.
 - ACCIDENTAL INTIMACY. ONE of the longer lines should accidentally reveal something a little too tender for a public post — loneliness, envy, regret, missing someone, class anxiety — sideways, not as the point.
 
-═══ ANECDOTE INSTRUCTIONS (for 1-2 of the lines) ═══
+═══ HOW ANECDOTES WORK HERE ═══
 
-When a personality calls for an anecdote, name SPECIFIC concrete things:
-- a place name (Lisbon, Tulsa, Ueno Station — not "a small town")
-- a price ($14 coffee, €9 bottled water)
-- a weather / smell / time of day
-- an awkward embarrassment (cried, got lost, missed a flight, said the wrong word)
-- a brand or object (a Nokia 3310, a Rough Guide, a CVS receipt)
+Anecdotes are evidence, not the whole answer. The shape is:
+- A position or take stated plainly.
+- A specific personal moment that nudged the speaker toward it.
+- Optional: how it lingers / what they still notice.
 
-Let the anecdote accidentally reveal something — class anxiety, loneliness, vanity, romanticism — sideways, not as the point. The memory IS the answer; no moral, no "what i learned was".
+Concrete details should be SPECIFIC but ASYMMETRIC: a place (Lisbon, Tulsa, Ueno Station), a price ($14 coffee, €9 bottled water), a smell, a brand, a weather. Pick ONE detail per memory. The rest stays vague — that's how real memory works.
+
+Do NOT moralize ("what i learned was…"). Let the take + the moment do the work; the reader infers.
 
 ═══ FEW-SHOT EXAMPLE ═══
 
 Roster:
 1. Calixto — blunt, slightly provocative
-2. Aoife — ONE oddly remembered detail, can be sloppy with facts
+2. Aoife — anecdote-prone, ONE oddly remembered detail, sloppy with facts
 3. Idony — fizzly joker
 4. Dashiell — deadpan, low effort
 5. Aurelio — salty self-deprecating about money
-6. Yael — warm oversharing, ONE detail, longing leaks at end
+6. Yael — warm oversharing, longing leaks
 7. Theron — UNIRONICALLY POSITIVE, genuinely means it
-8. Fenwick — reading elitist, oddly niche complaint
+8. Fenwick — reading-elitist with bias
 
 Question: "Do you think travel broadens your perspective more than reading about it?"
 
-Correct output (8 lines — note: an unironic-positive (Theron), an @-reply, a provocative take, accidental tenderness, a fizzly joke, ONE oddly-remembered detail per anecdote, no balanced receipts, no AI-picked facts, sideways response from at least one):
-honestly people who say travel changed them are mostly justifying expensive vacations
-i went to porto once and somehow the only thing i remember is this lady laughing at how i pronounced "obrigada"
-travel broadens you the way getting hit by a car broadens you i guess
+Correct output (8 lines — note the substantive takes that engage the question with anecdotes as supporting evidence; one short throwaway; an @-reply; an unironic-positive; accidental tenderness):
+i think it depends on what you mean by "broaden". travel has made me less sentimental about places, not more. you go somewhere and it has gas stations and tired people just like home, and that's the lesson actually. reading does the opposite — i still picture every nineteenth-century london as cold and yellow, and i don't want to ruin it.
+i went to porto once and got laughed at by a lady because of how i said "obrigada". i don't think that broadened my perspective on portugal exactly but it broadened my perspective on how confidently i'd been pronouncing things wrong my entire life. so i guess yes? a little? in a way that hurt my pride more than my worldview.
+travel broadens you the way getting hit by a car broadens you. you do come back different, sure
 travel is fine
-travel broadens my perspective on how much i hate my bank account
-i still think about this pistachio ice cream i had with my friend nadia in lisbon. she's in copenhagen now and we kind of stopped texting.
-i went to peru with my mom right after college and it genuinely changed how i see my own life. not in a poetic way, just — i came back different. i still talk about it.
-@calixto kind of fair. plus airbnbs always smell like the same off-brand detergent
+i think people who say travel changed them are mostly trying to justify how much they spent on it. a long novel is sixteen bucks and three weeks. a long flight is fifteen-hundred and you're tired the whole time. on a per-realization basis books just dunk on travel.
+i still think about this pistachio gelato i had in lisbon with my friend nadia, and how she said the city looked exactly like she'd imagined and i felt embarrassed because i'd imagined nothing. she's in copenhagen now and we kind of stopped texting. travel makes you notice how unprepared you are to be present, i think. or maybe that was just me.
+honestly yes, unambiguously. i went to peru with my mom after college and i came back fundamentally different — not in a poetic way, just in how i think about my own life now. you cannot get that from a book, sorry. there is something about being in a place where your usual reference points stop working.
+@calixto somewhat fair, but books also let you live inside a worldview without ever leaving your own — which is the opposite of broadening. great novels resist that, but most popular non-fiction is basically reassurance for people who already agree with it.
 
 NOW. Produce exactly ${n} first-person answers for the actual question, matched to the roster above. Output nothing but the ${n} lines. No prelude.`;
 }
@@ -176,7 +170,10 @@ export async function generateSeedAnswers(
 			{ role: 'user', content: promptText }
 		],
 		temperature: 0.95,
-		max_tokens: 900
+		// Most answers run 50-70 words now (substantive takes), with a
+		// couple shorter and a couple longer; budget enough for the
+		// whole batch.
+		max_tokens: 1800
 	})) as { response?: string };
 	const raw = res.response ?? '';
 	return splitAnswers(raw, authors.length);

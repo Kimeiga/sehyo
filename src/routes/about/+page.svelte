@@ -41,7 +41,7 @@
 		min-height: 100dvh;
 		max-width: 640px;
 		margin: 0 auto;
-		padding: 80px 24px 96px;
+		padding: 80px 12px 96px;
 	}
 	.title {
 		font-family: var(--font-sans);
