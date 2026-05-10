@@ -2,7 +2,7 @@
 	import type { PageProps } from './$types';
 	import { invalidateAll } from '$app/navigation';
 	import { authClient } from '$lib/auth-client';
-	import { MessageCircle, Pencil, X, Check } from 'lucide-svelte';
+	import { MessageCircle, Pencil, MoreHorizontal, Check } from 'lucide-svelte';
 
 	let { data }: PageProps = $props();
 
@@ -27,6 +27,23 @@
 	let editValue = $state('');
 	let savingEdit = $state(false);
 	let deleting = $state(false);
+	let kebabOpen = $state(false);
+
+	function toggleKebab(e: MouseEvent) {
+		e.stopPropagation();
+		kebabOpen = !kebabOpen;
+	}
+
+	$effect(() => {
+		if (!kebabOpen) return;
+		function onClickOutside() { kebabOpen = false; }
+		// Defer so the toggle click itself doesn't immediately close it.
+		const t = setTimeout(() => document.addEventListener('click', onClickOutside), 0);
+		return () => {
+			clearTimeout(t);
+			document.removeEventListener('click', onClickOutside);
+		};
+	});
 
 	// Free-form composer (unlocked once today's prompt is answered).
 	let freeValue = $state('');
@@ -86,6 +103,7 @@
 	function cancelEdit() {
 		editing = false;
 		editValue = '';
+		kebabOpen = false;
 	}
 
 	async function saveEdit() {
@@ -237,17 +255,8 @@
 				</div>
 			</form>
 		{:else}
-			<article class="my-answer" class:editing>
+			<article class="answer my-answer">
 				{#if editing}
-					<button
-						type="button"
-						class="delete-x"
-						aria-label="Delete answer"
-						onclick={deleteAnswer}
-						disabled={deleting}
-					>
-						<X size="16" strokeWidth="2.4" />
-					</button>
 					<textarea
 						bind:value={editValue}
 						rows="3"
@@ -256,7 +265,6 @@
 						class="edit-textarea"
 					></textarea>
 					<div class="edit-bar">
-						<button type="button" class="ghost-button" onclick={cancelEdit} disabled={savingEdit || deleting}>Cancel</button>
 						<button
 							type="button"
 							class="post-button small"
@@ -266,13 +274,50 @@
 							<Check size="16" strokeWidth="2.2" />
 							{savingEdit ? 'Saving…' : 'Save'}
 						</button>
+						<div class="popover-container">
+							<button
+								type="button"
+								class="kebab"
+								aria-label="More actions"
+								aria-expanded={kebabOpen}
+								onclick={toggleKebab}
+								disabled={savingEdit || deleting}
+							>
+								<MoreHorizontal size="18" strokeWidth="2" />
+							</button>
+							{#if kebabOpen}
+								<div class="popover" role="menu">
+									<button type="button" class="popover-item" onclick={cancelEdit} role="menuitem">
+										Cancel
+									</button>
+									<button
+										type="button"
+										class="popover-item destructive"
+										onclick={deleteAnswer}
+										role="menuitem"
+										disabled={deleting}
+									>
+										{deleting ? 'Deleting…' : 'Delete'}
+									</button>
+								</div>
+							{/if}
+						</div>
 					</div>
 				{:else}
 					<header class="author-row">
-						<span class="author you">Your answer</span>
+						<span class="author">{data.user?.name ?? 'You'}</span>
 					</header>
 					<p class="answer-body">{data.myAnswer.content}</p>
 					<footer class="answer-foot">
+						<button
+							type="button"
+							class="comment-button"
+							onclick={() => toggleCommentBox(data.myAnswer!.id)}
+							aria-label="Comment"
+						>
+							<MessageCircle size="18" strokeWidth="1.7" />
+							{#if data.myAnswer.comment_count > 0}<span class="count">{data.myAnswer.comment_count}</span>{/if}
+						</button>
 						<button
 							type="button"
 							class="comment-button"
@@ -282,6 +327,35 @@
 							<Pencil size="16" strokeWidth="1.8" />
 						</button>
 					</footer>
+
+					{#if openCommentFor === data.myAnswer.id}
+						<div class="comment-thread">
+							{#if commentsByPost[data.myAnswer.id]?.length}
+								<ul class="comment-list">
+									{#each commentsByPost[data.myAnswer.id] as c (c.id)}
+										<li class="comment">
+											<span class="comment-author">{c.user?.display_name ?? 'Anonymous'}</span>
+											<span class="comment-body">{c.content}</span>
+										</li>
+									{/each}
+								</ul>
+							{/if}
+							<form class="comment-composer" onsubmit={(e) => submitComment(data.myAnswer!.id, e)}>
+								<textarea
+									bind:value={commentValue}
+									placeholder="Add a comment…"
+									rows="2"
+									maxlength="1000"
+									disabled={submittingComment}
+								></textarea>
+								<button
+									type="submit"
+									class="post-button small"
+									disabled={submittingComment || commentValue.trim().length === 0}
+								>{submittingComment ? '…' : 'Post'}</button>
+							</form>
+						</div>
+					{/if}
 				{/if}
 			</article>
 		{/if}
@@ -414,28 +488,22 @@
 		margin-right: auto;
 	}
 
-	/* Today's prompt — thin and dramatic, wider than the body column on
-	   desktop so the question has room to breathe. On desktop the
-	   headline becomes a hero block: min-height fills most of the
-	   viewport, text vertically centered, with extra bottom padding
-	   for air before the composer. Mobile keeps the existing tight
-	   layout. */
+	/* Today's prompt — thin and centered, wider than the body column on
+	   desktop so the question has room to breathe. */
 	.prompt-today {
 		font-family: var(--font-sans);
 		font-weight: 100;
 		letter-spacing: -0.025em;
 		font-size: clamp(40px, 8vw, 72px);
 		line-height: 1.05;
+		text-align: center;
 		color: var(--foreground);
 		margin: 0 auto 32px;
 		max-width: 1000px;
 	}
 	@media (min-width: 768px) {
 		.prompt-today {
-			display: flex;
-			align-items: center;
-			min-height: 60dvh;
-			padding-bottom: 80px;
+			padding-bottom: 40px;
 		}
 	}
 
@@ -469,9 +537,16 @@
 		outline: 2px solid var(--ring);
 		outline-offset: -1px;
 	}
-	.composer-bar, .edit-bar {
+	.composer-bar {
 		display: flex;
 		justify-content: flex-end;
+		gap: 8px;
+		margin-top: 12px;
+	}
+	.edit-bar {
+		display: flex;
+		justify-content: flex-start;
+		align-items: center;
 		gap: 8px;
 		margin-top: 12px;
 	}
@@ -505,34 +580,62 @@
 	.ghost-button:hover { color: var(--foreground); }
 	.ghost-button:disabled { opacity: 0.4; cursor: not-allowed; }
 
+	/* The viewer's own answer reuses .answer styling so it sits in the
+	   feed identically (single border-top, same padding). The single
+	   horizontal line above is provided by the next sibling's
+	   border-top — no duplicate underline. */
 	.my-answer {
 		position: relative;
-		padding: 20px 0 24px;
-		border-bottom: 1px solid var(--border);
-		margin-bottom: 20px;
 	}
-	.my-answer.editing {
-		padding: 24px 0 20px;
+
+	.popover-container {
+		position: relative;
+		display: inline-flex;
 	}
-	.delete-x {
-		position: absolute;
-		top: 0;
-		right: 0;
-		width: 28px;
-		height: 28px;
-		border-radius: 14px;
-		background: var(--destructive);
-		color: var(--destructive-foreground);
+	.kebab {
+		appearance: none;
 		border: 0;
+		background: transparent;
+		color: var(--muted-foreground);
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
+		padding: 8px;
+		border-radius: 999px;
 		cursor: pointer;
-		transition: transform 120ms ease, opacity 120ms ease;
+		transition: color 120ms ease, background 120ms ease;
 	}
-	.delete-x:hover { transform: scale(1.06); }
-	.delete-x:active { transform: scale(0.94); }
-	.delete-x:disabled { opacity: 0.5; cursor: not-allowed; }
+	.kebab:hover { color: var(--foreground); background: var(--muted); }
+	.kebab:disabled { opacity: 0.4; cursor: not-allowed; }
+	.popover {
+		position: absolute;
+		top: calc(100% + 6px);
+		left: 0;
+		z-index: 20;
+		min-width: 140px;
+		padding: 4px;
+		background: var(--card);
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.3);
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.popover-item {
+		appearance: none;
+		border: 0;
+		background: transparent;
+		color: var(--foreground);
+		font: inherit;
+		text-align: left;
+		padding: 8px 12px;
+		border-radius: 6px;
+		cursor: pointer;
+	}
+	.popover-item:hover { background: var(--muted); }
+	.popover-item.destructive { color: var(--destructive); }
+	.popover-item:disabled { opacity: 0.5; cursor: not-allowed; }
 
 	.answers { display: flex; flex-direction: column; }
 	.answer {

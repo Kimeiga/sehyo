@@ -89,7 +89,7 @@ export const DELETE: RequestHandler = async ({ params, platform, locals }) => {
 		}
 	}
 
-	await db.deletePost(params.id);
+	await db.deletePost(params.id, locals.user.id);
 
 	return json({ success: true });
 };
