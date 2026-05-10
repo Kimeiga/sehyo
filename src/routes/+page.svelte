@@ -18,17 +18,21 @@
 		};
 	}
 
-	// New-answer composer (used when the viewer has no answer yet).
+	// Today's-prompt composer state.
 	let composerValue = $state('');
 	let posting = $state(false);
 
-	// Edit-mode state for the viewer's own answer.
+	// Edit-mode for the viewer's own answer to today's prompt.
 	let editing = $state(false);
 	let editValue = $state('');
 	let savingEdit = $state(false);
 	let deleting = $state(false);
 
-	// Comment composer state.
+	// Free-form composer (unlocked once today's prompt is answered).
+	let freeValue = $state('');
+	let postingFree = $state(false);
+
+	// Inline comment composer state.
 	let openCommentFor = $state<string | null>(null);
 	let commentValue = $state('');
 	let submittingComment = $state(false);
@@ -129,6 +133,29 @@
 		}
 	}
 
+	async function submitFreePost(e: SubmitEvent) {
+		e.preventDefault();
+		const content = freeValue.trim();
+		if (!content || postingFree) return;
+		postingFree = true;
+		try {
+			const res = await fetch('/api/posts/free', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ content })
+			});
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			freeValue = '';
+			await invalidateAll();
+		} catch (err) {
+			console.error('Free-form post failed:', err);
+			alert('Could not post. Try again.');
+		} finally {
+			postingFree = false;
+		}
+	}
+
 	async function loadComments(postId: string) {
 		try {
 			const res = await fetch(`/api/posts/${postId}/comments`, { credentials: 'include' });
@@ -175,6 +202,11 @@
 			submittingComment = false;
 		}
 	}
+
+	function formatDate(iso: string) {
+		const d = new Date(iso + 'T00:00:00Z');
+		return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+	}
 </script>
 
 <svelte:head>
@@ -185,7 +217,7 @@
 	{#if !data.prompt}
 		<p class="empty">No prompt today yet. Check back shortly.</p>
 	{:else}
-		<h1 class="prompt">{data.prompt.text}</h1>
+		<h1 class="prompt prompt-today">{data.prompt.text}</h1>
 
 		{#if !data.myAnswer}
 			<form class="composer" onsubmit={submitAnswer}>
@@ -256,56 +288,112 @@
 
 		<section class="answers">
 			{#each data.answers as a (a.id)}
-				<article class="answer">
-					<header class="author-row">
-						<span class="author author-mask">{a.display_name ?? 'Anonymous'}</span>
-					</header>
-					<p class="answer-body">{a.content}</p>
-					<footer class="answer-foot">
-						<button
-							type="button"
-							class="comment-button"
-							onclick={() => toggleCommentBox(a.id)}
-							aria-label="Comment"
-						>
-							<MessageCircle size="18" strokeWidth="1.7" />
-							{#if a.comment_count > 0}<span class="count">{a.comment_count}</span>{/if}
-						</button>
-					</footer>
-
-					{#if openCommentFor === a.id}
-						<div class="comment-thread">
-							{#if commentsByPost[a.id]?.length}
-								<ul class="comment-list">
-									{#each commentsByPost[a.id] as c (c.id)}
-										<li class="comment">
-											<span class="comment-author author-mask">{c.user?.display_name ?? 'Anonymous'}</span>
-											<span class="comment-body">{c.content}</span>
-										</li>
-									{/each}
-								</ul>
-							{/if}
-							<form class="comment-composer" onsubmit={(e) => submitComment(a.id, e)}>
-								<textarea
-									bind:value={commentValue}
-									placeholder="Add a comment…"
-									rows="2"
-									maxlength="1000"
-									disabled={submittingComment}
-								></textarea>
-								<button
-									type="submit"
-									class="post-button small"
-									disabled={submittingComment || commentValue.trim().length === 0}
-								>{submittingComment ? '…' : 'Post'}</button>
-							</form>
-						</div>
-					{/if}
-				</article>
+				{@render postCard(a)}
 			{/each}
 		</section>
+
+		{#if data.myAnswer}
+			<!-- Free-form composer + today's free-form posts. Unlocked by
+			     having answered today's prompt. -->
+			<section class="free-section">
+				<form class="composer" onsubmit={submitFreePost}>
+					<textarea
+						bind:value={freeValue}
+						placeholder="Post anything…"
+						rows="3"
+						maxlength="2000"
+						disabled={postingFree}
+					></textarea>
+					<div class="composer-bar">
+						<button
+							type="submit"
+							class="post-button"
+							disabled={postingFree || freeValue.trim().length === 0}
+						>{postingFree ? 'Posting…' : 'Post'}</button>
+					</div>
+				</form>
+
+				{#if data.todayFreePosts.length > 0}
+					<div class="answers">
+						{#each data.todayFreePosts as p (p.id)}
+							{@render postCard(p)}
+						{/each}
+					</div>
+				{/if}
+			</section>
+		{/if}
+
+		<!-- Past days, scroll-back style. -->
+		{#if data.pastDays.length > 0}
+			<div class="past">
+				{#each data.pastDays as day (day.prompt.id)}
+					<section class="past-day">
+						<p class="past-date">{formatDate(day.prompt.active_date)}</p>
+						<h2 class="prompt prompt-past">{day.prompt.text}</h2>
+						{#if day.answers.length > 0}
+							<div class="answers">
+								{#each day.answers as a (a.id)}
+									{@render postCard(a)}
+								{/each}
+							</div>
+						{:else}
+							<p class="empty small">No answers.</p>
+						{/if}
+					</section>
+				{/each}
+			</div>
+		{/if}
 	{/if}
 </main>
+
+{#snippet postCard(a: { id: string; content: string; display_name: string | null; bot_id: string | null; comment_count: number })}
+	<article class="answer">
+		<header class="author-row">
+			<span class="author author-mask">{a.display_name ?? 'Anonymous'}</span>
+		</header>
+		<p class="answer-body">{a.content}</p>
+		<footer class="answer-foot">
+			<button
+				type="button"
+				class="comment-button"
+				onclick={() => toggleCommentBox(a.id)}
+				aria-label="Comment"
+			>
+				<MessageCircle size="18" strokeWidth="1.7" />
+				{#if a.comment_count > 0}<span class="count">{a.comment_count}</span>{/if}
+			</button>
+		</footer>
+
+		{#if openCommentFor === a.id}
+			<div class="comment-thread">
+				{#if commentsByPost[a.id]?.length}
+					<ul class="comment-list">
+						{#each commentsByPost[a.id] as c (c.id)}
+							<li class="comment">
+								<span class="comment-author author-mask">{c.user?.display_name ?? 'Anonymous'}</span>
+								<span class="comment-body">{c.content}</span>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+				<form class="comment-composer" onsubmit={(e) => submitComment(a.id, e)}>
+					<textarea
+						bind:value={commentValue}
+						placeholder="Add a comment…"
+						rows="2"
+						maxlength="1000"
+						disabled={submittingComment}
+					></textarea>
+					<button
+						type="submit"
+						class="post-button small"
+						disabled={submittingComment || commentValue.trim().length === 0}
+					>{submittingComment ? '…' : 'Post'}</button>
+				</form>
+			</div>
+		{/if}
+	</article>
+{/snippet}
 
 <style>
 	.page {
@@ -314,14 +402,26 @@
 		padding: 120px 24px 96px;
 	}
 
-	.prompt {
+	/* Today's prompt — thin and dramatic. */
+	.prompt-today {
 		font-family: var(--font-sans);
-		font-weight: 800;
+		font-weight: 100;
 		letter-spacing: -0.025em;
-		font-size: clamp(28px, 5vw, 44px);
-		line-height: 1.12;
+		font-size: clamp(40px, 8vw, 72px);
+		line-height: 1.05;
 		color: var(--foreground);
 		margin: 0 0 32px;
+	}
+
+	/* Past prompts — same thin treatment, scaled down. */
+	.prompt-past {
+		font-family: var(--font-sans);
+		font-weight: 100;
+		letter-spacing: -0.022em;
+		font-size: clamp(28px, 5vw, 44px);
+		line-height: 1.1;
+		color: var(--foreground);
+		margin: 0 0 24px;
 	}
 
 	.composer { margin-bottom: 56px; }
@@ -485,9 +585,33 @@
 		min-height: 60px;
 	}
 
+	.free-section {
+		margin-top: 56px;
+		padding-top: 32px;
+		border-top: 1px solid var(--border);
+	}
+
+	.past {
+		margin-top: 96px;
+	}
+	.past-day {
+		padding-top: 56px;
+		padding-bottom: 16px;
+		border-top: 1px solid var(--border);
+	}
+	.past-date {
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--muted-foreground);
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		margin: 0 0 8px;
+	}
+
 	.empty {
 		text-align: center;
 		color: var(--muted-foreground);
 		padding: 40px 0;
 	}
+	.empty.small { padding: 16px 0; font-size: 14px; }
 </style>
