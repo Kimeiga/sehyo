@@ -8,8 +8,9 @@
 
 	interface Props {
 		user: User | null;
+		unreadCount?: number;
 	}
-	let { user }: Props = $props();
+	let { user, unreadCount = 0 }: Props = $props();
 
 	let signingIn = $state(false);
 
@@ -84,16 +85,17 @@
 		onSelect: () => void | Promise<void>;
 		show: boolean;
 		disabled?: boolean;
+		hasUnread?: boolean;
 	};
 
 	const items = $derived<Item[]>(
 		[
 			{ label: 'Home',     onSelect: () => navigate('/'),                    show: true },
 			{ label: 'Search',   onSelect: () => navigate('/search'),              show: true },
-			{ label: 'Messages', onSelect: () => navigate('/messages'),            show: isSignedIn },
+			{ label: 'Messages', onSelect: () => navigate('/messages'),            show: isSignedIn, hasUnread: unreadCount > 0 },
 			{ label: 'Messages', onSelect: showSignInGate,                         show: !isSignedIn, disabled: true },
 			{ label: 'Friends',  onSelect: () => navigate('/friends'),             show: isSignedIn },
-			{ label: 'Profile',  onSelect: () => user && navigate(user.username ? `/${user.username}` : `/profile/${user.id}`), show: isSignedIn },
+			{ label: 'Profile',  onSelect: () => { if (user) navigate(user.username ? `/${user.username}` : `/profile/${user.id}`); }, show: isSignedIn },
 			{ label: 'About',    onSelect: () => navigate('/about'),               show: true },
 			{ label: 'Sign in',  onSelect: signInGoogle,                           show: !isSignedIn },
 			{ label: 'Sign out', onSelect: signOut,                                show: isSignedIn }
@@ -112,7 +114,12 @@
 					style="animation-delay: {30 + i * 28}ms"
 					onclick={item.onSelect}
 					disabled={signingIn}
-				>{item.label}</button>
+				>
+					<span class="nav-item-label">{item.label}</span>
+					{#if item.hasUnread}
+						<span class="nav-item-dot" aria-label="unread"></span>
+					{/if}
+				</button>
 			{/each}
 		</nav>
 	</div>
@@ -158,6 +165,20 @@
 		transform: translateY(-12px);
 		animation: slideDown 320ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
 		transition: opacity 160ms ease;
+		display: inline-flex;
+		align-items: center;
+		gap: 12px;
+	}
+	.nav-item-label {
+		display: inline-block;
+	}
+	.nav-item-dot {
+		display: inline-block;
+		width: 12px;
+		height: 12px;
+		border-radius: 999px;
+		background: var(--brand);
+		flex-shrink: 0;
 	}
 	.nav-item:hover {
 		opacity: 0.6;
