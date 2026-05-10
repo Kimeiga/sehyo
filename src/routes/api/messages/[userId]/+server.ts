@@ -17,13 +17,16 @@ export const GET: RequestHandler = async ({ params, platform, locals }) => {
 		// Get all messages between current user and specified user
 		const messages = await db
 			.prepare(
-				`SELECT 
+				`SELECT
 					m.id,
 					m.sender_id,
 					m.recipient_id,
 					m.cipher_text,
 					m.aes_key,
 					m.iv,
+					m.sender_cipher_text,
+					m.sender_aes_key,
+					m.sender_iv,
 					m.created_at,
 					m.read_at,
 					u.username as sender_username,
