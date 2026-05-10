@@ -336,6 +336,7 @@
 		<h1 class="prompt prompt-today">{data.prompt.text}</h1>
 
 		{#if !data.myAnswer}
+			<p class="prompt-hint">Answer to unlock the rest of the world.</p>
 			<form class="composer" onsubmit={submitAnswer}>
 				<textarea
 					bind:value={composerValue}
@@ -816,6 +817,16 @@
 		.prompt-today { padding-bottom: 40px; }
 	}
 
+	.prompt-hint {
+		text-align: center;
+		color: var(--muted-foreground);
+		font-size: 14px;
+		font-style: italic;
+		max-width: 640px;
+		margin: -16px auto 28px;
+		line-height: 1.5;
+	}
+
 	.prompt-past {
 		font-family: var(--font-sans);
 		font-weight: 100;
@@ -948,20 +959,15 @@
 	}
 	/* Drop line below the avatar. flex:1 so the line stretches with
 	   the content column, even when the content column grows from
-	   nested replies inside tw-main. The bottom fades out so the
-	   tail past the last child blends rather than dangles. */
+	   nested replies inside tw-main. The line is drawn full-length
+	   to bottom of tw-item; the LAST child's ::after below hides
+	   the tail that would otherwise dangle past the last L-curve. */
 	.tw-line {
 		flex: 1;
 		width: 2px;
 		min-height: 6px;
-		margin-top: 6px;
-		margin-bottom: 0;
-		background: linear-gradient(
-			to bottom,
-			var(--border) 0,
-			var(--border) calc(100% - 16px),
-			transparent 100%
-		);
+		margin: 6px 0 0;
+		background: var(--border);
 		border-radius: 999px;
 	}
 
@@ -1055,6 +1061,27 @@
 		border-bottom: 2px solid var(--border);
 		border-bottom-left-radius: 14px;
 		pointer-events: none;
+	}
+	/* The parent's drop-line auto-extends to the bottom of the
+	   parent's tw-item (since tw-left stretches with tw-main's
+	   content). For the LAST direct reply, that means the line
+	   continues past its L-curve down through the rest of the
+	   subtree. Hide that tail with an opaque cover so the line
+	   visually terminates exactly at the curve.
+	   Width 4px @ x:-36 fully overlaps the 2px parent line at
+	   x:-34. Top:34 sits just below the curve hook (avatar
+	   center). Bottom:-9999 extends well past any nested
+	   descendants, so the cover is effective at any depth. */
+	.tw-children > .tw-item.is-reply:last-child::after {
+		content: '';
+		position: absolute;
+		left: -36px;
+		top: 34px;
+		bottom: -9999px;
+		width: 4px;
+		background: var(--background);
+		pointer-events: none;
+		z-index: 1;
 	}
 
 	.tw-children.capped {
