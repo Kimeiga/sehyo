@@ -242,17 +242,23 @@
 	let viewport: HTMLDivElement;
 	let camX = $state(0);
 	let camY = $state(0);
+	let zoom = $state(1);
 	let isDragging = $state(false);
 	let dragStart = { x: 0, y: 0, camX: 0, camY: 0 };
 
-	// The world point under the viewport center is (-camX, -camY) because the
-	// world is translated by (camX, camY) before centering. Whichever local
-	// anchor is closest to that point is currently "active" — the spiral that
-	// new cards would expand from if loaded now.
+	const MIN_ZOOM = 0.3;
+	const MAX_ZOOM = 2;
+	const ZOOM_WHEEL_RATE = 0.0015;
+
+	// The world point under the viewport center is (-camX/zoom, -camY/zoom):
+	// the world is scaled by `zoom`, then translated by (camX, camY) before
+	// the (-50%, -50%) centering. Whichever local anchor is closest to that
+	// point is currently "active" — the spiral that new cards would expand
+	// from if loaded now.
 	const activeAnchorId = $derived.by(() => {
 		if (placedItems.length === 0) return null;
-		const targetX = -camX;
-		const targetY = -camY;
+		const targetX = -camX / zoom;
+		const targetY = -camY / zoom;
 		let bestId: string | null = null;
 		let bestDist = Infinity;
 		for (const p of placedItems) {
@@ -274,8 +280,8 @@
 	let vh = $state(typeof window !== 'undefined' ? window.innerHeight : 768);
 
 	function edgeScale(x: number, y: number): number {
-		const cx = vw / 2 + camX + x;
-		const cy = vh / 2 + camY + y;
+		const cx = vw / 2 + camX + zoom * x;
+		const cy = vh / 2 + camY + zoom * y;
 		const dist = Math.min(cx, vw - cx, cy, vh - cy);
 		if (dist >= EDGE_THRESHOLD) return 1;
 		if (dist <= 0) return 0;
@@ -306,10 +312,27 @@
 		}
 	}
 
+	// Zoom toward a screen-space focal point. Adjusts camX/camY so the world
+	// point that was under (sx, sy) stays under (sx, sy) after the zoom.
+	function zoomAt(targetZoom: number, sx: number, sy: number) {
+		const clamped = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, targetZoom));
+		if (clamped === zoom) return;
+		const factor = clamped / zoom;
+		camX = sx - vw / 2 - factor * (sx - vw / 2 - camX);
+		camY = sy - vh / 2 - factor * (sy - vh / 2 - camY);
+		zoom = clamped;
+	}
+
 	function onWheel(e: WheelEvent) {
 		e.preventDefault();
-		camX -= e.deltaX;
-		camY -= e.deltaY;
+		// Ctrl/Cmd + wheel = zoom. macOS trackpad pinch also fires wheel events
+		// with `ctrlKey: true`, so this handles both pinch and modifier-scroll.
+		if (e.ctrlKey || e.metaKey) {
+			zoomAt(zoom * Math.exp(-e.deltaY * ZOOM_WHEEL_RATE), e.clientX, e.clientY);
+		} else {
+			camX -= e.deltaX;
+			camY -= e.deltaY;
+		}
 	}
 </script>
 
@@ -327,12 +350,13 @@
 	onpointercancel={onPointerUp}
 	onwheel={onWheel}
 >
-	<div class="world" style="transform: translate(-50%, -50%) translate({camX}px, {camY}px)">
+	<div class="world" style="transform: translate(-50%, -50%) translate({camX}px, {camY}px) scale({zoom})">
 		{#each placedItems as placed (placed.id)}
 			{@const s = edgeScale(placed.x, placed.y)}
+			{@const radius = (1 - s) * 32}
 			<div
 				class="post-slot"
-				style="left: {placed.x}px; top: {placed.y}px; width: {placed.w}px; height: {placed.h}px; transform: translate(-50%, -50%) scale({s}); opacity: {s};"
+				style="left: {placed.x}px; top: {placed.y}px; width: {placed.w}px; height: {placed.h}px; transform: translate(-50%, -50%) scale({s}); opacity: {s}; border-radius: {radius}px;"
 			>
 				{#if placed.kind === 'start'}
 					<StartCard />
@@ -401,6 +425,7 @@
 	.post-slot {
 		position: absolute;
 		transform: translate(-50%, -50%);
+		overflow: hidden;
 	}
 
 	.lock-badge {
