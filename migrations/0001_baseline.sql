@@ -78,17 +78,28 @@ CREATE INDEX IF NOT EXISTS idx_verification_identifier ON verification(identifie
 -- Application tables
 -- ──────────────────────────────────────────────────────────────────────────
 
+CREATE TABLE IF NOT EXISTS daily_prompts (
+    id TEXT PRIMARY KEY,
+    prompt_text TEXT NOT NULL,
+    active_date TEXT NOT NULL UNIQUE, -- YYYY-MM-DD in UTC
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
+);
+CREATE INDEX IF NOT EXISTS idx_daily_prompts_active_date ON daily_prompts(active_date DESC);
+
 CREATE TABLE IF NOT EXISTS posts (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
+    prompt_id TEXT,
     content TEXT NOT NULL,
     image_url TEXT,
     created_at INTEGER NOT NULL DEFAULT (unixepoch()),
     updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
-    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE,
+    FOREIGN KEY (prompt_id) REFERENCES daily_prompts(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_posts_user_id ON posts(user_id);
 CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_posts_prompt_id ON posts(prompt_id);
 
 CREATE TABLE IF NOT EXISTS comments (
     id TEXT PRIMARY KEY,

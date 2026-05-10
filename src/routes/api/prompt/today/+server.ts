@@ -1,31 +1,27 @@
-import type { PageServerLoad } from './$types';
+import { json, error } from '@sveltejs/kit';
+import type { RequestHandler } from './$types';
 
-interface AnswerRow {
-	id: string;
-	user_id: string;
-	content: string;
-	created_at: number;
-	display_name: string | null;
-	username: string | null;
-	profile_picture_url: string | null;
-	sprite_id: number | null;
-	bot_id: string | null;
-	reaction_count: number;
-	comment_count: number;
-}
-
-export const load: PageServerLoad = async ({ platform }) => {
+/**
+ * Today's prompt + its answers, ranked by HN-style decay so fresher and
+ * more-engaged answers float to the top while old cold ones sink.
+ *
+ * Public — no auth required. Anonymous users get the same view as
+ * signed-in users; identity-reveal happens client-side after engagement.
+ */
+export const GET: RequestHandler = async ({ platform }) => {
 	const db = platform?.env?.DB;
-	if (!db) return { prompt: null, answers: [] as AnswerRow[] };
+	if (!db) throw error(500, 'Database not available');
 
 	const date = todayUTC();
 
 	const prompt = await db
-		.prepare('SELECT id, prompt_text, active_date FROM daily_prompts WHERE active_date = ?')
+		.prepare('SELECT id, prompt_text, active_date, created_at FROM daily_prompts WHERE active_date = ?')
 		.bind(date)
-		.first<{ id: string; prompt_text: string; active_date: string }>();
+		.first<{ id: string; prompt_text: string; active_date: string; created_at: number }>();
 
-	if (!prompt) return { prompt: null, answers: [] as AnswerRow[] };
+	if (!prompt) {
+		return json({ prompt: null, answers: [], total_answers: 0 });
+	}
 
 	const answersRes = await db
 		.prepare(
@@ -48,7 +44,19 @@ export const load: PageServerLoad = async ({ platform }) => {
 			LIMIT 200`
 		)
 		.bind(prompt.id)
-		.all<AnswerRow>();
+		.all<{
+			id: string;
+			user_id: string;
+			content: string;
+			created_at: number;
+			display_name: string | null;
+			username: string | null;
+			profile_picture_url: string | null;
+			sprite_id: number | null;
+			bot_id: string | null;
+			reaction_count: number;
+			comment_count: number;
+		}>();
 
 	const now = Math.floor(Date.now() / 1000);
 	const answers = (answersRes.results ?? [])
@@ -60,10 +68,11 @@ export const load: PageServerLoad = async ({ platform }) => {
 		})
 		.sort((a, b) => b.score - a.score);
 
-	return {
+	return json({
 		prompt: { id: prompt.id, text: prompt.prompt_text, active_date: prompt.active_date },
-		answers
-	};
+		answers,
+		total_answers: answers.length
+	});
 };
 
 function todayUTC(): string {
