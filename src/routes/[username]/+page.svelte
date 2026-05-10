@@ -410,7 +410,10 @@
 		color: var(--muted-foreground);
 		margin: 0 0 14px;
 		font-weight: 500;
-		display: inline-flex;
+		/* `flex` (not `inline-flex`) so the handle line stays a
+		   block-level box and the bio line below never wraps up
+		   beside it on wider viewports. */
+		display: flex;
 		align-items: center;
 		gap: 2px;
 	}
@@ -495,7 +498,9 @@
 		line-height: 1.5;
 		margin: 0 0 12px;
 		max-width: 540px;
-		display: inline-flex;
+		/* Block-level flex so the bio always sits below the handle line
+		   instead of collapsing inline next to it. */
+		display: flex;
 		align-items: flex-start;
 		gap: 8px;
 		flex-wrap: wrap;

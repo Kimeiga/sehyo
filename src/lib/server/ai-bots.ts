@@ -221,6 +221,27 @@ function shuffle<T>(arr: T[]): T[] {
 	return a;
 }
 
+// Anecdote-prone personas: longer, story-shaped answers. Without
+// stratifying the picker, a random shuffle can occasionally produce
+// 8 short-take voices in a row, which makes the thread feel
+// rapid-fire and one-note.
+const ANECDOTAL_BOT_IDS = new Set(['seed_theron', 'seed_soren', 'seed_yael', 'seed_aoife']);
+
+function pickAuthors(authors: SeedAuthor[], n: number): SeedAuthor[] {
+	const anecdotal = authors.filter((a) => ANECDOTAL_BOT_IDS.has(a.bot_id));
+	const others = authors.filter((a) => !ANECDOTAL_BOT_IDS.has(a.bot_id));
+	const targetAnecdotal = Math.min(2, anecdotal.length, n);
+	const targetOthers = Math.max(0, n - targetAnecdotal);
+
+	const picked: SeedAuthor[] = [
+		...shuffle(anecdotal).slice(0, targetAnecdotal),
+		...shuffle(others).slice(0, targetOthers)
+	];
+	// Shuffle the combined list so anecdotes don't always fall at the
+	// top of the batch.
+	return shuffle(picked).slice(0, n);
+}
+
 /**
  * Regenerate seed-author answers for today's existing prompt without
  * touching the prompt itself or any user-authored content. Used for
@@ -250,7 +271,7 @@ export async function regenerateSeedAnswersForToday(
 
 	const authors = await getSeedAuthors(db);
 	const n = Math.min(ANSWER_COUNT, authors.length);
-	const picked = shuffle(authors).slice(0, n);
+	const picked = pickAuthors(authors, n);
 	const answers = await generateSeedAnswers(ai, prompt.prompt_text, picked);
 
 	let inserted = 0;
@@ -306,7 +327,7 @@ export async function rotatePromptIfNeeded(db: D1Database, ai: Ai): Promise<{
 
 	const authors = await getSeedAuthors(db);
 	const n = Math.min(ANSWER_COUNT, authors.length);
-	const picked = shuffle(authors).slice(0, n);
+	const picked = pickAuthors(authors, n);
 	const answers = await generateSeedAnswers(ai, promptText, picked);
 
 	let inserted = 0;
