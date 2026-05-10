@@ -23,6 +23,9 @@ declare global {
 				GOOGLE_CLIENT_ID: string;
 				GOOGLE_CLIENT_SECRET: string;
 				GOOGLE_REDIRECT_URI: string;
+				BETTER_AUTH_SECRET: string;
+				ADMIN_SECRET: string;
+				AI: import('@cloudflare/workers-types').Ai;
 			};
 			context: {
 				waitUntil(promise: Promise<any>): void;
