@@ -397,12 +397,25 @@
 
 <style>
 	.page {
-		max-width: 640px;
+		max-width: none;
 		margin: 0 auto;
 		padding: 120px 24px 96px;
 	}
 
-	/* Today's prompt — thin and dramatic. */
+	/* Inner blocks keep the comfortable 640px reading column. The prompt
+	   headlines below break out wider on desktop. */
+	.composer,
+	.my-answer,
+	.answers,
+	.free-section,
+	.past-date {
+		max-width: 640px;
+		margin-left: auto;
+		margin-right: auto;
+	}
+
+	/* Today's prompt — thin and dramatic, wider than the body column on
+	   desktop so the question has room to breathe. */
 	.prompt-today {
 		font-family: var(--font-sans);
 		font-weight: 100;
@@ -410,7 +423,8 @@
 		font-size: clamp(40px, 8vw, 72px);
 		line-height: 1.05;
 		color: var(--foreground);
-		margin: 0 0 32px;
+		margin: 0 auto 32px;
+		max-width: 920px;
 	}
 
 	/* Past prompts — same thin treatment, scaled down. */
@@ -421,7 +435,8 @@
 		font-size: clamp(28px, 5vw, 44px);
 		line-height: 1.1;
 		color: var(--foreground);
-		margin: 0 0 24px;
+		margin: 0 auto 24px;
+		max-width: 720px;
 	}
 
 	.composer { margin-bottom: 56px; }
@@ -595,6 +610,8 @@
 		margin-top: 96px;
 	}
 	.past-day {
+		max-width: 720px;
+		margin: 0 auto;
 		padding-top: 56px;
 		padding-bottom: 16px;
 		border-top: 1px solid var(--border);
