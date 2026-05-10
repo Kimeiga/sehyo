@@ -1,5 +1,6 @@
 import type { LayoutServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
+import { loadCommentsForPosts } from '$lib/server/comments';
 
 interface AnswerRow {
 	id: string;
@@ -99,13 +100,24 @@ export const load: LayoutServerLoad = async ({ platform, locals, url }) => {
 		unlockedAvatars = (r.results ?? []).map((row) => row.user_id);
 	}
 
+	// Eagerly load every comment for today's answers + the viewer's own
+	// answer. Comments are always-visible in the feed (no click-to-open),
+	// so we hydrate everything up-front and avoid a flicker / extra
+	// round-trip when the page paints.
+	const todayPostIds = [
+		...(myAnswer ? [myAnswer.id] : []),
+		...answers.map((a) => a.id)
+	];
+	const todayCommentsByPost = await loadCommentsForPosts(db, todayPostIds);
+
 	return {
 		user: locals.user,
 		prompt: prompt ? { id: prompt.id, text: prompt.prompt_text, active_date: prompt.active_date } : null,
 		answers,
 		myAnswer,
 		namesBlurred,
-		unlockedAvatars
+		unlockedAvatars,
+		todayCommentsByPost
 	};
 };
 

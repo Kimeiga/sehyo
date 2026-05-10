@@ -3,7 +3,7 @@
 	import { invalidateAll } from '$app/navigation';
 	import { authClient } from '$lib/auth-client';
 	import { promptSignIn } from '$lib/stores/sign-in-modal';
-	import { MessageCircle, Pencil, MoreHorizontal, Check, CornerUpLeft } from 'lucide-svelte';
+	import { MessageCircle, Pencil, MoreHorizontal, Check } from 'lucide-svelte';
 
 	let { data }: PageProps = $props();
 
@@ -23,36 +23,21 @@
 
 	const MAX_NEST_DEPTH = 3;
 
-	function buildCommentTree(flat: CommentRow[]): { comment: CommentRow; children: CommentRow[] }[] {
-		// Group by parent. Render top-level (parent null) with their full
-		// descendant trees flattened up to MAX_NEST_DEPTH visual layers.
-		const byParent = new Map<string | null, CommentRow[]>();
-		for (const c of flat) {
-			const key = c.parent_comment_id;
-			const arr = byParent.get(key) ?? [];
-			arr.push(c);
-			byParent.set(key, arr);
-		}
-		// We render via a recursive snippet, so just return top-level array.
-		const top = byParent.get(null) ?? [];
-		// Sort by created_at ascending within each level (the API already does
-		// this, but defensive).
-		top.sort((a, b) => a.created_at - b.created_at);
-		return top.map((c) => ({ comment: c, children: byParent.get(c.id) ?? [] }));
-	}
-
-	// Children of a given comment id, sorted ascending by created_at.
 	function childrenOf(commentsForPost: CommentRow[], commentId: string): CommentRow[] {
 		return commentsForPost
 			.filter((c) => c.parent_comment_id === commentId)
 			.sort((a, b) => a.created_at - b.created_at);
 	}
 
-	// Today's-prompt composer state.
+	function topLevelOf(commentsForPost: CommentRow[]): CommentRow[] {
+		return commentsForPost
+			.filter((c) => c.parent_comment_id === null)
+			.sort((a, b) => a.created_at - b.created_at);
+	}
+
 	let composerValue = $state('');
 	let posting = $state(false);
 
-	// Edit-mode for the viewer's own answer to today's prompt.
 	let editing = $state(false);
 	let editValue = $state('');
 	let savingEdit = $state(false);
@@ -67,7 +52,6 @@
 	$effect(() => {
 		if (!kebabOpen) return;
 		function onClickOutside() { kebabOpen = false; }
-		// Defer so the toggle click itself doesn't immediately close it.
 		const t = setTimeout(() => document.addEventListener('click', onClickOutside), 0);
 		return () => {
 			clearTimeout(t);
@@ -75,15 +59,10 @@
 		};
 	});
 
-	// World composer with two modes (Post / Ask). One textarea, one
-	// submit button; the active tab decides which endpoint we hit.
 	let worldTab = $state<'post' | 'ask'>('post');
 	let worldValue = $state('');
 	let postingWorld = $state(false);
 
-	// Browser-notification permission state. The actual web-push
-	// subscription wiring is a Phase 2 follow-up; for now we just hold
-	// the permission so the UI can reflect it.
 	type NotifyState = NotificationPermission | 'unsupported' | 'ios-pwa-required' | null;
 	let notificationPermission = $state<NotifyState>(null);
 	$effect(() => {
@@ -98,8 +77,6 @@
 			notificationPermission = Notification.permission;
 			return;
 		}
-		// iOS Safari hides the Notification API unless the page is
-		// installed to the home screen as a PWA (iOS 16.4+).
 		if (isIos && !isStandalone) {
 			notificationPermission = 'ios-pwa-required';
 			return;
@@ -117,9 +94,6 @@
 			const result = await Notification.requestPermission();
 			notificationPermission = result;
 			if (result === 'granted') {
-				// TODO(phase2): subscribe to web-push and persist on server
-				// so the cron worker can send "new prompt" / "new comment"
-				// pushes to this device.
 				new Notification('Sehyo notifications enabled', {
 					body: 'You’ll be told when a new question is posited.',
 					icon: '/pwa-192x192.png'
@@ -130,13 +104,18 @@
 		}
 	}
 
-	// Inline comment composer state.
-	let openCommentFor = $state<string | null>(null);
+	// Comments are eagerly hydrated by the server. The composer is opened
+	// by clicking the "comment" button on a post; the threads themselves
+	// always render.
+	let commentingOnPost = $state<string | null>(null);
 	let commentValue = $state('');
 	let submittingComment = $state(false);
-	let commentsByPost = $state<Record<string, CommentRow[]>>({});
 
-	// When non-null, indicates a reply composer is open under this comment id.
+	const commentsByPost = $derived<Record<string, CommentRow[]>>({
+		...((data as { todayCommentsByPost?: Record<string, CommentRow[]> }).todayCommentsByPost ?? {}),
+		...((data as { commentsByPost?: Record<string, CommentRow[]> }).commentsByPost ?? {})
+	});
+
 	let replyingTo = $state<string | null>(null);
 	let replyValue = $state('');
 	let submittingReply = $state(false);
@@ -147,7 +126,7 @@
 	const unlockedSet = $derived(new Set(data.unlockedAvatars ?? []));
 	function isAvatarRevealed(userId: string | undefined | null): boolean {
 		if (!userId) return false;
-		if (data.user?.id === userId) return true; // your own face is always visible
+		if (data.user?.id === userId) return true;
 		return unlockedSet.has(userId);
 	}
 	function avatarFor(image: string | null | undefined, seed: string): string {
@@ -278,26 +257,9 @@
 		}
 	}
 
-	async function loadComments(postId: string) {
-		try {
-			const res = await fetch(`/api/posts/${postId}/comments`, { credentials: 'include' });
-			if (!res.ok) return;
-			const body = await res.json();
-			commentsByPost = { ...commentsByPost, [postId]: body.comments ?? [] };
-		} catch (err) {
-			console.error('Load comments failed:', err);
-		}
-	}
-
-	async function toggleCommentBox(postId: string) {
-		if (openCommentFor === postId) {
-			openCommentFor = null;
-			commentValue = '';
-			return;
-		}
-		openCommentFor = postId;
+	function focusComposer(postId: string) {
+		commentingOnPost = postId;
 		commentValue = '';
-		loadComments(postId);
 	}
 
 	async function submitComment(postId: string, e: SubmitEvent) {
@@ -315,7 +277,7 @@
 			});
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			commentValue = '';
-			await loadComments(postId);
+			commentingOnPost = null;
 			await invalidateAll();
 		} catch (err) {
 			console.error('Comment failed:', err);
@@ -341,7 +303,6 @@
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			replyValue = '';
 			replyingTo = null;
-			await loadComments(postId);
 			await invalidateAll();
 		} catch (err) {
 			console.error('Reply failed:', err);
@@ -395,121 +356,21 @@
 				</div>
 			</form>
 		{:else}
-			<article class="answer my-answer">
-				{#if editing}
-					<textarea
-						bind:value={editValue}
-						rows="3"
-						maxlength="2000"
-						disabled={savingEdit || deleting}
-						class="edit-textarea"
-					></textarea>
-					<div class="edit-bar">
-						<button
-							type="button"
-							class="post-button small"
-							onclick={saveEdit}
-							disabled={savingEdit || deleting || editValue.trim().length === 0}
-						>
-							<Check size="16" strokeWidth="2.2" />
-							{savingEdit ? 'Saving…' : 'Save'}
-						</button>
-						<div class="popover-container">
-							<button
-								type="button"
-								class="kebab"
-								aria-label="More actions"
-								aria-expanded={kebabOpen}
-								onclick={toggleKebab}
-								disabled={savingEdit || deleting}
-							>
-								<MoreHorizontal size="18" strokeWidth="2" />
-							</button>
-							{#if kebabOpen}
-								<div class="popover" role="menu">
-									<button type="button" class="popover-item" onclick={cancelEdit} role="menuitem">
-										Cancel
-									</button>
-									<button
-										type="button"
-										class="popover-item destructive"
-										onclick={deleteAnswer}
-										role="menuitem"
-										disabled={deleting}
-									>
-										{deleting ? 'Deleting…' : 'Delete'}
-									</button>
-								</div>
-							{/if}
-						</div>
-					</div>
-				{:else}
-					<header class="author-row author-row-with-avatar">
-						{#if data.user}
-							{@render avatar(data.user.id, (data.user as { image?: string | null }).image, 'md')}
-						{/if}
-						<span class="author-inline">
-							{#if data.user?.username}
-								<a class="author author-link" href="/{data.user.username}">{data.user?.name ?? 'You'}</a>
-								<a class="handle" href="/{data.user.username}">@{data.user.username}</a>
-							{:else}
-								<span class="author">{data.user?.name ?? 'You'}</span>
-							{/if}
-							{#if isAnon}
-								<button
-									type="button"
-									class="edit-name"
-									aria-label="Change your name"
-									onclick={changeMyName}
-								>
-									<Pencil size="13" strokeWidth="1.8" />
-								</button>
-							{/if}
-						</span>
-					</header>
-					<p class="answer-body">{data.myAnswer.content}</p>
-					<footer class="answer-foot">
-						<button
-							type="button"
-							class="comment-button"
-							onclick={() => toggleCommentBox(data.myAnswer!.id)}
-							aria-label="Comment"
-						>
-							<MessageCircle size="18" strokeWidth="1.7" />
-							{#if data.myAnswer.comment_count > 0}<span class="count">{data.myAnswer.comment_count}</span>{/if}
-						</button>
-						<button
-							type="button"
-							class="comment-button"
-							onclick={startEdit}
-							aria-label="Edit answer"
-						>
-							<Pencil size="16" strokeWidth="1.8" />
-						</button>
-					</footer>
-
-					{#if data.myAnswer.comment_count > 0 && !isFullySignedIn}
-						<!-- Guest preview: render the thread but blur EVERY
-						     comment until the user signs in with Google. -->
-						<div class="guest-locked">
-							{@render commentThread(data.myAnswer.id)}
-							<div class="guest-locked-cta">
-								<span class="guest-locked-text">
-									<button type="button" class="guest-locked-link" onclick={() => promptSignIn('Sign in to read the comments on your response.')}>Sign in</button>
-									to read the comments on your response.
-								</span>
-							</div>
-						</div>
-					{:else if openCommentFor === data.myAnswer.id || (data.myAnswer.comment_count > 0 && isFullySignedIn)}
-						{@render commentThread(data.myAnswer.id)}
-					{/if}
-				{/if}
-			</article>
+			{@render postArticle({
+				id: data.myAnswer.id,
+				user_id: data.myAnswer.user_id,
+				content: data.myAnswer.content,
+				display_name: data.user?.name ?? 'You',
+				username: data.user?.username ?? null,
+				bot_id: null,
+				image: (data.user as { image?: string | null } | null)?.image ?? null,
+				comment_count: data.myAnswer.comment_count
+			}, { isMine: true })}
 		{/if}
 
 		<section class="answers">
 			{#each data.answers as a (a.id)}
-				{@render postCard(a)}
+				{@render postArticle(a, { isMine: false })}
 			{/each}
 		</section>
 
@@ -532,8 +393,6 @@
 				{/if}
 			</p>
 
-			<!-- Transition into the global posting space. Full-width line +
-			     a quiet word announces this isn't the daily prompt. -->
 			<hr class="world-divider" />
 			<h2 class="world-label">World</h2>
 
@@ -584,7 +443,7 @@
 							{#if p.is_question}
 								{@render userQuestionCard(p)}
 							{:else}
-								{@render worldPostCard(p)}
+								{@render postArticle(p, { isMine: false })}
 							{/if}
 						{/each}
 					</div>
@@ -592,8 +451,6 @@
 			</section>
 		{/if}
 
-		<!-- Sign-in toast: when the viewer's own answer has bot replies
-		     they can't read because they're not Google-signed-in. -->
 		{#if !isFullySignedIn && data.myAnswer && data.myAnswer.comment_count > 0}
 			<div class="signin-toast" role="status">
 				<span>{data.myAnswer.comment_count} {data.myAnswer.comment_count === 1 ? 'person' : 'people'} responded to your answer.</span>
@@ -602,7 +459,6 @@
 			</div>
 		{/if}
 
-		<!-- Past days, scroll-back style. -->
 		{#if data.pastDays.length > 0}
 			<div class="past">
 				{#each data.pastDays as day (day.prompt.id)}
@@ -612,7 +468,7 @@
 						{#if day.answers.length > 0}
 							<div class="answers">
 								{#each day.answers as a (a.id)}
-									{@render postCard(a)}
+									{@render postArticle(a, { isMine: false })}
 								{/each}
 							</div>
 						{:else}
@@ -625,16 +481,28 @@
 	{/if}
 </main>
 
-{#snippet avatar(userId: string, image: string | null | undefined, size: 'sm' | 'md' = 'md')}
+<!-- ─────────────────────────────────────────────────────────────────
+	 Twitter-style row. Avatar in a fixed-width left column, name +
+	 @handle + body + actions stacked in the right column. Used for
+	 every post and every comment. The optional `hasThread` flag
+	 grows the avatar column into a dropping vertical line so child
+	 replies can hook into it visually.
+	 ───────────────────────────────────────────────────────────────── -->
+{#snippet avatar(userId: string, image: string | null | undefined)}
 	{@const revealed = isAvatarRevealed(userId)}
-	<span class="avatar-frame avatar-{size}" class:locked={!revealed} aria-hidden="true">
-		<img src={avatarFor(image, userId)} alt="" class="avatar-img" loading="lazy" />
+	<span class="tw-avatar" class:locked={!revealed} aria-hidden="true">
+		<img src={avatarFor(image, userId)} alt="" class="tw-avatar-img" loading="lazy" />
 	</span>
 {/snippet}
 
-{#snippet authorName(displayName: string | null, isOwn: boolean)}
-	<span class="author-inline">
-		<span class="author author-mask">{displayName ?? 'Anonymous'}</span>
+{#snippet authorMeta(displayName: string | null | undefined, username: string | null | undefined, isOwn: boolean)}
+	<header class="tw-meta">
+		{#if username}
+			<a class="tw-name" href="/{username}">{displayName ?? 'Anonymous'}</a>
+			<a class="tw-handle" href="/{username}">@{username}</a>
+		{:else}
+			<span class="tw-name">{displayName ?? 'Anonymous'}</span>
+		{/if}
 		{#if isOwn && isAnon}
 			<button
 				type="button"
@@ -642,10 +510,10 @@
 				aria-label="Change your name"
 				onclick={changeMyName}
 			>
-				<Pencil size="12" strokeWidth="1.8" />
+				<Pencil size="13" strokeWidth="1.8" />
 			</button>
 		{/if}
-	</span>
+	</header>
 {/snippet}
 
 {#snippet commentNode(c: CommentRow, postId: string, depth: number)}
@@ -653,58 +521,53 @@
 	{@const kids = childrenOf(all, c.id)}
 	{@const hasKids = kids.length > 0}
 	{@const ownComment = !!data.user && c.user_id === data.user.id}
-	<li class="comment-card" class:has-children={hasKids}>
-		<header class="comment-header">
-			{@render avatar(c.user_id, c.user?.profile_picture_url, 'sm')}
-			{#if c.user?.username}
-				<a class="comment-author author-mask author-link" href="/{c.user.username}">{c.user.display_name ?? 'Anonymous'}</a>
-				<a class="handle handle-small" href="/{c.user.username}">@{c.user.username}</a>
-			{:else}
-				<span class="comment-author author-mask">{c.user?.display_name ?? 'Anonymous'}</span>
-			{/if}
-			{#if ownComment && isAnon}
-				<button
-					type="button"
-					class="edit-name comment-edit-name"
-					aria-label="Change your name"
-					onclick={changeMyName}
-				>
-					<Pencil size="11" strokeWidth="1.8" />
-				</button>
-			{/if}
-		</header>
-		<p class="comment-body">{c.content}</p>
-		<footer class="comment-card-foot">
-			<button
-				type="button"
-				class="comment-button"
-				onclick={() => toggleReply(c.id)}
-				aria-label={replyingTo === c.id ? 'Cancel reply' : 'Reply'}
-			>
-				<MessageCircle size="16" strokeWidth="1.7" />
-				{#if hasKids}<span class="count">{kids.length}</span>{/if}
-			</button>
-		</footer>
+	<li class="tw-item" class:has-thread={hasKids}>
+		<div class="tw-row tw-row-comment is-reply">
+			<div class="tw-left">
+				{#if c.user?.username}
+					<a class="tw-avatar-link" href="/{c.user.username}" aria-label={c.user.display_name ?? 'Profile'}>
+						{@render avatar(c.user_id, c.user?.profile_picture_url)}
+					</a>
+				{:else}
+					{@render avatar(c.user_id, c.user?.profile_picture_url)}
+				{/if}
+			</div>
+			<div class="tw-main">
+				{@render authorMeta(c.user?.display_name, c.user?.username, ownComment)}
+				<p class="tw-body">{c.content}</p>
+				<footer class="tw-foot">
+					<button
+						type="button"
+						class="tw-action"
+						onclick={() => toggleReply(c.id)}
+						aria-label={replyingTo === c.id ? 'Cancel reply' : 'Reply'}
+					>
+						<MessageCircle size="16" strokeWidth="1.7" />
+						{#if hasKids}<span class="count">{kids.length}</span>{/if}
+					</button>
+				</footer>
 
-		{#if replyingTo === c.id}
-			<form class="reply-composer" onsubmit={(e) => submitReply(postId, c.id, e)}>
-				<textarea
-					bind:value={replyValue}
-					placeholder="Reply…"
-					rows="2"
-					maxlength="1000"
-					disabled={submittingReply}
-				></textarea>
-				<button
-					type="submit"
-					class="post-button small"
-					disabled={submittingReply || replyValue.trim().length === 0}
-				>{submittingReply ? '…' : 'Reply'}</button>
-			</form>
-		{/if}
+				{#if replyingTo === c.id}
+					<form class="reply-composer" onsubmit={(e) => submitReply(postId, c.id, e)}>
+						<textarea
+							bind:value={replyValue}
+							placeholder="Reply…"
+							rows="2"
+							maxlength="1000"
+							disabled={submittingReply}
+						></textarea>
+						<button
+							type="submit"
+							class="post-button small"
+							disabled={submittingReply || replyValue.trim().length === 0}
+						>{submittingReply ? '…' : 'Reply'}</button>
+					</form>
+				{/if}
+			</div>
+		</div>
 
 		{#if hasKids}
-			<ul class="reply-list" class:capped={depth + 1 >= MAX_NEST_DEPTH}>
+			<ul class="tw-children" class:capped={depth + 1 >= MAX_NEST_DEPTH}>
 				{#each kids as child (child.id)}
 					{#if depth + 1 < MAX_NEST_DEPTH}
 						{@render commentNode(child, postId, depth + 1)}
@@ -717,127 +580,203 @@
 	</li>
 {/snippet}
 
-{#snippet commentThread(postId: string)}
-	{@const all = commentsByPost[postId] ?? []}
-	{@const tops = all.filter((c) => c.parent_comment_id === null).sort((a, b) => a.created_at - b.created_at)}
-	<div class="comment-thread">
-		{#if tops.length > 0}
-			<ul class="comment-tree">
+{#snippet postArticle(
+	a: { id: string; user_id: string; content: string; display_name: string | null; username?: string | null; bot_id: string | null; image?: string | null; comment_count: number },
+	opts: { isMine?: boolean }
+)}
+	{@const isMine = !!opts?.isMine}
+	{@const all = commentsByPost[a.id] ?? []}
+	{@const tops = topLevelOf(all)}
+	{@const hasTops = tops.length > 0}
+	{@const guestLocked = isMine && hasTops && !isFullySignedIn}
+	<article class="tw-item tw-post" class:has-thread={hasTops || isMine || commentingOnPost === a.id}>
+		{#if isMine && editing}
+			<div class="tw-row tw-row-post">
+				<div class="tw-left">
+					{#if data.user}
+						{@render avatar(data.user.id, (data.user as { image?: string | null }).image)}
+					{/if}
+				</div>
+				<div class="tw-main">
+					{@render authorMeta(a.display_name, a.username, true)}
+					<textarea
+						bind:value={editValue}
+						rows="3"
+						maxlength="2000"
+						disabled={savingEdit || deleting}
+						class="edit-textarea"
+					></textarea>
+					<div class="edit-bar">
+						<button
+							type="button"
+							class="post-button small"
+							onclick={saveEdit}
+							disabled={savingEdit || deleting || editValue.trim().length === 0}
+						>
+							<Check size="16" strokeWidth="2.2" />
+							{savingEdit ? 'Saving…' : 'Save'}
+						</button>
+						<div class="popover-container">
+							<button
+								type="button"
+								class="kebab"
+								aria-label="More actions"
+								aria-expanded={kebabOpen}
+								onclick={toggleKebab}
+								disabled={savingEdit || deleting}
+							>
+								<MoreHorizontal size="18" strokeWidth="2" />
+							</button>
+							{#if kebabOpen}
+								<div class="popover" role="menu">
+									<button type="button" class="popover-item" onclick={cancelEdit} role="menuitem">
+										Cancel
+									</button>
+									<button
+										type="button"
+										class="popover-item destructive"
+										onclick={deleteAnswer}
+										role="menuitem"
+										disabled={deleting}
+									>
+										{deleting ? 'Deleting…' : 'Delete'}
+									</button>
+								</div>
+							{/if}
+						</div>
+					</div>
+				</div>
+			</div>
+		{:else}
+			<div class="tw-row tw-row-post">
+				<div class="tw-left">
+					{#if a.username}
+						<a class="tw-avatar-link" href="/{a.username}" aria-label={a.display_name ?? 'Profile'}>
+							{@render avatar(a.user_id, a.image)}
+						</a>
+					{:else}
+						{@render avatar(a.user_id, a.image)}
+					{/if}
+				</div>
+				<div class="tw-main">
+					{@render authorMeta(a.display_name, a.username, isMine)}
+					<p class="tw-body">{a.content}</p>
+					<footer class="tw-foot">
+						<button
+							type="button"
+							class="tw-action"
+							onclick={() => focusComposer(a.id)}
+							aria-label="Comment"
+						>
+							<MessageCircle size="18" strokeWidth="1.7" />
+							{#if a.comment_count > 0}<span class="count">{a.comment_count}</span>{/if}
+						</button>
+						{#if isMine}
+							<button
+								type="button"
+								class="tw-action"
+								onclick={startEdit}
+								aria-label="Edit answer"
+							>
+								<Pencil size="16" strokeWidth="1.8" />
+							</button>
+						{/if}
+					</footer>
+				</div>
+			</div>
+		{/if}
+
+		{#if hasTops}
+			<ul class="tw-children" class:guest-locked={guestLocked}>
 				{#each tops as c (c.id)}
-					{@render commentNode(c, postId, 0)}
+					{@render commentNode(c, a.id, 0)}
 				{/each}
 			</ul>
+
+			{#if guestLocked}
+				<div class="guest-locked-cta">
+					<span class="guest-locked-text">
+						<button type="button" class="guest-locked-link" onclick={() => promptSignIn('Sign in to read the comments on your response.')}>Sign in</button>
+						to read the comments on your response.
+					</span>
+				</div>
+			{/if}
 		{/if}
-		<form class="comment-composer" onsubmit={(e) => submitComment(postId, e)}>
-			<textarea
-				bind:value={commentValue}
-				placeholder="Add a comment…"
-				rows="2"
-				maxlength="1000"
-				disabled={submittingComment}
-			></textarea>
-			<button
-				type="submit"
-				class="post-button small"
-				disabled={submittingComment || commentValue.trim().length === 0}
-			>{submittingComment ? '…' : 'Post'}</button>
-		</form>
-	</div>
-{/snippet}
 
-{#snippet worldPostCard(p: { id: string; user_id: string; content: string; display_name: string | null; username?: string | null; bot_id: string | null; image?: string | null; comment_count: number })}
-	<article class="world-post">
-		<div class="world-post-head">
-			{@render avatar(p.user_id, p.image, 'md')}
-			<p class="world-post-from">
-				{#if p.username}
-					<a class="world-post-name author-mask author-link" href="/{p.username}">{p.display_name ?? 'Anonymous'}</a>
-					<a class="handle handle-inline" href="/{p.username}">@{p.username}</a>
-				{:else}
-					<span class="world-post-name author-mask">{p.display_name ?? 'Anonymous'}</span>
-				{/if}
-			</p>
-		</div>
-		<p class="world-post-text">{p.content}</p>
-		<footer class="answer-foot">
-			<button
-				type="button"
-				class="comment-button"
-				onclick={() => toggleCommentBox(p.id)}
-				aria-label="Comment"
-			>
-				<MessageCircle size="18" strokeWidth="1.7" />
-				{#if p.comment_count > 0}<span class="count">{p.comment_count}</span>{/if}
-			</button>
-		</footer>
-
-		{#if openCommentFor === p.id}
-			{@render commentThread(p.id)}
+		{#if commentingOnPost === a.id && !guestLocked}
+			<form class="comment-composer" onsubmit={(e) => submitComment(a.id, e)}>
+				<textarea
+					bind:value={commentValue}
+					placeholder="Add a comment…"
+					rows="2"
+					maxlength="1000"
+					disabled={submittingComment}
+				></textarea>
+				<button
+					type="submit"
+					class="post-button small"
+					disabled={submittingComment || commentValue.trim().length === 0}
+				>{submittingComment ? '…' : 'Post'}</button>
+			</form>
 		{/if}
 	</article>
 {/snippet}
 
 {#snippet userQuestionCard(q: { id: string; user_id: string; content: string; display_name: string | null; username?: string | null; bot_id: string | null; image?: string | null; comment_count: number })}
-	<article class="user-question">
-		<div class="world-post-head">
-			{@render avatar(q.user_id, q.image, 'md')}
-			<p class="user-question-from">
-				From
+	{@const all = commentsByPost[q.id] ?? []}
+	{@const tops = topLevelOf(all)}
+	{@const hasTops = tops.length > 0}
+	<article class="tw-item user-question" class:has-thread={hasTops || commentingOnPost === q.id}>
+		<div class="tw-row tw-row-post">
+			<div class="tw-left">
 				{#if q.username}
-					<a class="user-question-name author-mask author-link" href="/{q.username}">{q.display_name ?? 'Anonymous'}</a>
-					<a class="handle handle-inline" href="/{q.username}">@{q.username}</a>
+					<a class="tw-avatar-link" href="/{q.username}" aria-label={q.display_name ?? 'Profile'}>
+						{@render avatar(q.user_id, q.image)}
+					</a>
 				{:else}
-					<span class="user-question-name author-mask">{q.display_name ?? 'Anonymous'}</span>
+					{@render avatar(q.user_id, q.image)}
 				{/if}
-			</p>
+			</div>
+			<div class="tw-main">
+				{@render authorMeta(q.display_name, q.username, false)}
+				<h3 class="user-question-text">{q.content}</h3>
+				<footer class="tw-foot">
+					<button
+						type="button"
+						class="tw-action"
+						onclick={() => focusComposer(q.id)}
+						aria-label="Reply"
+					>
+						<MessageCircle size="18" strokeWidth="1.7" />
+						{#if q.comment_count > 0}<span class="count">{q.comment_count}</span>{/if}
+					</button>
+				</footer>
+			</div>
 		</div>
-		<h3 class="user-question-text">{q.content}</h3>
-		<footer class="answer-foot">
-			<button
-				type="button"
-				class="comment-button"
-				onclick={() => toggleCommentBox(q.id)}
-				aria-label="Reply"
-			>
-				<MessageCircle size="18" strokeWidth="1.7" />
-				{#if q.comment_count > 0}<span class="count">{q.comment_count}</span>{/if}
-			</button>
-		</footer>
 
-		{#if openCommentFor === q.id}
-			{@render commentThread(q.id)}
+		{#if hasTops}
+			<ul class="tw-children">
+				{#each tops as c (c.id)}
+					{@render commentNode(c, q.id, 0)}
+				{/each}
+			</ul>
 		{/if}
-	</article>
-{/snippet}
 
-{#snippet postCard(a: { id: string; user_id: string; content: string; display_name: string | null; username?: string | null; bot_id: string | null; image?: string | null; comment_count: number })}
-	<article class="answer">
-		<header class="author-row author-row-with-avatar">
-			{@render avatar(a.user_id, a.image, 'md')}
-			<span class="author-inline">
-				{#if a.username}
-					<a class="author author-mask author-link" href="/{a.username}">{a.display_name ?? 'Anonymous'}</a>
-					<a class="handle" href="/{a.username}">@{a.username}</a>
-				{:else}
-					<span class="author author-mask">{a.display_name ?? 'Anonymous'}</span>
-				{/if}
-			</span>
-		</header>
-		<p class="answer-body">{a.content}</p>
-		<footer class="answer-foot">
-			<button
-				type="button"
-				class="comment-button"
-				onclick={() => toggleCommentBox(a.id)}
-				aria-label="Comment"
-			>
-				<MessageCircle size="18" strokeWidth="1.7" />
-				{#if a.comment_count > 0}<span class="count">{a.comment_count}</span>{/if}
-			</button>
-		</footer>
-
-		{#if openCommentFor === a.id}
-			{@render commentThread(a.id)}
+		{#if commentingOnPost === q.id}
+			<form class="comment-composer" onsubmit={(e) => submitComment(q.id, e)}>
+				<textarea
+					bind:value={commentValue}
+					placeholder="Add a comment…"
+					rows="2"
+					maxlength="1000"
+					disabled={submittingComment}
+				></textarea>
+				<button
+					type="submit"
+					class="post-button small"
+					disabled={submittingComment || commentValue.trim().length === 0}
+				>{submittingComment ? '…' : 'Post'}</button>
+			</form>
 		{/if}
 	</article>
 {/snippet}
@@ -849,20 +788,17 @@
 		padding: 120px 24px 96px;
 	}
 
-	/* Inner blocks keep the comfortable 640px reading column. The prompt
-	   headlines below break out wider on desktop. */
 	.composer,
-	.my-answer,
 	.answers,
 	.free-section,
-	.past-date {
+	.past-date,
+	.tw-post,
+	.user-question {
 		max-width: 640px;
 		margin-left: auto;
 		margin-right: auto;
 	}
 
-	/* Today's prompt — thin and centered, wider than the body column on
-	   desktop so the question has room to breathe. */
 	.prompt-today {
 		font-family: var(--font-sans);
 		font-weight: 100;
@@ -875,12 +811,9 @@
 		max-width: 1000px;
 	}
 	@media (min-width: 768px) {
-		.prompt-today {
-			padding-bottom: 40px;
-		}
+		.prompt-today { padding-bottom: 40px; }
 	}
 
-	/* Past prompts — same thin treatment, scaled down. */
 	.prompt-past {
 		font-family: var(--font-sans);
 		font-weight: 100;
@@ -893,20 +826,21 @@
 	}
 
 	.composer { margin-bottom: 56px; }
-	.composer textarea, .edit-textarea, .comment-composer textarea {
+	.composer textarea, .edit-textarea, .comment-composer textarea, .reply-composer textarea {
 		width: 100%;
 		font-family: var(--font-sans);
-		font-size: 17px;
+		font-size: 16px;
 		line-height: 1.5;
-		padding: 14px 16px;
+		padding: 12px 14px;
 		border-radius: 12px;
 		border: 1px solid var(--border);
 		background: var(--card);
 		color: var(--card-foreground);
 		resize: vertical;
-		min-height: 96px;
+		min-height: 88px;
 	}
-	.composer textarea:focus, .edit-textarea:focus, .comment-composer textarea:focus {
+	.composer textarea { min-height: 96px; font-size: 17px; padding: 14px 16px; }
+	.composer textarea:focus, .edit-textarea:focus, .comment-composer textarea:focus, .reply-composer textarea:focus {
 		outline: 2px solid var(--ring);
 		outline-offset: -1px;
 	}
@@ -921,7 +855,7 @@
 		justify-content: flex-start;
 		align-items: center;
 		gap: 8px;
-		margin-top: 12px;
+		margin-top: 10px;
 	}
 	.post-button {
 		appearance: none;
@@ -939,26 +873,219 @@
 	}
 	.post-button.small { padding: 8px 14px; font-size: 14px; }
 	.post-button:disabled { opacity: 0.4; cursor: not-allowed; }
-	.ghost-button {
+
+	/* ──────────────────────────────────────────────────────────────
+	   Twitter-style row
+	   tw-item is the recursive container (post OR comment). It holds
+	   one tw-row plus optional tw-children (replies). Avatar lives in
+	   the left column at a fixed width; everything else (name, body,
+	   actions) stacks in the right column. Sizes match across posts
+	   and comments by design — comments are not "smaller posts".
+
+	   Threading: an item with replies grows a vertical line in its
+	   left column (left:21px, descending from below the avatar). Each
+	   reply hooks into that line via an L-connector with a rounded
+	   bottom-left corner.
+	   ────────────────────────────────────────────────────────────── */
+	.tw-item {
+		list-style: none;
+		position: relative;
+		padding: 0;
+	}
+	.tw-post {
+		padding: 18px 0;
+		border-top: 1px solid var(--border);
+	}
+	.tw-row {
+		display: flex;
+		gap: 12px;
+		align-items: flex-start;
+	}
+	.tw-left {
+		flex-shrink: 0;
+		width: 44px;
+	}
+	.tw-avatar-link {
+		display: block;
+		width: 44px;
+		height: 44px;
+		border-radius: 999px;
+		overflow: hidden;
+	}
+	.tw-avatar {
+		display: block;
+		width: 44px;
+		height: 44px;
+		border-radius: 999px;
+		overflow: hidden;
+		background: var(--muted);
+		position: relative;
+	}
+	.tw-avatar-img {
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		transition: filter 220ms ease, transform 220ms ease;
+	}
+	.tw-avatar.locked .tw-avatar-img {
+		filter: blur(8px);
+		transform: scale(1.18);
+	}
+	.tw-main {
+		flex: 1;
+		min-width: 0;
+	}
+	.tw-meta {
+		display: flex;
+		align-items: baseline;
+		gap: 6px;
+		flex-wrap: wrap;
+		margin-bottom: 2px;
+	}
+	.tw-name {
+		font-weight: 600;
+		font-size: 15px;
+		color: var(--foreground);
+		text-decoration: none;
+	}
+	.tw-name:hover { text-decoration: underline; }
+	.tw-handle {
+		font-size: 13px;
+		color: var(--muted-foreground);
+		text-decoration: none;
+		font-weight: 500;
+	}
+	.tw-handle:hover { text-decoration: underline; }
+
+	.tw-body {
+		font-family: var(--font-sans);
+		font-size: 16px;
+		line-height: 1.55;
+		color: var(--foreground);
+		margin: 2px 0 0;
+		white-space: pre-wrap;
+		word-wrap: break-word;
+	}
+
+	.tw-foot {
+		margin-top: 8px;
+		display: flex;
+		gap: 4px;
+	}
+	.tw-action {
 		appearance: none;
 		border: 0;
-		padding: 8px 14px;
-		border-radius: 999px;
 		background: transparent;
 		color: var(--muted-foreground);
-		font-weight: 600;
-		font-size: 14px;
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 6px 8px;
+		border-radius: 999px;
 		cursor: pointer;
+		font-size: 13px;
+		transition: color 120ms ease, background 120ms ease;
 	}
-	.ghost-button:hover { color: var(--foreground); }
-	.ghost-button:disabled { opacity: 0.4; cursor: not-allowed; }
+	.tw-action:hover { color: var(--foreground); background: var(--muted); }
+	.count { font-weight: 600; line-height: 1; }
 
-	/* The viewer's own answer reuses .answer styling so it sits in the
-	   feed identically (single border-top, same padding). The single
-	   horizontal line above is provided by the next sibling's
-	   border-top — no duplicate underline. */
-	.my-answer {
+	/* Threading: vertical line in the left column extending below
+	   the avatar to the bottom of the item (which contains the
+	   children). Each child reply gets an L-connector hooking into
+	   this line. */
+	.tw-item.has-thread::before {
+		content: '';
+		position: absolute;
+		left: 21px;
+		top: 60px;
+		bottom: 0;
+		width: 2px;
+		background: var(--border);
+		border-radius: 999px;
+		pointer-events: none;
+	}
+
+	.tw-children {
+		list-style: none;
+		padding: 0;
+		margin: 12px 0 0 56px; /* indent past parent's avatar+gap */
 		position: relative;
+	}
+	.tw-children > .tw-item {
+		padding: 12px 0;
+	}
+	/* L-connector from parent's vertical line into this reply's
+	   avatar mid-height. Drawn as a small box with two borders +
+	   rounded corner. */
+	.tw-children > .tw-item::after {
+		content: '';
+		position: absolute;
+		left: -35px;
+		top: -12px;
+		width: 35px;
+		height: 36px;
+		border-left: 2px solid var(--border);
+		border-bottom: 2px solid var(--border);
+		border-bottom-left-radius: 14px;
+		pointer-events: none;
+	}
+	/* The last child gets the L too, but we hide the parent's
+	   continuation line below it by overlaying a same-color block. */
+	.tw-children > .tw-item:last-child::before {
+		content: '';
+		position: absolute;
+		left: -36px;
+		top: 22px;
+		bottom: -2px;
+		width: 4px;
+		background: var(--background);
+		pointer-events: none;
+		z-index: 1;
+	}
+	/* But if THIS child has its own replies, it needs its own
+	   ::before for its own vertical line — the override above
+	   would clobber that. Re-establish it inside this scope.
+	   We use :where to keep specificity low. */
+	.tw-children > .tw-item.has-thread:last-child::before {
+		left: 21px;
+		top: 60px;
+		bottom: 0;
+		background: var(--border);
+		width: 2px;
+		z-index: 0;
+	}
+	.tw-children.capped {
+		margin-left: 56px; /* same indent at depth cap */
+	}
+
+	.reply-composer,
+	.comment-composer {
+		display: flex;
+		gap: 8px;
+		align-items: flex-end;
+		margin: 12px 0 0 56px;
+	}
+	.reply-composer { margin-top: 8px; }
+	.reply-composer textarea, .comment-composer textarea {
+		flex: 1;
+		min-height: 54px;
+	}
+
+	/* My-answer edit-mode textarea reuses the look of regular composer */
+	.edit-textarea {
+		width: 100%;
+		font-family: var(--font-sans);
+		font-size: 16px;
+		line-height: 1.55;
+		padding: 12px 14px;
+		border-radius: 12px;
+		border: 1px solid var(--border);
+		background: var(--card);
+		color: var(--card-foreground);
+		resize: vertical;
+		min-height: 88px;
+		margin-top: 4px;
 	}
 
 	.popover-container {
@@ -1011,261 +1138,7 @@
 	.popover-item:disabled { opacity: 0.5; cursor: not-allowed; }
 
 	.answers { display: flex; flex-direction: column; }
-	.answer {
-		padding: 20px 0;
-		border-top: 1px solid var(--border);
-	}
-	.author-row {
-		font-size: 13px;
-		color: var(--muted-foreground);
-		margin-bottom: 6px;
-	}
-	.author { font-weight: 600; }
-	.author.you { color: var(--foreground); }
-	.answer-body {
-		font-family: var(--font-sans);
-		font-size: 16px;
-		line-height: 1.5;
-		color: var(--foreground);
-		margin: 0;
-		white-space: pre-wrap;
-	}
-	.answer-foot {
-		margin-top: 12px;
-		display: flex;
-		justify-content: flex-end;
-	}
-	.comment-button {
-		appearance: none;
-		border: 0;
-		background: transparent;
-		color: var(--muted-foreground);
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		padding: 6px 8px;
-		border-radius: 999px;
-		cursor: pointer;
-		font-size: 13px;
-		transition: color 120ms ease, background 120ms ease;
-	}
-	.comment-button:hover { color: var(--foreground); background: var(--muted); }
-	.count { font-weight: 600; line-height: 1; }
 
-	.comment-thread {
-		margin-top: 14px;
-		padding-top: 14px;
-		border-top: 1px dashed var(--border);
-	}
-	/* ─────────────────────────────────────────────────────────────────
-	   Threaded comments. Each comment is a small post: header on top,
-	   body below, comment-button at the bottom-right.
-	   When a comment has replies, a vertical line drops down its left
-	   side, and each direct reply gets a horizontal hook connecting
-	   it to that line — the Reddit / HN threading idiom.
-	   ───────────────────────────────────────────────────────────────── */
-
-	.comment-tree {
-		list-style: none;
-		padding: 0;
-		margin: 0 0 16px;
-	}
-
-	.reply-list {
-		list-style: none;
-		padding: 0;
-		/* Indent for the threading line + hook to live in. The same
-		   indent applies whether or not a vertical line is drawn, so
-		   replies always sit at the same x-offset. */
-		margin: 6px 0 0 28px;
-	}
-	.reply-list.capped { margin-left: 28px; } /* same indent at depth cap */
-
-	.comment-card {
-		position: relative;
-		padding: 12px 0 8px 0;
-	}
-
-	/* Vertical thread line: only drawn when this comment has children
-	   underneath. Lives at left:11px, descending from below the
-	   header through the entire reply-list block. */
-	.comment-card.has-children::before {
-		content: '';
-		position: absolute;
-		left: 11px;
-		top: 30px;
-		bottom: 6px;
-		width: 1px;
-		background: var(--border);
-	}
-
-	/* Each reply (child of a reply-list) draws a small horizontal
-	   hook from the parent's vertical line into the reply's content
-	   area. */
-	.reply-list > .comment-card::after {
-		content: '';
-		position: absolute;
-		left: -17px;
-		top: 22px;
-		width: 14px;
-		height: 1px;
-		background: var(--border);
-		border-bottom-left-radius: 6px;
-	}
-
-	.comment-header {
-		display: flex;
-		align-items: baseline;
-		gap: 6px;
-		flex-wrap: wrap;
-		margin-bottom: 4px;
-	}
-	.comment-author {
-		font-size: 14px;
-		font-weight: 600;
-		color: var(--foreground);
-	}
-	.comment-body {
-		font-family: var(--font-sans);
-		font-size: 14px;
-		line-height: 1.5;
-		color: var(--foreground);
-		margin: 0;
-		white-space: pre-wrap;
-	}
-	.comment-card-foot {
-		margin-top: 6px;
-		display: flex;
-		justify-content: flex-end;
-	}
-	.comment-composer {
-		display: flex;
-		gap: 8px;
-		align-items: flex-end;
-	}
-	.comment-composer textarea,
-	.reply-composer textarea {
-		flex: 1;
-		/* 16px specifically — anything smaller and iOS Safari zooms the
-		   page on focus. */
-		font-size: 16px;
-		min-height: 60px;
-	}
-
-	.reply-composer {
-		display: flex;
-		gap: 8px;
-		align-items: flex-end;
-		margin-top: 8px;
-	}
-
-	.comment-row {
-		display: flex;
-		align-items: baseline;
-		flex-wrap: wrap;
-		gap: 6px;
-	}
-
-	.comment-foot {
-		margin-top: 4px;
-	}
-
-	.reply-button {
-		appearance: none;
-		border: 0;
-		background: transparent;
-		color: var(--muted-foreground);
-		font: inherit;
-		font-size: 12px;
-		font-weight: 500;
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
-		padding: 4px 6px;
-		border-radius: 6px;
-		cursor: pointer;
-	}
-	.reply-button:hover {
-		color: var(--foreground);
-		background: var(--muted);
-	}
-
-	/* Nested replies. Padding-left + a left border line to indicate
-	   nesting. After MAX_NEST_DEPTH layers we render flat in the same
-	   indent (.capped suppresses additional indent). */
-	.comment-list.nested {
-		list-style: none;
-		padding: 0;
-		margin: 8px 0 0 14px;
-		border-left: 1px solid var(--border);
-		padding-left: 12px;
-	}
-	.comment-list.nested.capped {
-		border-left: 0;
-		padding-left: 0;
-		margin-left: 0;
-	}
-
-	/* Pencil affordance next to the user's own (anonymous) name. */
-	/* ── Avatars ─────────────────────────────────────────────────────
-	   Lives wherever a name is rendered. Small (24px) in comments,
-	   medium (40px) in posts. The .locked variant clips an over-
-	   sized blurred image so the blur fade doesn't show at the
-	   circle's edge. */
-	.avatar-frame {
-		display: inline-block;
-		flex-shrink: 0;
-		border-radius: 999px;
-		overflow: hidden;
-		background: var(--muted);
-		position: relative;
-	}
-	.avatar-md { width: 36px; height: 36px; }
-	.avatar-sm { width: 24px; height: 24px; }
-	.avatar-img {
-		display: block;
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-		transition: filter 220ms ease, transform 220ms ease;
-	}
-	.avatar-frame.locked .avatar-img {
-		filter: blur(8px);
-		transform: scale(1.18);
-	}
-
-	.author-row-with-avatar {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-	}
-
-	.author-inline {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		flex-wrap: wrap;
-	}
-	.handle {
-		font-size: 12px;
-		color: var(--muted-foreground);
-		text-decoration: none;
-		font-weight: 500;
-	}
-	.handle:hover {
-		text-decoration: underline;
-	}
-	.handle-small { font-size: 11px; }
-	.handle-inline { margin-left: 4px; text-transform: none; letter-spacing: 0; }
-
-	/* Display-name link: foreground color, underline only on hover. */
-	.author-link {
-		color: var(--foreground);
-		text-decoration: none;
-	}
-	.author-link:hover {
-		text-decoration: underline;
-	}
 	.edit-name {
 		appearance: none;
 		border: 0;
@@ -1282,13 +1155,7 @@
 		color: var(--foreground);
 		background: var(--muted);
 	}
-	.comment-edit-name {
-		padding: 1px;
-	}
 
-	/* Soft gray nudge that surfaces below the answers feed once the
-	   viewer has answered today. The "Enable notifications" verb stays
-	   white so it reads as the actionable bit. */
 	.nudge {
 		max-width: 640px;
 		margin: 32px auto 0;
@@ -1316,10 +1183,6 @@
 		font-weight: 500;
 	}
 
-	/* Full-width section divider between the daily prompt zone and the
-	   global "World" zone. Negative side margins break out of the
-	   page's 24px padding so the line spans edge-to-edge of the
-	   viewport. */
 	.world-divider {
 		border: 0;
 		border-top: 1px solid var(--border);
@@ -1336,11 +1199,8 @@
 		margin: 32px auto 24px;
 		max-width: 640px;
 	}
-	.free-section {
-		margin-top: 0;
-	}
+	.free-section { margin-top: 0; }
 
-	/* Two-tab segmented control above the World composer. */
 	.world-tabs {
 		display: flex;
 		gap: 24px;
@@ -1367,82 +1227,23 @@
 		border-bottom-color: var(--foreground);
 	}
 
-	/* Free-form World posts get the same thin-large headline treatment
-	   as user-asked questions, just without the "FROM" eyebrow.
-	   The author tag sits as a small line above the body.
-	   Width is inherited from the .free-section parent (max-width
-	   640px); we don't constrain it again here, otherwise the flex
-	   parent (.world-feed) lets short posts shrink to content. */
-	.world-post {
-		width: 100%;
-		padding: 28px 0;
-		border-top: 1px solid var(--border);
-	}
-	.world-post-head {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		margin: 0 0 10px;
-	}
-	.world-post-from {
-		font-size: 13px;
-		color: var(--muted-foreground);
-		margin: 0;
-		font-weight: 500;
-	}
-	.world-post-name {
-		color: var(--foreground);
-		font-weight: 600;
-	}
-	.world-post-text {
-		font-family: var(--font-sans);
-		font-weight: 100;
-		letter-spacing: -0.018em;
-		font-size: clamp(22px, 3.6vw, 32px);
-		line-height: 1.2;
-		color: var(--foreground);
-		margin: 0;
-		white-space: pre-wrap;
-	}
-
-	/* User-asked questions in the World feed render with the same thin
-	   headline treatment as the daily prompt, but with a "From X" tag
-	   above so they read as user content, not system content. */
 	.user-question {
-		max-width: 640px;
-		margin: 0 auto;
-		padding: 28px 0;
+		padding: 22px 0;
 		border-top: 1px solid var(--border);
-	}
-	.user-question-from {
-		font-size: 12px;
-		font-weight: 500;
-		color: var(--muted-foreground);
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		margin: 0 0 12px;
-	}
-	.user-question-name {
-		color: var(--foreground);
-		text-transform: none;
-		letter-spacing: 0;
-		font-weight: 600;
 	}
 	.user-question-text {
 		font-family: var(--font-sans);
 		font-weight: 100;
-		letter-spacing: -0.022em;
-		font-size: clamp(28px, 5vw, 44px);
-		line-height: 1.1;
+		letter-spacing: -0.02em;
+		font-size: clamp(22px, 3.4vw, 30px);
+		line-height: 1.18;
 		color: var(--foreground);
-		margin: 0;
+		margin: 4px 0 0;
 	}
 
 	.world-feed { display: flex; flex-direction: column; }
 
-	.past {
-		margin-top: 96px;
-	}
+	.past { margin-top: 96px; }
 	.past-day {
 		max-width: 720px;
 		margin: 0 auto;
@@ -1477,11 +1278,8 @@
 		font-style: italic;
 	}
 
-	/* Guest-locked comment thread on the viewer's own answer: blur
-	   names, avatars, comment text. The italic gray "sign in" line
-	   sits underneath, with the verb itself in white so it reads as
-	   the action. */
-	.guest-locked > :global(.comment-thread) {
+	/* Guest sees their own comments thread but blurred. */
+	.tw-children.guest-locked {
 		filter: blur(5px);
 		user-select: none;
 		pointer-events: none;
@@ -1511,9 +1309,6 @@
 	}
 	.guest-locked-link:hover { opacity: 0.85; }
 
-	/* Bottom-of-screen toast: stays visible while the viewer hasn't
-	   signed in but their own answer has replies. Acts as the
-	   conversion-prompt that pushes them through Google sign-in. */
 	.signin-toast {
 		position: fixed;
 		left: 50%;

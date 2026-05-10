@@ -1,4 +1,5 @@
 import type { PageServerLoad } from './$types';
+import { loadCommentsForPosts } from '$lib/server/comments';
 
 interface AnswerRow {
 	id: string;
@@ -109,9 +110,23 @@ export const load: PageServerLoad = async ({ platform }) => {
 		.bind(startOfTodayUtc, startOfTomorrowUtc)
 		.all<AnswerRow>();
 
+	const todayFreePosts = freeRowsRes.results ?? [];
+
+	// Eagerly hydrate comments for everything visible on this page so
+	// threads paint without a click + roundtrip:
+	//   • each past-day's answers
+	//   • today's free-form posts and questions
+	const allPostIds: string[] = [];
+	for (const day of pastDays) {
+		for (const a of day.answers) allPostIds.push(a.id);
+	}
+	for (const p of todayFreePosts) allPostIds.push(p.id);
+	const commentsByPost = await loadCommentsForPosts(db, allPostIds);
+
 	return {
 		pastDays,
-		todayFreePosts: freeRowsRes.results ?? []
+		todayFreePosts,
+		commentsByPost
 	};
 };
 
