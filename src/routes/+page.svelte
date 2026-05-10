@@ -367,13 +367,16 @@
 		</section>
 
 		{#if data.myAnswer}
-			<!-- Free-form composer + today's free-form posts. Unlocked by
-			     having answered today's prompt. -->
+			<!-- Transition into the global posting space. Full-width line +
+			     a quiet word announces this isn't the daily prompt. -->
+			<hr class="world-divider" />
+			<h2 class="world-label">World</h2>
+
 			<section class="free-section">
 				<form class="composer" onsubmit={submitFreePost}>
 					<textarea
 						bind:value={freeValue}
-						placeholder="Post anything…"
+						placeholder="What's on your mind?"
 						rows="3"
 						maxlength="2000"
 						disabled={postingFree}
@@ -715,10 +718,28 @@
 		min-height: 60px;
 	}
 
-	.free-section {
-		margin-top: 56px;
-		padding-top: 32px;
+	/* Full-width section divider between the daily prompt zone and the
+	   global "World" zone. Negative side margins break out of the
+	   page's 24px padding so the line spans edge-to-edge of the
+	   viewport. */
+	.world-divider {
+		border: 0;
 		border-top: 1px solid var(--border);
+		margin: 64px -24px 0;
+	}
+	.world-label {
+		font-family: var(--font-sans);
+		font-weight: 100;
+		letter-spacing: -0.02em;
+		font-size: clamp(28px, 5vw, 44px);
+		line-height: 1.1;
+		text-align: center;
+		color: var(--foreground);
+		margin: 32px auto 24px;
+		max-width: 640px;
+	}
+	.free-section {
+		margin-top: 0;
 	}
 
 	.past {
