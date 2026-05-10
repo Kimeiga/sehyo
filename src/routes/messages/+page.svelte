@@ -4,17 +4,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Avatar, AvatarImage, AvatarFallback } from '$lib/components/ui/avatar';
-	import { MessageCircle, Send, Lock, CircleAlert } from 'lucide-svelte';
-	import {
-		storePrivateKey,
-		storePublicKey,
-		getStoredPrivateKey,
-		getStoredPublicKey,
-		hasEncryptionKeys,
-		encryptMessage,
-		decryptMessage,
-		type EncryptedMessage
-	} from '$lib/crypto';
+	import { MessageCircle, Send } from 'lucide-svelte';
 
 	interface Props {
 		data: {
@@ -41,22 +31,12 @@
 		id: string;
 		sender_id: string;
 		recipient_id: string;
-		cipher_text: string;
-		aes_key: string;
-		iv: string;
-		// Sender-side copy: present on messages sent AFTER the
-		// dual-encryption rollout. Lets the sender decrypt their
-		// own outgoing messages on reload.
-		sender_cipher_text: string | null;
-		sender_aes_key: string | null;
-		sender_iv: string | null;
+		content: string;
 		created_at: number;
 		read_at: number | null;
 		sender_username: string;
 		sender_display_name: string;
 		sender_profile_picture: string | null;
-		decrypted_text?: string;
-		decryption_error?: boolean;
 	}
 
 	let conversations = $state<Conversation[]>([]);
@@ -65,157 +45,46 @@
 	let newMessage = $state('');
 	let isLoading = $state(false);
 	let isSending = $state(false);
-	let isSettingUpEncryption = $state(false);
-	let encryptionSetup = $state(hasEncryptionKeys());
 	let messagesContainer = $state<HTMLDivElement>();
 
-	// Initialize encryption keys if not already set up
-	async function setupEncryption() {
-		if (hasEncryptionKeys()) {
-			encryptionSetup = true;
-			return;
-		}
-
-		isSettingUpEncryption = true;
-		try {
-			// For anonymous users or users without keys, generate keys server-side
-			// This ensures they can use messaging even if they're temporary accounts
-			const response = await fetch('/api/user/generate-keys', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' }
-			});
-
-			if (!response.ok) {
-				throw new Error('Failed to generate encryption keys');
-			}
-
-			const keys = await response.json();
-
-			// Store keys locally (private key NEVER sent to server, only returned once!)
-			storePrivateKey(keys.private_key);
-			storePublicKey(keys.public_key);
-
-			encryptionSetup = true;
-		} catch (error) {
-			console.error('Encryption setup error:', error);
-			alert('Failed to set up encryption. Please try again.');
-		} finally {
-			isSettingUpEncryption = false;
-		}
-	}
-
-	// Load conversations
 	async function loadConversations() {
 		try {
 			const response = await fetch('/api/messages/conversations');
 			if (!response.ok) throw new Error('Failed to load conversations');
-
-			const data = await response.json();
-			conversations = data.conversations;
-		} catch (error) {
-			console.error('Load conversations error:', error);
+			const body = await response.json();
+			conversations = body.conversations ?? [];
+		} catch (err) {
+			console.error('Load conversations error:', err);
 		}
 	}
 
-	// Load messages for a conversation
 	async function loadMessages(userId: string) {
 		isLoading = true;
 		try {
 			const response = await fetch(`/api/messages/${userId}`);
 			if (!response.ok) throw new Error('Failed to load messages');
-
-			// IMPORTANT: do NOT name this `data` — that shadows the
-			// component-level `data` prop, and the sender-id check
-			// below reads .user.id off this response object instead
-			// of off the actual session, leaving every outgoing
-			// message looking "not mine" and falling back to the
-			// recipient cipher (which the sender can't decrypt).
-			const responseBody = await response.json();
-			const allMessages = responseBody.messages as Message[];
-
-			// Decrypt messages. We swallow per-message decrypt errors
-			// silently — they happen when an older message was
-			// encrypted to a public key the viewer no longer holds the
-			// matching private key for (e.g. they cleared
-			// localStorage, signed in on a new device, or regenerated
-			// keys). These messages are unrecoverable from the
-			// viewer's side, so we drop them from the displayed list
-			// rather than littering the console with per-message
-			// stack traces.
-			const privateKey = getStoredPrivateKey();
-			let undecryptableCount = 0;
-			const decrypted: Message[] = [];
-			if (privateKey) {
-				for (const message of allMessages) {
-					// Pick the cipher copy that was encrypted to the
-					// viewer's pubkey. If we're the SENDER and a
-					// sender-side copy exists, use that; otherwise
-					// fall back to the recipient copy. (Old messages
-					// from before the dual-encryption rollout only
-					// have the recipient copy, so they remain
-					// undecryptable from the sender's side and get
-					// hidden as before.)
-					const isOwn = message.sender_id === data.user?.id;
-					const useSenderCopy =
-						isOwn &&
-						message.sender_cipher_text &&
-						message.sender_aes_key &&
-						message.sender_iv;
-					const encrypted: EncryptedMessage = useSenderCopy
-						? {
-							cipher_text: message.sender_cipher_text!,
-							aes_key: message.sender_aes_key!,
-							iv: message.sender_iv!
-						}
-						: {
-							cipher_text: message.cipher_text,
-							aes_key: message.aes_key,
-							iv: message.iv
-						};
-					try {
-						message.decrypted_text = await decryptMessage(encrypted, privateKey);
-						decrypted.push(message);
-					} catch {
-						undecryptableCount++;
-					}
-				}
-			} else {
-				decrypted.push(...allMessages);
-			}
-			if (undecryptableCount > 0) {
-				console.warn(
-					`messages: ${undecryptableCount} older message(s) couldn't be decrypted with the current key — hiding them.`
-				);
-			}
-			messages = decrypted;
-
-			// Scroll to bottom
+			const body = await response.json();
+			messages = (body.messages ?? []) as Message[];
 			setTimeout(() => {
-				if (messagesContainer) {
-					messagesContainer.scrollTop = messagesContainer.scrollHeight;
-				}
+				if (messagesContainer) messagesContainer.scrollTop = messagesContainer.scrollHeight;
 			}, 100);
-		} catch (error) {
-			console.error('Load messages error:', error);
+		} catch (err) {
+			console.error('Load messages error:', err);
 		} finally {
 			isLoading = false;
 		}
 	}
 
-	// Select a conversation. Mirrors the selection into the URL as
-	// `?with=<userId>` so the page can be reloaded / shared / opened
-	// in a new tab and land on the same conversation. Uses
-	// replaceState so the back button still walks the user out of
-	// /messages naturally instead of pogo-sticking through every
-	// conversation they clicked.
+	// Selecting a conversation mirrors the choice into the URL as
+	// `?with=<userId>` so reload / share / back behaves naturally.
+	// replaceState (not pushState) — we don't want each row click to
+	// add a history entry.
 	function selectConversation(conversation: Conversation) {
 		selectedConversation = conversation;
 		loadMessages(conversation.user_id);
 		if (typeof window !== 'undefined') {
 			const url = new URL(window.location.href);
 			url.searchParams.set('with', conversation.user_id);
-			// Drop any one-shot stub-creation params so the URL is
-			// the canonical form going forward.
 			url.searchParams.delete('to');
 			url.searchParams.delete('name');
 			url.searchParams.delete('handle');
@@ -224,80 +93,41 @@
 		}
 	}
 
-	// Send a message
 	async function sendMessage() {
 		if (!newMessage.trim() || !selectedConversation || isSending) return;
 
 		isSending = true;
 		const messageText = newMessage.trim();
 		newMessage = '';
-
 		try {
-			// Get recipient's public key
-			const recipientPublicKey = await fetch(`/api/user/${selectedConversation.user_id}/public-key`)
-				.then((r) => r.json())
-				.then((d) => d.public_key);
-
-			if (!recipientPublicKey) {
-				throw new Error(
-					`${selectedConversation.display_name ?? 'This user'} hasn't set up messages yet — they need to open /messages once before they can receive your message.`
-				);
-			}
-
-			// Encrypt the message twice — once to the recipient and
-			// once to the sender — so the sender can later decrypt
-			// their own outgoing message on reload. Without the
-			// second copy, the sender's loadMessages() can't open
-			// the cipher (it was sealed with the recipient's
-			// pubkey) and the message appears to vanish.
-			const encrypted = await encryptMessage(messageText, recipientPublicKey);
-			const senderPublicKey = getStoredPublicKey();
-			let senderEncrypted: EncryptedMessage | null = null;
-			if (senderPublicKey) {
-				try {
-					senderEncrypted = await encryptMessage(messageText, senderPublicKey);
-				} catch (err) {
-					console.warn('Sender-side encryption failed; outgoing copy will be unrecoverable on reload.', err);
-				}
-			}
-
-			// Send encrypted message
 			const response = await fetch('/api/messages/send', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
 				body: JSON.stringify({
 					recipient_id: selectedConversation.user_id,
-					cipher_text: encrypted.cipher_text,
-					aes_key: encrypted.aes_key,
-					iv: encrypted.iv,
-					sender_cipher_text: senderEncrypted?.cipher_text ?? null,
-					sender_aes_key: senderEncrypted?.aes_key ?? null,
-					sender_iv: senderEncrypted?.iv ?? null
+					content: messageText
 				})
 			});
-
-			if (!response.ok) throw new Error('Failed to send message');
-
-			// Reload messages
+			if (!response.ok) {
+				const body = await response.json().catch(() => ({}));
+				throw new Error(body?.message ?? 'Failed to send message');
+			}
 			await loadMessages(selectedConversation.user_id);
 		} catch (err) {
 			console.error('Send message error:', err);
-			const msg = err instanceof Error ? err.message : 'Failed to send message. Please try again.';
-			alert(msg);
-			newMessage = messageText; // Restore message
+			alert(err instanceof Error ? err.message : 'Failed to send message. Try again.');
+			newMessage = messageText;
 		} finally {
 			isSending = false;
 		}
 	}
 
-	// On mount, look at the URL and auto-select the right conversation.
-	// Two flavors of input we handle:
-	//   • `?with=<userId>` — canonical form, written by selectConversation
-	//     when the user clicks a row. Used for reload / share / back.
-	//   • `?to=<userId>&name=…&handle=…&pic=…` — the legacy "Message"
-	//     button handoff from /[username]: we may not have a
-	//     conversations row yet, so we splice in a stub from the
-	//     extras until the first message persists it server-side.
+	// On mount, look at the URL and auto-select.
+	//   • `?with=<userId>` — canonical form written by selectConversation.
+	//   • `?to=<userId>&name=…&handle=…&pic=…` — legacy "Message"
+	//     button handoff from /[username]: splice in a stub if the
+	//     conversations list doesn't have the user yet.
 	async function applyUrlSelection() {
 		if (typeof window === 'undefined') return;
 		const params = new URLSearchParams(window.location.search);
@@ -309,9 +139,6 @@
 			selectConversation(existing);
 			return;
 		}
-
-		// No conversation row yet — only valid for the profile
-		// handoff path, which carries the display-name extras.
 		const stub: Conversation = {
 			user_id: target,
 			username: params.get('handle') ?? '',
@@ -325,7 +152,6 @@
 	}
 
 	onMount(async () => {
-		await setupEncryption();
 		await loadConversations();
 		await applyUrlSelection();
 	});
@@ -333,7 +159,6 @@
 
 <div class="messages-root container mx-auto px-4 py-8 max-w-6xl">
 	{#if !data.user}
-		<!-- Sign in prompt for non-authenticated users -->
 		<Card>
 			<CardHeader>
 				<CardTitle class="flex items-center gap-2">
@@ -343,35 +168,12 @@
 			</CardHeader>
 			<CardContent>
 				<div class="text-center py-12">
-					<Lock class="size-16 mx-auto text-muted-foreground mb-4" />
+					<MessageCircle class="size-16 mx-auto text-muted-foreground mb-4" />
 					<h3 class="text-xl font-semibold mb-2">Sign in to view messages</h3>
-					<p class="text-muted-foreground mb-6">
-						Access your end-to-end encrypted messages by signing in.
-					</p>
+					<p class="text-muted-foreground mb-6">Sign in to start a conversation.</p>
 					<a href="/auth/login">
 						<Button>Sign In</Button>
 					</a>
-				</div>
-			</CardContent>
-		</Card>
-	{:else if !encryptionSetup}
-		<Card>
-			<CardHeader>
-				<CardTitle class="flex items-center gap-2">
-					<Lock class="size-6" />
-					Setting Up Encryption
-				</CardTitle>
-			</CardHeader>
-			<CardContent>
-				<div class="text-center py-12">
-					<Lock class="size-16 mx-auto text-blue-600 mb-4" />
-					<h3 class="text-xl font-semibold mb-2">Generating Encryption Keys...</h3>
-					<p class="text-muted-foreground mb-4">
-						We're setting up end-to-end encryption for your messages. This will only take a moment.
-					</p>
-					{#if isSettingUpEncryption}
-						<div class="animate-spin size-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto"></div>
-					{/if}
 				</div>
 			</CardContent>
 		</Card>
@@ -383,7 +185,6 @@
 					<CardTitle class="flex items-center gap-2">
 						<MessageCircle class="size-5" />
 						Messages
-						<Lock class="size-4 ml-auto text-green-600" title="End-to-end encrypted" />
 					</CardTitle>
 				</CardHeader>
 				<CardContent class="p-0">
@@ -446,15 +247,8 @@
 								<p class="text-sm text-muted-foreground">@{selectedConversation.username}</p>
 							</div>
 						</div>
-						<p
-							class="mt-3 text-xs text-muted-foreground flex items-center justify-center gap-1.5"
-						>
-							<Lock class="size-3" />
-							Messages are end-to-end encrypted. Only you and {selectedConversation.display_name} can read them.
-						</p>
 					</CardHeader>
 
-					<!-- Messages -->
 					<CardContent class="flex-1 overflow-y-auto p-4" bind:this={messagesContainer}>
 						{#if isLoading}
 							<div class="flex justify-center items-center h-full">
@@ -462,11 +256,9 @@
 							</div>
 						{:else if messages.length === 0}
 							<div class="flex flex-col items-center justify-center h-full text-center">
-								<Lock class="size-16 text-muted-foreground mb-4" />
+								<MessageCircle class="size-16 text-muted-foreground mb-4" />
 								<h3 class="text-lg font-semibold mb-2">Start a conversation</h3>
-								<p class="text-sm text-muted-foreground">
-									Send your first end-to-end encrypted message!
-								</p>
+								<p class="text-sm text-muted-foreground">Send your first message.</p>
 							</div>
 						{:else}
 							<div class="space-y-4">
@@ -491,19 +283,7 @@
 													? 'bg-blue-600 text-white'
 													: 'bg-muted text-foreground'}"
 											>
-												{#if message.decryption_error}
-													<div class="flex items-center gap-2 text-red-500">
-														<CircleAlert class="size-4" />
-														<span class="text-sm">Failed to decrypt message</span>
-													</div>
-												{:else if message.decrypted_text}
-													<p class="text-sm whitespace-pre-wrap break-words">{message.decrypted_text}</p>
-												{:else}
-													<div class="flex items-center gap-2">
-														<Lock class="size-4" />
-														<span class="text-sm italic">Decrypting...</span>
-													</div>
-												{/if}
+												<p class="text-sm whitespace-pre-wrap break-words">{message.content}</p>
 											</div>
 											<p class="text-xs text-muted-foreground mt-1 {isOwn ? 'text-right' : 'text-left'}">
 												{new Date(message.created_at * 1000).toLocaleTimeString()}
@@ -515,10 +295,6 @@
 						{/if}
 					</CardContent>
 
-					<!-- Message Input — no E2EE notice here; that lives at
-					     the top of the conversation now. No bottom padding;
-					     the form sits flush against the bottom edge of the
-					     card. -->
 					<div class="border-t p-4">
 						<form
 							onsubmit={(e) => {
@@ -560,10 +336,7 @@
 
 <style>
 	/* Force the messages page to use Sehyo's black background instead
-	   of the shadcn card-on-muted look. We override the CSS custom
-	   property locally so every Card / Input / button-bg-card-muted
-	   inside this page renders flat against --background, matching
-	   the rest of the app. */
+	   of the shadcn card-on-muted look. */
 	.messages-root {
 		--card: var(--background);
 		--popover: var(--background);
@@ -576,4 +349,3 @@
 		background-color: oklch(0.16 0 0) !important;
 	}
 </style>
-
