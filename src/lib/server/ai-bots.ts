@@ -6,9 +6,20 @@ import type { D1Database, Ai } from '@cloudflare/workers-types';
 const PROMPT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const ANSWERS_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
-// Number of seed answers to generate per prompt. Stays small so the feed
-// doesn't look bot-flooded; real human posts mix in over the day.
-const ANSWER_COUNT = 8;
+// Number of seed answers to generate per prompt. With 18 bots in the
+// pool, picking 10 per batch gives variety across days while still
+// leaving room for human posts.
+const ANSWER_COUNT = 10;
+
+// Inter-bot comments generated after the initial answers (Pass 2)
+// and nested replies on those (Pass 3). Together they make the
+// thread feel inhabited the moment a human visits.
+const INTERBOT_COMMENT_COUNT = 8;
+const INTERBOT_NESTED_COUNT = 4;
+
+// Bot replies generated on a user's own post when they answer the
+// daily prompt — the "guest-preview comments" engagement loop.
+const REPLIES_ON_USER_ANSWER = 4;
 
 const PROMPT_GENERATION_SYSTEM = `You generate a single short question for a daily-question social platform called Sehyo.
 
@@ -223,23 +234,249 @@ function shuffle<T>(arr: T[]): T[] {
 
 // Anecdote-prone personas: longer, story-shaped answers. Without
 // stratifying the picker, a random shuffle can occasionally produce
-// 8 short-take voices in a row, which makes the thread feel
+// 10 short-take voices in a row, which makes the thread feel
 // rapid-fire and one-note.
-const ANECDOTAL_BOT_IDS = new Set(['seed_theron', 'seed_soren', 'seed_yael', 'seed_aoife']);
+const ANECDOTAL_BOT_IDS = new Set([
+	'seed_theron',
+	'seed_soren',
+	'seed_yael',
+	'seed_aoife',
+	'seed_mei',
+	'seed_jihye'
+]);
 
 function pickAuthors(authors: SeedAuthor[], n: number): SeedAuthor[] {
 	const anecdotal = authors.filter((a) => ANECDOTAL_BOT_IDS.has(a.bot_id));
 	const others = authors.filter((a) => !ANECDOTAL_BOT_IDS.has(a.bot_id));
-	const targetAnecdotal = Math.min(2, anecdotal.length, n);
+	const targetAnecdotal = Math.min(3, anecdotal.length, n);
 	const targetOthers = Math.max(0, n - targetAnecdotal);
 
 	const picked: SeedAuthor[] = [
 		...shuffle(anecdotal).slice(0, targetAnecdotal),
 		...shuffle(others).slice(0, targetOthers)
 	];
-	// Shuffle the combined list so anecdotes don't always fall at the
-	// top of the batch.
 	return shuffle(picked).slice(0, n);
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Bot-as-commenter: generates a single short reply in a specific
+// bot's voice, given some context (an answer they're replying to or
+// a comment they're replying to). Used for both:
+//   - Pass 2/3 of the daily-prompt thread (inter-bot back-and-forth)
+//   - Bot replies on a real user's answer (guest-preview engagement)
+// ─────────────────────────────────────────────────────────────────────
+
+interface CommentContext {
+	commenter: SeedAuthor;
+	parentAuthorName: string;
+	parentText: string;
+	// If present, the commenter is replying to a comment, not a top-level post.
+	// Lets the prompt know to keep it tight and conversational.
+	isNested?: boolean;
+}
+
+function commentSystemPrompt(ctx: CommentContext): string {
+	const persona = ctx.commenter.personality ?? 'no specific personality';
+	return `You are ${ctx.commenter.name} on a daily-question forum. Your personality: ${persona}.
+
+You are replying to ${ctx.parentAuthorName}'s ${ctx.isNested ? 'comment' : 'post'}:
+"${ctx.parentText}"
+
+Write ONE short reply in your character's first-person voice. Constraints:
+- 3 to ${ctx.isNested ? 14 : 22} words. Most should be on the shorter side.
+- Plain prose. No quotation marks, no name labels, no markdown, no narration ("X said"), no emoji, no hashtags.
+- React to what was said — agree / disagree / joke / ask / share a tiny related thought / @ them ("@${ctx.parentAuthorName.toLowerCase()} same"). Be conversational, not summarizing.
+- Match the messy register of the forum: occasional missing apostrophes ok, lowercase fine, fragments fine.
+- DO NOT close on a profound flourish, metaphor, or "X not Y" construction. Keep it casual and grounded.
+- If your personality is anecdote-heavy you can squeeze in ONE concrete tiny detail; if it's deadpan/sardonic, stay short.
+
+Output ONLY the reply text. Nothing else.`;
+}
+
+async function generateBotComment(ai: Ai, ctx: CommentContext): Promise<string | null> {
+	try {
+		const res = (await ai.run(ANSWERS_MODEL, {
+			messages: [
+				{ role: 'system', content: commentSystemPrompt(ctx) },
+				{ role: 'user', content: 'Write your reply.' }
+			],
+			temperature: 0.92,
+			max_tokens: 140
+		})) as { response?: string };
+		const cleaned = cleanLine(res.response ?? '').trim();
+		// Skip empty / suspiciously long output.
+		if (!cleaned || cleaned.length > 350) return null;
+		return cleaned;
+	} catch (err) {
+		console.error('generateBotComment failed:', err);
+		return null;
+	}
+}
+
+/**
+ * After today's prompt + answers exist, generate inter-bot comments
+ * to make the thread feel populated. Pass 2: bots comment on each
+ * other's top-level answers. Pass 3: bots reply to those Pass 2
+ * comments. Calls run in parallel (Workers AI handles concurrency).
+ */
+async function runMultiPassComments(
+	db: D1Database,
+	ai: Ai,
+	prompt: { id: string; prompt_text: string },
+	authors: SeedAuthor[]
+): Promise<{ pass2: number; pass3: number }> {
+	// Load the answers we just inserted (so we have post ids + content).
+	const postsRes = await db
+		.prepare(
+			`SELECT id, user_id, content
+			 FROM posts
+			 WHERE prompt_id = ?
+			   AND user_id IN (SELECT id FROM user WHERE bot_id LIKE 'seed_%')`
+		)
+		.bind(prompt.id)
+		.all<{ id: string; user_id: string; content: string }>();
+	const posts = postsRes.results ?? [];
+	if (posts.length === 0) return { pass2: 0, pass3: 0 };
+
+	const authorById = new Map<string, SeedAuthor>();
+	for (const a of authors) authorById.set(a.user_id, a);
+
+	// ── Pass 2: top-level inter-bot comments on the answers ──────────
+	const pass2Plan: Array<{ commenter: SeedAuthor; parentPostId: string; parentText: string; parentAuthorName: string }> = [];
+	for (let i = 0; i < INTERBOT_COMMENT_COUNT; i++) {
+		const post = posts[Math.floor(Math.random() * posts.length)];
+		const parentAuthor = authorById.get(post.user_id);
+		const candidates = authors.filter((a) => a.user_id !== post.user_id);
+		const commenter = candidates[Math.floor(Math.random() * candidates.length)];
+		if (!commenter || !parentAuthor) continue;
+		pass2Plan.push({
+			commenter,
+			parentPostId: post.id,
+			parentText: post.content,
+			parentAuthorName: parentAuthor.name
+		});
+	}
+
+	const pass2Results = await Promise.all(
+		pass2Plan.map(async (p) => {
+			const text = await generateBotComment(ai, {
+				commenter: p.commenter,
+				parentAuthorName: p.parentAuthorName,
+				parentText: p.parentText,
+				isNested: false
+			});
+			return text ? { ...p, text, commentId: crypto.randomUUID() } : null;
+		})
+	);
+	const pass2Inserted = pass2Results.filter((x): x is NonNullable<typeof x> => !!x);
+
+	for (const c of pass2Inserted) {
+		try {
+			await db
+				.prepare(
+					'INSERT INTO comments (id, post_id, user_id, content) VALUES (?, ?, ?, ?)'
+				)
+				.bind(c.commentId, c.parentPostId, c.commenter.user_id, c.text)
+				.run();
+		} catch (err) {
+			console.error('pass2 insert failed', err);
+		}
+	}
+
+	// ── Pass 3: nested replies on those comments ────────────────────
+	if (pass2Inserted.length === 0) return { pass2: pass2Inserted.length, pass3: 0 };
+
+	const pass3Plan: Array<{
+		commenter: SeedAuthor;
+		parentPostId: string;
+		parentCommentId: string;
+		parentText: string;
+		parentAuthorName: string;
+	}> = [];
+	for (let i = 0; i < INTERBOT_NESTED_COUNT; i++) {
+		const target = pass2Inserted[Math.floor(Math.random() * pass2Inserted.length)];
+		const candidates = authors.filter((a) => a.user_id !== target.commenter.user_id);
+		const commenter = candidates[Math.floor(Math.random() * candidates.length)];
+		if (!commenter) continue;
+		pass3Plan.push({
+			commenter,
+			parentPostId: target.parentPostId,
+			parentCommentId: target.commentId,
+			parentText: target.text,
+			parentAuthorName: target.commenter.name
+		});
+	}
+
+	const pass3Results = await Promise.all(
+		pass3Plan.map(async (p) => {
+			const text = await generateBotComment(ai, {
+				commenter: p.commenter,
+				parentAuthorName: p.parentAuthorName,
+				parentText: p.parentText,
+				isNested: true
+			});
+			return text ? { ...p, text, commentId: crypto.randomUUID() } : null;
+		})
+	);
+	const pass3Inserted = pass3Results.filter((x): x is NonNullable<typeof x> => !!x);
+
+	for (const c of pass3Inserted) {
+		try {
+			await db
+				.prepare(
+					'INSERT INTO comments (id, post_id, user_id, content, parent_comment_id) VALUES (?, ?, ?, ?, ?)'
+				)
+				.bind(c.commentId, c.parentPostId, c.commenter.user_id, c.text, c.parentCommentId)
+				.run();
+		} catch (err) {
+			console.error('pass3 insert failed', err);
+		}
+	}
+
+	return { pass2: pass2Inserted.length, pass3: pass3Inserted.length };
+}
+
+/**
+ * Generate N short bot replies on a real user's just-posted answer.
+ * Drives the "X people responded — sign in to read" engagement loop
+ * for guests. Runs in parallel.
+ */
+export async function generateBotRepliesOnUserAnswer(
+	db: D1Database,
+	ai: Ai,
+	postId: string,
+	postContent: string,
+	postAuthorName: string
+): Promise<number> {
+	const authors = await getSeedAuthors(db);
+	if (authors.length === 0) return 0;
+
+	const picked = shuffle(authors).slice(0, REPLIES_ON_USER_ANSWER);
+	const results = await Promise.all(
+		picked.map((commenter) =>
+			generateBotComment(ai, {
+				commenter,
+				parentAuthorName: postAuthorName,
+				parentText: postContent,
+				isNested: false
+			}).then((text) => (text ? { commenter, text } : null))
+		)
+	);
+
+	let inserted = 0;
+	for (const r of results) {
+		if (!r) continue;
+		try {
+			await db
+				.prepare('INSERT INTO comments (id, post_id, user_id, content) VALUES (?, ?, ?, ?)')
+				.bind(crypto.randomUUID(), postId, r.commenter.user_id, r.text)
+				.run();
+			inserted++;
+		} catch (err) {
+			console.error('user-reply insert failed', err);
+		}
+	}
+	return inserted;
 }
 
 /**
@@ -291,7 +528,15 @@ export async function regenerateSeedAnswersForToday(
 		}
 	}
 
-	return { prompt_id: prompt.id, prompt_text: prompt.prompt_text, answers_inserted: inserted };
+	// Pass 2 + Pass 3: inter-bot comments to make the thread look alive.
+	const allAuthors = await getSeedAuthors(db);
+	const passes = await runMultiPassComments(db, ai, prompt, allAuthors);
+	return {
+		prompt_id: prompt.id,
+		prompt_text: prompt.prompt_text,
+		answers_inserted: inserted,
+		comments_inserted: passes.pass2 + passes.pass3
+	};
 }
 
 /**
@@ -347,5 +592,17 @@ export async function rotatePromptIfNeeded(db: D1Database, ai: Ai): Promise<{
 		}
 	}
 
-	return { prompt_id: promptId, prompt_text: promptText, created: true, answers_inserted: inserted };
+	const passes = await runMultiPassComments(
+		db,
+		ai,
+		{ id: promptId, prompt_text: promptText },
+		authors
+	);
+	return {
+		prompt_id: promptId,
+		prompt_text: promptText,
+		created: true,
+		answers_inserted: inserted,
+		comments_inserted: passes.pass2 + passes.pass3
+	};
 }

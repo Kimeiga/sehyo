@@ -13,16 +13,13 @@
 
 	const SITE = 'https://sehyo.com';
 	const DEFAULT_DESC =
-		'One daily question, answered by everyone. Share your thoughts, see what others say, and discover something new every day.';
+		'Sehyo (製評, "to make commentary") is the most human social media on earth™. A calm, thoughtful place to share what you really think.';
 
 	const ogUrl = $derived(`${SITE}${page.url.pathname}`);
-	// ~50 chars — hits the "optimal" range without sounding stuffy.
-	const ogTitle = $derived('Sehyo — A daily question. Share your thoughts.');
-	// 110-160 chars target. The dynamic version slots today's prompt in
-	// and tacks a soft CTA on the end.
+	const ogTitle = $derived('Sehyo — the most human social media on earth™');
 	const ogDescription = $derived(
 		data.prompt
-			? `Today's question on Sehyo: ${data.prompt.text} Answer, see what others say, and share your thoughts.`
+			? `Today on Sehyo: ${data.prompt.text} A calm, thoughtful place to share what you really think.`
 			: DEFAULT_DESC
 	);
 	// Dynamic prompt-of-the-day image. Generated edge-side via workers-og.
