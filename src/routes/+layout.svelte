@@ -18,7 +18,10 @@
 	const ogDescription = $derived(
 		data.prompt ? `Today's question: ${data.prompt.text}` : DEFAULT_DESC
 	);
-	const ogImage = $derived(`${SITE}/og-default.png`);
+	// Dynamic prompt-of-the-day image. Generated edge-side via workers-og,
+	// cached 1h. The static /og-default.png stays as a fallback if anything
+	// else points at it.
+	const ogImage = $derived(`${SITE}/og.png`);
 
 	onMount(async () => {
 		if (pwaInfo) {
