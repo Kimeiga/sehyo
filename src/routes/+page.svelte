@@ -511,7 +511,7 @@
 		</section>
 
 		{#if !data.myAnswer}
-			<p class="locked-cta">Answer today's question to explore the world.</p>
+			<p class="locked-cta">Answer today's question to explore the world of sehyo.</p>
 		{/if}
 
 		{#if data.myAnswer}
