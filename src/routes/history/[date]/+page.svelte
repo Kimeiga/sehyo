@@ -11,7 +11,7 @@
 </script>
 
 <svelte:head>
-	<title>{archive.prompt.text} · 製 SEHYO</title>
+	<title>{archive.prompt.text} · Sehyo</title>
 </svelte:head>
 
 <main class="page">
