@@ -274,11 +274,11 @@ curl -X POST "https://sehyo.com/api/admin/rotate-prompt?bots=force" \
   -H "x-admin-secret: $ADMIN_SECRET"
 ```
 
-This calls `regenerateSeedAnswersForToday()` — it deletes only
-seed-author posts/comments for today's prompt (preserving any human
+This calls `generateSeedAnswers()` — it deletes only seed-author
+posts/comments on the most recent prompt (preserving any human
 content), then regenerates the bot answers + Pass-2/Pass-3 inter-bot
-comments. Idempotent on `active_date` for the prompt itself — the
-prompt text is *not* changed.
+comments. The prompt itself is *not* re-generated; only the bot seed
+content attached to it.
 
 To also re-roll the prompt text (e.g. you don't like today's
 question), you'd manually `DELETE FROM daily_prompts WHERE

@@ -198,7 +198,7 @@ async function getRecentPromptTexts(d1: D1Database, limit: number): Promise<stri
 	return rows.map((r) => r.prompt_text);
 }
 
-export async function generateSeedAnswers(
+export async function generateAnswerLines(
 	ai: Ai,
 	promptText: string,
 	authors: SeedAuthor[]
@@ -529,23 +529,28 @@ export async function generateBotRepliesOnUserAnswer(
 }
 
 /**
- * Regenerate seed-author answers for today's existing prompt without
- * touching the prompt itself or any user-authored content. Used for
- * dev iteration when the LLM prompt or model changes.
+ * Regenerate seed-author answers on the most recent prompt, regardless of
+ * what date that prompt is from. Replaces seed-bot posts on that prompt
+ * while leaving user-authored content alone. Used both during the
+ * automatic post-rotation step and for dev iteration when the LLM prompt
+ * or model changes.
  */
-export async function regenerateSeedAnswersForToday(
+export async function generateSeedAnswers(
 	d1: D1Database,
 	ai: Ai
-): Promise<{ prompt_id: string; prompt_text: string; answers_inserted: number }> {
+): Promise<{
+	prompt_id: string;
+	prompt_text: string;
+	answers_inserted: number;
+	comments_inserted: number;
+}> {
 	const db = drizzle(d1);
-	const date = todayUTC();
 	const [prompt] = await db
 		.select({ id: dailyPrompts.id, prompt_text: dailyPrompts.prompt_text })
 		.from(dailyPrompts)
-		.where(eq(dailyPrompts.active_date, date))
 		.orderBy(desc(dailyPrompts.created_at))
 		.limit(1);
-	if (!prompt) throw new Error('No prompt for today');
+	if (!prompt) throw new Error('No prompts found');
 
 	// Drop only seed-author posts attached to this prompt. User content
 	// stays.
@@ -564,7 +569,7 @@ export async function regenerateSeedAnswersForToday(
 	const authors = await getSeedAuthors(d1);
 	const n = Math.min(ANSWER_COUNT, authors.length);
 	const picked = pickAuthors(authors, n);
-	const answers = await generateSeedAnswers(ai, prompt.prompt_text, picked);
+	const answers = await generateAnswerLines(ai, prompt.prompt_text, picked);
 
 	let inserted = 0;
 	for (let i = 0; i < answers.length; i++) {
@@ -610,6 +615,7 @@ export async function rotatePrompt(
 	prompt_id: string;
 	prompt_text: string;
 	answers_inserted: number;
+	comments_inserted: number;
 }> {
 	const db = drizzle(d1);
 	const date = todayUTC();
@@ -627,7 +633,7 @@ export async function rotatePrompt(
 	const authors = await getSeedAuthors(d1);
 	const n = Math.min(ANSWER_COUNT, authors.length);
 	const picked = pickAuthors(authors, n);
-	const answers = await generateSeedAnswers(ai, promptText, picked);
+	const answers = await generateAnswerLines(ai, promptText, picked);
 
 	let inserted = 0;
 	for (let i = 0; i < answers.length; i++) {
@@ -656,7 +662,6 @@ export async function rotatePrompt(
 	return {
 		prompt_id: promptId,
 		prompt_text: promptText,
-		created: true,
 		answers_inserted: inserted,
 		comments_inserted: passes.pass2 + passes.pass3
 	};

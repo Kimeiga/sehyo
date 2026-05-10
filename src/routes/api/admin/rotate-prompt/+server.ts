@@ -1,6 +1,6 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { rotatePrompt, regenerateSeedAnswersForToday } from '$lib/server/ai-bots';
+import { rotatePrompt, generateSeedAnswers } from '$lib/server/ai-bots';
 
 /**
  * Triggers today's prompt rotation. Idempotent: if today's prompt already
@@ -21,7 +21,7 @@ export const POST: RequestHandler = async ({ request, platform, url }) => {
 		throw error(500, 'Bindings missing');
 	}
 	if (url.searchParams.get('bots') === 'force') {
-		const result = await regenerateSeedAnswersForToday(env.DB, env.AI);
+		const result = await generateSeedAnswers(env.DB, env.AI);
 		return json(result);
 	}
 	const result = await rotatePrompt(env.DB, env.AI);
