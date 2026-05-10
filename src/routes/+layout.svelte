@@ -11,12 +11,18 @@
 	let { data, children }: LayoutProps = $props();
 
 	const SITE = 'https://sehyo.com';
-	const DEFAULT_DESC = 'A daily question. Share your thoughts.';
+	const DEFAULT_DESC =
+		'One daily question, answered by everyone. Share your thoughts, see what others say, and discover something new every day.';
 
 	const ogUrl = $derived(`${SITE}${page.url.pathname}`);
-	const ogTitle = $derived('Sehyo — share your thoughts');
+	// ~50 chars — hits the "optimal" range without sounding stuffy.
+	const ogTitle = $derived('Sehyo — A daily question. Share your thoughts.');
+	// 110-160 chars target. The dynamic version slots today's prompt in
+	// and tacks a soft CTA on the end.
 	const ogDescription = $derived(
-		data.prompt ? `Today's question: ${data.prompt.text}` : DEFAULT_DESC
+		data.prompt
+			? `Today's question on Sehyo: ${data.prompt.text} Answer, see what others say, and share your thoughts.`
+			: DEFAULT_DESC
 	);
 	// Dynamic prompt-of-the-day image. Generated edge-side via workers-og,
 	// cached 1h. The static /og-default.png stays as a fallback if anything
