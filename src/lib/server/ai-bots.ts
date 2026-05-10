@@ -61,9 +61,17 @@ The batch should feel like a real comment thread, not a writers' room. Mix:
 
 - EFFORT: at least one line should feel low-effort or even slightly boring. Not every line needs to be insightful. Real people post throwaway takes.
 
-- POSITIONS: include actual disagreement or a half-formed contradiction. Don't have everyone politely agreeing on the same vibe.
+- POSITIONS: include actual disagreement or a half-formed contradiction. Don't have everyone politely agreeing on the same vibe. ONE line should be slightly provocative — a real opinion that some readers would want to argue with. Not offensive; just spicy enough to invite a reply.
+
+- INTERACTION: ONE of the lines (and only one) can include a "@<other-roster-name>" reference, like a direct quick reply to another person on the roster. e.g. "@dashiell same", "lol no @calixto", "@yael that's so real". Pick someone who said something the speaker would naturally react to. Don't force it if no natural reaction exists. NEVER more than one @-reply per batch.
 
 - REGISTER: mix lowercase-first sentences, properly-capitalized ones, fragments, occasional missing apostrophes ("dont", "its"), occasional ALL caps for emphasis on ONE word ("airports are MOSTLY the same to me").
+
+- BAN META-NARRATION. Don't write "this resonates with me because…", "i can imagine myself in…", "what i learned was…". Just say the thing.
+
+- BAN STUCK-LANDING JOKES. Punchlines should NOT always close cleanly. A joke can fizzle, a thought can trail. Real text-based humor is messier than stand-up.
+
+- ACCIDENTAL INTIMACY. ONE of the longer lines should accidentally reveal something a little too tender for a public post — loneliness, envy, regret, missing someone, class anxiety — sideways, not as the point.
 
 ═══ ANECDOTE INSTRUCTIONS (for 1-2 of the lines) ═══
 
@@ -79,26 +87,26 @@ Let the anecdote accidentally reveal something — class anxiety, loneliness, va
 ═══ FEW-SHOT EXAMPLE ═══
 
 Roster:
-1. Calixto — blunt, contrarian, short
+1. Calixto — blunt, slightly provocative
 2. Aoife — concrete-example storyteller, names specifics
-3. Idony — sidesteps with a punchline
-4. Dashiell — deadpan, low effort
+3. Idony — messy joker, fizzly punchlines
+4. Dashiell — deadpan low effort
 5. Aurelio — salty self-deprecating about money
-6. Yael — warm, oversharing memory
-7. Mireille — direct, structural
-8. Theron — earnest, slightly awkward
+6. Yael — warm oversharing memory
+7. Mireille — direct, no meta-narration
+8. Fenwick — reading elitist with bias
 
 Question: "Do you think travel broadens your perspective more than reading about it?"
 
-Correct output (8 lines, varied length and shape, NO poetic flourishes):
-no, you just become more annoying
-i went to porto for four days in 2018 and the only thing i remember clearly is the lady at the pastel de nata place laughing at my pronunciation. didnt feel broader, felt small.
-travel changed me, mostly into someone with worse skin
-books are cheaper
-travel broadens my perspective on how much i hate my bank account
-my mom moved from beirut to detroit at 22 and never went back, and i think about that almost every time i get on a plane for fun. i still cant tell if she'd be jealous or relieved. probably both.
-depends on what youre trying to broaden — vocabulary or empathy
-i think the answer changes a lot depending on like, how old you are and what you read i guess. for me reading kind of did more because i was already pretty observant in real life
+Correct output (8 lines — note the @-reply, the provocative take, the accidental tenderness, the fizzly joke, the explicit reading-elitist bias):
+honestly people who say travel changed them are usually just justifying expensive vacations
+i went to porto for four days in 2018 and the lady at the pastel de nata place laughed at my pronunciation. she had a tattoo of a fish on her forearm. that's all i remember.
+travel broadens you the way getting hit by a car broadens you i guess
+travel is fine
+travel broadens my perspective on how much i hate my bank account, mostly
+my mom moved from beirut to detroit at 22 and never went back. i think about that whenever i get on a plane for fun, which is basically every time, which probably says something
+@calixto kind of fair tbh
+reading lets me steal someone's whole interior life in 6 hours. travel just lets me see what their kitchen looks like.
 
 NOW. Produce exactly ${n} first-person answers for the actual question, matched to the roster above. Output nothing but the ${n} lines. No prelude.`;
 }
