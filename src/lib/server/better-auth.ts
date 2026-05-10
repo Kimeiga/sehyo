@@ -4,6 +4,7 @@ import { drizzle } from 'drizzle-orm/d1';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import type { D1Database } from '@cloudflare/workers-types';
 import * as schema from './db/schema';
+import { generateRandomName } from './random-name';
 
 // Cache for auth instances - use a Map with baseURL as key
 const authCache = new Map<string, ReturnType<typeof betterAuth>>();
@@ -129,7 +130,9 @@ export function createAuth(db: D1Database, env: {
 
 		// Plugins
 		plugins: [
-			anonymous()
+			anonymous({
+				generateName: () => generateRandomName()
+			})
 		]
 	});
 

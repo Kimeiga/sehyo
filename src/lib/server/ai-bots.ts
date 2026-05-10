@@ -1,45 +1,52 @@
 import type { D1Database, Ai } from '@cloudflare/workers-types';
 
 const PROMPT_MODEL = '@cf/meta/llama-3.1-8b-instruct';
-const ANSWER_MODEL = '@cf/meta/llama-3.1-8b-instruct';
+const ANSWERS_MODEL = '@cf/meta/llama-3.1-8b-instruct';
+
+// Number of seed answers to generate per prompt. Stays small so the feed
+// doesn't look bot-flooded; real human posts mix in over the day.
+const ANSWER_COUNT = 8;
 
 const PROMPT_GENERATION_SYSTEM = `You generate a single short question for a daily-question social platform called Sehyo.
 
 Constraints:
-- One sentence, ending in a question mark.
-- Personal, opinion-shaped, conversation-starting. Reading it should make the average person feel they have an answer.
+- One sentence ending in a question mark.
+- Personal, opinion-shaped, conversation-starting. The average person should immediately have an answer.
 - Avoid generic ("what makes you happy?") and avoid current-events/political.
 - Avoid topics with obvious "right" answers.
 - 6-18 words.
-- No quotation marks. No preamble. Output only the question.`;
+- No quotation marks. No preamble. Output ONLY the question.`;
 
-const PROMPT_GENERATION_USER = `Give me today's question.`;
+const PROMPT_GENERATION_USER = 'Give me today\'s question.';
 
-export interface PhilosopherBot {
-	user_id: string;
-	bot_profile_id: string;
-	name: string;
-	system_prompt: string;
+function answersSystemPrompt(n: number) {
+	return `You write ${n} short answers to a daily-question forum prompt, as if from ${n} different anonymous people.
+
+Each answer:
+- Is one sentence, 6-22 words.
+- Sounds like a real person typing on their phone, not an essay.
+- Has a clear, specific point. Profound where possible, but never lecturing.
+- Comes from a different angle than the others (skeptical / hopeful / contrarian / pragmatic / personal anecdote / aphoristic / questioning back / wry).
+- Avoids cliché, motivational-poster phrasing, hashtags, emoji, and quotation marks.
+- Does not start with "I think" or "Honestly" or "Actually".
+
+Output format:
+- Exactly ${n} lines.
+- One answer per line.
+- No numbering, no bullets, no labels, no signatures.`;
 }
 
-export async function getActivePhilosophers(db: D1Database): Promise<PhilosopherBot[]> {
-	const rows = await db
-		.prepare(
-			`SELECT bp.id AS bot_profile_id, bp.user_id, bp.name, bp.personality
-			 FROM bot_profiles bp
-			 WHERE bp.is_active = 1`
-		)
-		.all<{ bot_profile_id: string; user_id: string; name: string; personality: string }>();
+export interface SeedAuthor {
+	user_id: string;
+	bot_id: string;
+	name: string;
+}
 
-	return (rows.results ?? []).flatMap((r) => {
-		try {
-			const p = JSON.parse(r.personality);
-			if (typeof p?.system_prompt !== 'string') return [];
-			return [{ user_id: r.user_id, bot_profile_id: r.bot_profile_id, name: r.name, system_prompt: p.system_prompt }];
-		} catch {
-			return [];
-		}
-	});
+export async function getSeedAuthors(db: D1Database): Promise<SeedAuthor[]> {
+	const rows = await db
+		.prepare(`SELECT id AS user_id, bot_id, name FROM user WHERE bot_id LIKE 'seed_%'`)
+		.all<{ user_id: string; bot_id: string; name: string }>();
+	return rows.results ?? [];
 }
 
 export async function generatePromptText(ai: Ai): Promise<string> {
@@ -51,28 +58,40 @@ export async function generatePromptText(ai: Ai): Promise<string> {
 		temperature: 0.9,
 		max_tokens: 80
 	})) as { response?: string };
-	return cleanModelOutput(res.response ?? '');
+	return cleanLine(res.response ?? '');
 }
 
-export async function generateBotAnswer(ai: Ai, bot: PhilosopherBot, promptText: string): Promise<string> {
-	const res = (await ai.run(ANSWER_MODEL, {
+export async function generateSeedAnswers(ai: Ai, promptText: string, n: number): Promise<string[]> {
+	const res = (await ai.run(ANSWERS_MODEL, {
 		messages: [
-			{ role: 'system', content: bot.system_prompt },
+			{ role: 'system', content: answersSystemPrompt(n) },
 			{ role: 'user', content: promptText }
 		],
-		temperature: 0.85,
-		max_tokens: 220
+		temperature: 0.95,
+		max_tokens: 600
 	})) as { response?: string };
-	return cleanModelOutput(res.response ?? '');
+	const raw = res.response ?? '';
+	return splitAnswers(raw, n);
 }
 
-function cleanModelOutput(s: string): string {
+function splitAnswers(raw: string, n: number): string[] {
+	const lines = raw
+		.split(/\r?\n/)
+		.map((l) => cleanLine(l))
+		.filter((l) => l.length > 0 && l.length <= 240);
+	// If the model returned more than n, take the first n. If fewer, return what we have.
+	return lines.slice(0, n);
+}
+
+function cleanLine(s: string): string {
 	let out = s.trim();
-	// Strip wrapping quotes the model sometimes adds despite instructions.
+	// Strip leading numbering / bullets the model sometimes adds.
+	out = out.replace(/^\s*(?:\d+[.)]|[-*•])\s+/, '');
+	// Strip wrapping quotes.
 	if ((out.startsWith('"') && out.endsWith('"')) || (out.startsWith('“') && out.endsWith('”'))) {
 		out = out.slice(1, -1).trim();
 	}
-	// Strip leading "Answer:" / "Response:" labels some models prefix.
+	// Strip leading "Answer:" / "Response:" labels.
 	out = out.replace(/^(answer|response)[:.\-]\s*/i, '');
 	return out;
 }
@@ -85,16 +104,26 @@ function todayUTC(): string {
 	return `${yyyy}-${mm}-${dd}`;
 }
 
+function shuffle<T>(arr: T[]): T[] {
+	const a = arr.slice();
+	for (let i = a.length - 1; i > 0; i--) {
+		const j = Math.floor(Math.random() * (i + 1));
+		[a[i], a[j]] = [a[j], a[i]];
+	}
+	return a;
+}
+
 /**
- * Pick (or generate) today's prompt and have every active philosopher answer
- * it. Idempotent on the active_date — if today's prompt already exists this
- * returns it without re-generating bot answers.
+ * Pick (or generate) today's prompt and seed it with N short answers, each
+ * attributed to a different randomly-chosen seed author. Idempotent on the
+ * active_date — if today's prompt already exists this returns it without
+ * regenerating.
  */
 export async function rotatePromptIfNeeded(db: D1Database, ai: Ai): Promise<{
 	prompt_id: string;
 	prompt_text: string;
 	created: boolean;
-	bot_answers_inserted: number;
+	answers_inserted: number;
 }> {
 	const date = todayUTC();
 
@@ -104,7 +133,7 @@ export async function rotatePromptIfNeeded(db: D1Database, ai: Ai): Promise<{
 		.first<{ id: string; prompt_text: string }>();
 
 	if (existing) {
-		return { prompt_id: existing.id, prompt_text: existing.prompt_text, created: false, bot_answers_inserted: 0 };
+		return { prompt_id: existing.id, prompt_text: existing.prompt_text, created: false, answers_inserted: 0 };
 	}
 
 	const promptText = await generatePromptText(ai);
@@ -115,28 +144,27 @@ export async function rotatePromptIfNeeded(db: D1Database, ai: Ai): Promise<{
 		.bind(promptId, promptText, date)
 		.run();
 
-	const bots = await getActivePhilosophers(db);
+	const authors = await getSeedAuthors(db);
+	const n = Math.min(ANSWER_COUNT, authors.length);
+	const answers = await generateSeedAnswers(ai, promptText, n);
+	const picked = shuffle(authors).slice(0, answers.length);
 
-	// Generate sequentially. Workers AI handles its own concurrency caps and a
-	// brief stagger keeps per-prompt rate budgets simple.
 	let inserted = 0;
-	for (const bot of bots) {
+	for (let i = 0; i < answers.length; i++) {
+		const a = answers[i];
+		const author = picked[i];
+		if (!a || !author) continue;
 		try {
-			const answer = await generateBotAnswer(ai, bot, promptText);
-			if (!answer) continue;
 			const postId = crypto.randomUUID();
 			await db
-				.prepare(
-					`INSERT INTO posts (id, user_id, prompt_id, content)
-					 VALUES (?, ?, ?, ?)`
-				)
-				.bind(postId, bot.user_id, promptId, answer)
+				.prepare(`INSERT INTO posts (id, user_id, prompt_id, content) VALUES (?, ?, ?, ?)`)
+				.bind(postId, author.user_id, promptId, a)
 				.run();
 			inserted++;
 		} catch (err) {
-			console.error(`Bot ${bot.name} failed to generate:`, err);
+			console.error('Seed insert failed for', author.name, err);
 		}
 	}
 
-	return { prompt_id: promptId, prompt_text: promptText, created: true, bot_answers_inserted: inserted };
+	return { prompt_id: promptId, prompt_text: promptText, created: true, answers_inserted: inserted };
 }
