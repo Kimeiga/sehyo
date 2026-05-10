@@ -99,10 +99,35 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
 			.bind(locals.user.id)
 			.all();
 
+		// Pull every existing friendship row touching the viewer so we can
+		// surface "Requested" / "Pending" / "Friends" on each Find row
+		// instead of always showing a bare "Add" that no-ops.
+		const myFriendshipsRes = await platform.env.DB.prepare(
+			`SELECT requester_id, addressee_id, status
+			 FROM friendships
+			 WHERE requester_id = ?1 OR addressee_id = ?1`
+		)
+			.bind(locals.user.id)
+			.all<{ requester_id: string; addressee_id: string; status: string }>();
+
+		// Map[other_user_id] -> 'pending_outgoing' | 'pending_incoming' | 'accepted'
+		const friendshipByUser: Record<string, 'pending_outgoing' | 'pending_incoming' | 'accepted'> = {};
+		for (const row of myFriendshipsRes.results ?? []) {
+			const otherId =
+				row.requester_id === locals.user.id ? row.addressee_id : row.requester_id;
+			if (row.status === 'accepted') {
+				friendshipByUser[otherId] = 'accepted';
+			} else if (row.status === 'pending') {
+				friendshipByUser[otherId] =
+					row.requester_id === locals.user.id ? 'pending_outgoing' : 'pending_incoming';
+			}
+		}
+
 		return {
 			friends: friendsResult.results || [],
 			requests: requestsResult.results || [],
-			allUsers: allUsersResult.results || []
+			allUsers: allUsersResult.results || [],
+			friendshipByUser
 		};
 	} catch (err) {
 		console.error('Error loading friends:', err);
