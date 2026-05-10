@@ -458,9 +458,11 @@
 				{:else}
 					<header class="author-row">
 						<span class="author-inline">
-							<span class="author">{data.user?.name ?? 'You'}</span>
 							{#if data.user?.username}
+								<a class="author author-link" href="/{data.user.username}">{data.user?.name ?? 'You'}</a>
 								<a class="handle" href="/{data.user.username}">@{data.user.username}</a>
+							{:else}
+								<span class="author">{data.user?.name ?? 'You'}</span>
 							{/if}
 							{#if isAnon}
 								<button
@@ -627,9 +629,11 @@
 	{@const ownComment = !!data.user && c.user_id === data.user.id}
 	<li class="comment-card" class:has-children={hasKids}>
 		<header class="comment-header">
-			<span class="comment-author author-mask">{c.user?.display_name ?? 'Anonymous'}</span>
 			{#if c.user?.username}
+				<a class="comment-author author-mask author-link" href="/{c.user.username}">{c.user.display_name ?? 'Anonymous'}</a>
 				<a class="handle handle-small" href="/{c.user.username}">@{c.user.username}</a>
+			{:else}
+				<span class="comment-author author-mask">{c.user?.display_name ?? 'Anonymous'}</span>
 			{/if}
 			{#if ownComment && isAnon}
 				<button
@@ -717,9 +721,12 @@
 {#snippet userQuestionCard(q: { id: string; content: string; display_name: string | null; username?: string | null; bot_id: string | null; comment_count: number })}
 	<article class="user-question">
 		<p class="user-question-from">
-			From <span class="user-question-name author-mask">{q.display_name ?? 'Anonymous'}</span>
+			From
 			{#if q.username}
+				<a class="user-question-name author-mask author-link" href="/{q.username}">{q.display_name ?? 'Anonymous'}</a>
 				<a class="handle handle-inline" href="/{q.username}">@{q.username}</a>
+			{:else}
+				<span class="user-question-name author-mask">{q.display_name ?? 'Anonymous'}</span>
 			{/if}
 		</p>
 		<h3 class="user-question-text">{q.content}</h3>
@@ -745,9 +752,11 @@
 	<article class="answer">
 		<header class="author-row">
 			<span class="author-inline">
-				<span class="author author-mask">{a.display_name ?? 'Anonymous'}</span>
 				{#if a.username}
+					<a class="author author-mask author-link" href="/{a.username}">{a.display_name ?? 'Anonymous'}</a>
 					<a class="handle" href="/{a.username}">@{a.username}</a>
+				{:else}
+					<span class="author author-mask">{a.display_name ?? 'Anonymous'}</span>
 				{/if}
 			</span>
 		</header>
@@ -1148,11 +1157,19 @@
 		font-weight: 500;
 	}
 	.handle:hover {
-		color: var(--foreground);
 		text-decoration: underline;
 	}
 	.handle-small { font-size: 11px; }
 	.handle-inline { margin-left: 4px; text-transform: none; letter-spacing: 0; }
+
+	/* Display-name link: foreground color, underline only on hover. */
+	.author-link {
+		color: var(--foreground);
+		text-decoration: none;
+	}
+	.author-link:hover {
+		text-decoration: underline;
+	}
 	.edit-name {
 		appearance: none;
 		border: 0;

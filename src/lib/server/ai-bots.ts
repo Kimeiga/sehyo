@@ -22,7 +22,7 @@ const PROMPT_GENERATION_USER = 'Give me today\'s question.';
 function answersSystemPrompt(authors: SeedAuthor[]) {
 	const n = authors.length;
 	const roster = authors
-		.map((a, i) => `${i + 1}. ${a.name} — ${a.bio ?? 'no specific personality'}`)
+		.map((a, i) => `${i + 1}. ${a.name} — ${a.personality ?? 'no specific personality'}`)
 		.join('\n');
 
 	return `You are simulating ${n} different anonymous people typing answers on a daily-question forum. Each line of output is ONE PERSON'S OWN answer, in their first-person voice.
@@ -58,13 +58,20 @@ export interface SeedAuthor {
 	user_id: string;
 	bot_id: string;
 	name: string;
-	bio: string | null;
+	personality: string | null;
 }
 
 export async function getSeedAuthors(db: D1Database): Promise<SeedAuthor[]> {
+	// Personality is purely LLM-side guidance and lives on bot_profiles
+	// (not on the public user.bio, which now holds a normal-person bio).
 	const rows = await db
-		.prepare(`SELECT id AS user_id, bot_id, name, bio FROM user WHERE bot_id LIKE 'seed_%'`)
-		.all<{ user_id: string; bot_id: string; name: string; bio: string | null }>();
+		.prepare(
+			`SELECT u.id AS user_id, u.bot_id, u.name, bp.personality
+			 FROM user u
+			 LEFT JOIN bot_profiles bp ON bp.user_id = u.id
+			 WHERE u.bot_id LIKE 'seed_%'`
+		)
+		.all<{ user_id: string; bot_id: string; name: string; personality: string | null }>();
 	return rows.results ?? [];
 }
 
