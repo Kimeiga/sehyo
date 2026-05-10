@@ -172,7 +172,9 @@
 				.then((d) => d.public_key);
 
 			if (!recipientPublicKey) {
-				throw new Error('Recipient has not set up encryption');
+				throw new Error(
+					`${selectedConversation.display_name ?? 'This user'} hasn't set up messages yet — they need to open /messages once before they can receive your message.`
+				);
 			}
 
 			// Encrypt message
@@ -192,9 +194,10 @@
 
 			// Reload messages
 			await loadMessages(selectedConversation.user_id);
-		} catch (error) {
-			console.error('Send message error:', error);
-			alert('Failed to send message. Please try again.');
+		} catch (err) {
+			console.error('Send message error:', err);
+			const msg = err instanceof Error ? err.message : 'Failed to send message. Please try again.';
+			alert(msg);
 			newMessage = messageText; // Restore message
 		} finally {
 			isSending = false;
