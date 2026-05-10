@@ -40,11 +40,17 @@
 	<div class="container mx-auto px-4">
 		<div class="flex items-center justify-between h-16">
 			<!-- Logo -->
-			<a href="/" class="flex items-center gap-2">
-				<div class="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-					<span class="text-primary-foreground font-bold text-xl">S</span>
-				</div>
-				<span class="font-bold text-xl hidden sm:block text-foreground">Sehyo</span>
+			<a href="/" class="flex items-center gap-2 text-2xl">
+				<span
+					class="bg-primary rounded-md inline-flex items-center justify-center text-primary-foreground font-jp font-bold leading-none"
+					style="padding: 0.18em 0.22em;"
+				>
+					<span style="line-height: 1; display: block;">製</span>
+				</span>
+				<span
+					class="font-sans font-extrabold text-foreground hidden sm:block leading-none"
+					style="letter-spacing: -0.1em;"
+				>SEHYO</span>
 			</a>
 
 			<!-- Search Bar (always visible) -->

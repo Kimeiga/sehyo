@@ -67,8 +67,17 @@
 <div class="min-h-screen flex items-center justify-center bg-background px-4">
 	<Card class="w-full max-w-md">
 		<CardHeader class="text-center">
-			<div class="w-16 h-16 bg-primary rounded-lg flex items-center justify-center mx-auto mb-4">
-				<span class="text-primary-foreground font-bold text-3xl">S</span>
+			<div class="flex items-center justify-center gap-3 mb-4 text-5xl">
+				<span
+					class="bg-primary rounded-lg inline-flex items-center justify-center text-primary-foreground font-jp font-bold leading-none"
+					style="padding: 0.18em 0.22em;"
+				>
+					<span style="line-height: 1; display: block;">製</span>
+				</span>
+				<span
+					class="font-sans font-extrabold text-foreground leading-none"
+					style="letter-spacing: -0.1em;"
+				>SEHYO</span>
 			</div>
 			<CardTitle class="text-2xl">Welcome to Sehyo</CardTitle>
 			<CardDescription>
