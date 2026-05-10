@@ -1,8 +1,9 @@
 {
   "name": "Sehyo",
   "short_name": "Sehyo",
-  "description": "A modern social media platform built with SvelteKit and Cloudflare",
+  "description": "A daily question. Share your thoughts.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#00A5D8",
@@ -33,20 +34,5 @@
       "purpose": "maskable"
     }
   ],
-  "categories": ["social", "entertainment"],
-  "screenshots": [
-    {
-      "src": "/screenshot-wide.png",
-      "sizes": "1280x720",
-      "type": "image/png",
-      "form_factor": "wide"
-    },
-    {
-      "src": "/screenshot-narrow.png",
-      "sizes": "750x1334",
-      "type": "image/png",
-      "form_factor": "narrow"
-    }
-  ]
+  "categories": ["social", "lifestyle"]
 }
-
