@@ -17,7 +17,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 		const auth = createAuth(event.platform.env.DB, {
 			GOOGLE_CLIENT_ID: event.platform.env.GOOGLE_CLIENT_ID,
 			GOOGLE_CLIENT_SECRET: event.platform.env.GOOGLE_CLIENT_SECRET,
-			GOOGLE_REDIRECT_URI: event.platform.env.GOOGLE_REDIRECT_URI
+			GOOGLE_REDIRECT_URI: event.platform.env.GOOGLE_REDIRECT_URI,
+			BETTER_AUTH_SECRET: event.platform.env.BETTER_AUTH_SECRET
 		}, baseURL);
 
 		const session = await auth.api.getSession({

@@ -13,6 +13,7 @@ export function createAuth(db: D1Database, env: {
 	GOOGLE_CLIENT_ID: string;
 	GOOGLE_CLIENT_SECRET: string;
 	GOOGLE_REDIRECT_URI?: string;
+	BETTER_AUTH_SECRET?: string;
 }, baseURL?: string) {
 	// Determine the base URL
 	const effectiveBaseURL = baseURL || env.GOOGLE_REDIRECT_URI?.replace('/api/auth/callback/google', '') || 'https://sehyo.com';
@@ -43,6 +44,14 @@ export function createAuth(db: D1Database, env: {
 			database: drizzleAdapter(drizzleDb, {
 				provider: 'sqlite', // D1 is SQLite-compatible
 			}),
+
+		// HMAC secret for session tokens. Cloudflare Workers don't
+		// expose process.env, so better-auth can't auto-pick it up
+		// from the environment the way it does on Node — we pass it
+		// explicitly. Without this, recent better-auth versions
+		// throw "You are using the default secret" and 500 every
+		// /api/auth/* call.
+		secret: env.BETTER_AUTH_SECRET,
 
 		// Base URL for callbacks
 		baseURL: effectiveBaseURL,

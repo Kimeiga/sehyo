@@ -20,7 +20,8 @@ export const GET: RequestHandler = async ({ request, platform }) => {
 		const auth = createAuth(platform.env.DB, {
 			GOOGLE_CLIENT_ID: platform.env.GOOGLE_CLIENT_ID,
 			GOOGLE_CLIENT_SECRET: platform.env.GOOGLE_CLIENT_SECRET,
-			GOOGLE_REDIRECT_URI: platform.env.GOOGLE_REDIRECT_URI
+			GOOGLE_REDIRECT_URI: platform.env.GOOGLE_REDIRECT_URI,
+			BETTER_AUTH_SECRET: platform.env.BETTER_AUTH_SECRET
 		}, baseURL);
 
 		const response = await auth.handler(request);
@@ -60,7 +61,8 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 		const auth = createAuth(platform.env.DB, {
 			GOOGLE_CLIENT_ID: platform.env.GOOGLE_CLIENT_ID,
 			GOOGLE_CLIENT_SECRET: platform.env.GOOGLE_CLIENT_SECRET,
-			GOOGLE_REDIRECT_URI: platform.env.GOOGLE_REDIRECT_URI
+			GOOGLE_REDIRECT_URI: platform.env.GOOGLE_REDIRECT_URI,
+			BETTER_AUTH_SECRET: platform.env.BETTER_AUTH_SECRET
 		}, baseURL);
 
 		const response = await auth.handler(request);
