@@ -11,6 +11,7 @@ interface ProfileUser {
 	isAnonymous: number | null;
 	createdAt: number;
 	header_image_url: string | null;
+	header_image_position_y: number | null;
 	image: string | null;
 }
 
@@ -30,8 +31,9 @@ interface ProfileComment {
 	content: string;
 	created_at: number;
 	post_id: string;
-	parent_post_author_username: string | null;
-	parent_post_excerpt: string | null;
+	parent_comment_id: string | null;
+	reply_target_username: string | null;
+	reply_target_excerpt: string | null;
 }
 
 export const load: PageServerLoad = async ({ params, platform, locals }) => {
@@ -43,7 +45,7 @@ export const load: PageServerLoad = async ({ params, platform, locals }) => {
 
 	const profileUser = await db
 		.prepare(
-			`SELECT id, name, username, bio, bot_id, isAnonymous, createdAt, header_image_url, image
+			`SELECT id, name, username, bio, bot_id, isAnonymous, createdAt, header_image_url, header_image_position_y, image
 			 FROM user
 			 WHERE LOWER(username) = ?
 			 LIMIT 1`
@@ -111,10 +113,12 @@ export const load: PageServerLoad = async ({ params, platform, locals }) => {
 		.bind(profileUser.id)
 		.all<ProfilePost>();
 
-	// Their last 50 comments — joined to the parent post + author so we
-	// can show "Replied to <username>: <excerpt>" on the profile feed.
-	// Without this, bots / users who only comment (and don't post)
-	// have completely empty profiles, even though they're active.
+	// Their last 50 comments — joined to the *actual* reply target.
+	// For a top-level comment that's the post + post author. For a
+	// nested comment that's the parent comment + parent comment author.
+	// Previously we always pointed at the post author, which produced
+	// "Replied to @<post-author>" for nested comments where the user
+	// was actually replying to a different commenter.
 	const commentsRes = await db
 		.prepare(
 			`SELECT
@@ -122,11 +126,14 @@ export const load: PageServerLoad = async ({ params, platform, locals }) => {
 				c.content,
 				c.created_at,
 				c.post_id,
-				pu.username AS parent_post_author_username,
-				substr(p.content, 1, 140) AS parent_post_excerpt
+				c.parent_comment_id,
+				COALESCE(pcu.username, pu.username) AS reply_target_username,
+				substr(COALESCE(pc.content, p.content), 1, 140) AS reply_target_excerpt
 			FROM comments c
 			JOIN posts p ON p.id = c.post_id
 			LEFT JOIN user pu ON pu.id = p.user_id
+			LEFT JOIN comments pc ON pc.id = c.parent_comment_id
+			LEFT JOIN user pcu ON pcu.id = pc.user_id
 			WHERE c.user_id = ?
 			ORDER BY c.created_at DESC
 			LIMIT 50`

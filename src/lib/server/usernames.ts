@@ -9,6 +9,7 @@ export const RESERVED_USERNAMES = new Set<string>([
 	'search', 'history', 'messages', 'friends', 'profile', 'settings', 'admin',
 	'auth', 'login', 'signup', 'signin', 'signout', 'logout', 'register',
 	'account', 'home', 'feed', 'world',
+	'post', 'comment', 'posts', 'comments',
 	// API + static
 	'api', 'og', 'sw', 'robots', 'sitemap', 'favicon', 'manifest',
 	'static', 'assets', 'public', 'pwa', 'sehyo', 'logo',
