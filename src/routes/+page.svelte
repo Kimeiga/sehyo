@@ -74,13 +74,11 @@
 		};
 	});
 
-	// Free-form composer (unlocked once today's prompt is answered).
-	let freeValue = $state('');
-	let postingFree = $state(false);
-
-	// "Ask a question" composer in the World section.
-	let questionValue = $state('');
-	let postingQuestion = $state(false);
+	// World composer with two modes (Post / Ask). One textarea, one
+	// submit button; the active tab decides which endpoint we hit.
+	let worldTab = $state<'post' | 'ask'>('post');
+	let worldValue = $state('');
+	let postingWorld = $state(false);
 
 	// Browser-notification permission state. The actual web-push
 	// subscription wiring is a Phase 2 follow-up; for now we just hold
@@ -244,49 +242,27 @@
 		}
 	}
 
-	async function submitFreePost(e: SubmitEvent) {
+	async function submitWorld(e: SubmitEvent) {
 		e.preventDefault();
-		const content = freeValue.trim();
-		if (!content || postingFree) return;
-		postingFree = true;
+		const content = worldValue.trim();
+		if (!content || postingWorld) return;
+		const endpoint = worldTab === 'ask' ? '/api/posts/question' : '/api/posts/free';
+		postingWorld = true;
 		try {
-			const res = await fetch('/api/posts/free', {
+			const res = await fetch(endpoint, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				credentials: 'include',
 				body: JSON.stringify({ content })
 			});
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			freeValue = '';
+			worldValue = '';
 			await invalidateAll();
 		} catch (err) {
-			console.error('Free-form post failed:', err);
+			console.error('World post failed:', err);
 			alert('Could not post. Try again.');
 		} finally {
-			postingFree = false;
-		}
-	}
-
-	async function submitQuestion(e: SubmitEvent) {
-		e.preventDefault();
-		const content = questionValue.trim();
-		if (!content || postingQuestion) return;
-		postingQuestion = true;
-		try {
-			const res = await fetch('/api/posts/question', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				credentials: 'include',
-				body: JSON.stringify({ content })
-			});
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			questionValue = '';
-			await invalidateAll();
-		} catch (err) {
-			console.error('Question post failed:', err);
-			alert('Could not post question. Try again.');
-		} finally {
-			postingQuestion = false;
+			postingWorld = false;
 		}
 	}
 
@@ -535,37 +511,43 @@
 			<h2 class="world-label">World</h2>
 
 			<section class="free-section">
-				<form class="composer" onsubmit={submitFreePost}>
-					<textarea
-						bind:value={freeValue}
-						placeholder="What's on your mind?"
-						rows="3"
-						maxlength="2000"
-						disabled={postingFree}
-					></textarea>
-					<div class="composer-bar">
-						<button
-							type="submit"
-							class="post-button"
-							disabled={postingFree || freeValue.trim().length === 0}
-						>{postingFree ? 'Posting…' : 'Post'}</button>
-					</div>
-				</form>
+				<div class="world-tabs" role="tablist" aria-label="World composer">
+					<button
+						type="button"
+						role="tab"
+						aria-selected={worldTab === 'post'}
+						class="world-tab"
+						class:active={worldTab === 'post'}
+						onclick={() => (worldTab = 'post')}
+					>Post</button>
+					<button
+						type="button"
+						role="tab"
+						aria-selected={worldTab === 'ask'}
+						class="world-tab"
+						class:active={worldTab === 'ask'}
+						onclick={() => (worldTab = 'ask')}
+					>Ask</button>
+				</div>
 
-				<form class="composer" onsubmit={submitQuestion}>
+				<form class="composer" onsubmit={submitWorld}>
 					<textarea
-						bind:value={questionValue}
-						placeholder="Ask a question…"
-						rows="2"
-						maxlength="280"
-						disabled={postingQuestion}
+						bind:value={worldValue}
+						placeholder={worldTab === 'ask' ? 'Ask a question…' : "What's on your mind?"}
+						rows={worldTab === 'ask' ? 2 : 3}
+						maxlength={worldTab === 'ask' ? 280 : 2000}
+						disabled={postingWorld}
 					></textarea>
 					<div class="composer-bar">
 						<button
 							type="submit"
 							class="post-button"
-							disabled={postingQuestion || questionValue.trim().length === 0}
-						>{postingQuestion ? 'Asking…' : 'Ask'}</button>
+							disabled={postingWorld || worldValue.trim().length === 0}
+						>{
+							postingWorld
+								? worldTab === 'ask' ? 'Asking…' : 'Posting…'
+								: worldTab === 'ask' ? 'Ask' : 'Post'
+						}</button>
 					</div>
 				</form>
 
@@ -575,7 +557,7 @@
 							{#if p.is_question}
 								{@render userQuestionCard(p)}
 							{:else}
-								{@render postCard(p)}
+								{@render worldPostCard(p)}
 							{/if}
 						{/each}
 					</div>
@@ -716,6 +698,35 @@
 			>{submittingComment ? '…' : 'Post'}</button>
 		</form>
 	</div>
+{/snippet}
+
+{#snippet worldPostCard(p: { id: string; content: string; display_name: string | null; username?: string | null; bot_id: string | null; comment_count: number })}
+	<article class="world-post">
+		<p class="world-post-from">
+			{#if p.username}
+				<a class="world-post-name author-mask author-link" href="/{p.username}">{p.display_name ?? 'Anonymous'}</a>
+				<a class="handle handle-inline" href="/{p.username}">@{p.username}</a>
+			{:else}
+				<span class="world-post-name author-mask">{p.display_name ?? 'Anonymous'}</span>
+			{/if}
+		</p>
+		<p class="world-post-text">{p.content}</p>
+		<footer class="answer-foot">
+			<button
+				type="button"
+				class="comment-button"
+				onclick={() => toggleCommentBox(p.id)}
+				aria-label="Comment"
+			>
+				<MessageCircle size="18" strokeWidth="1.7" />
+				{#if p.comment_count > 0}<span class="count">{p.comment_count}</span>{/if}
+			</button>
+		</footer>
+
+		{#if openCommentFor === p.id}
+			{@render commentThread(p.id)}
+		{/if}
+	</article>
 {/snippet}
 
 {#snippet userQuestionCard(q: { id: string; content: string; display_name: string | null; username?: string | null; bot_id: string | null; comment_count: number })}
@@ -1242,6 +1253,63 @@
 	}
 	.free-section {
 		margin-top: 0;
+	}
+
+	/* Two-tab segmented control above the World composer. */
+	.world-tabs {
+		display: flex;
+		gap: 24px;
+		margin: 0 0 16px;
+		border-bottom: 1px solid var(--border);
+	}
+	.world-tab {
+		appearance: none;
+		border: 0;
+		background: transparent;
+		color: var(--muted-foreground);
+		font: inherit;
+		font-weight: 500;
+		font-size: 15px;
+		padding: 8px 0;
+		cursor: pointer;
+		border-bottom: 2px solid transparent;
+		margin-bottom: -1px;
+		transition: color 120ms ease, border-color 120ms ease;
+	}
+	.world-tab:hover { color: var(--foreground); }
+	.world-tab.active {
+		color: var(--foreground);
+		border-bottom-color: var(--foreground);
+	}
+
+	/* Free-form World posts get the same thin-large headline treatment
+	   as user-asked questions, just without the "FROM" eyebrow.
+	   The author tag sits as a small line above the body. */
+	.world-post {
+		max-width: 640px;
+		margin: 0 auto;
+		padding: 28px 0;
+		border-top: 1px solid var(--border);
+	}
+	.world-post-from {
+		font-size: 13px;
+		color: var(--muted-foreground);
+		margin: 0 0 10px;
+		font-weight: 500;
+	}
+	.world-post-name {
+		color: var(--foreground);
+		font-weight: 600;
+	}
+	.world-post-text {
+		font-family: var(--font-sans);
+		font-weight: 100;
+		letter-spacing: -0.018em;
+		font-size: clamp(22px, 3.6vw, 32px);
+		line-height: 1.2;
+		color: var(--foreground);
+		margin: 0;
+		white-space: pre-wrap;
 	}
 
 	/* User-asked questions in the World feed render with the same thin

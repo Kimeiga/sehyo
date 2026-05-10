@@ -83,12 +83,13 @@
 </svelte:head>
 
 <div class="page">
+	<h1 class="page-title">Search</h1>
 	<div class="search-shell">
 		<input
 			bind:this={inputEl}
 			bind:value={query}
 			type="search"
-			placeholder="Search people, answers, comments…"
+			placeholder="People, answers, comments…"
 			autocomplete="off"
 			autocapitalize="off"
 			spellcheck="false"
@@ -155,6 +156,15 @@
 		max-width: 640px;
 		margin: 0 auto;
 		padding: 80px 20px 64px;
+	}
+	.page-title {
+		font-family: var(--font-sans);
+		font-weight: 100;
+		letter-spacing: -0.025em;
+		font-size: clamp(40px, 7vw, 64px);
+		line-height: 1.05;
+		color: var(--foreground);
+		margin: 0 0 24px;
 	}
 	.search-shell { margin-bottom: 24px; }
 	.search-input {
