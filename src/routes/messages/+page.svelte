@@ -118,12 +118,22 @@
 			if (!response.ok) throw new Error('Failed to load messages');
 
 			const data = await response.json();
-			messages = data.messages;
+			const allMessages = data.messages as Message[];
 
-			// Decrypt messages
+			// Decrypt messages. We swallow per-message decrypt errors
+			// silently — they happen when an older message was
+			// encrypted to a public key the viewer no longer holds the
+			// matching private key for (e.g. they cleared
+			// localStorage, signed in on a new device, or regenerated
+			// keys). These messages are unrecoverable from the
+			// viewer's side, so we drop them from the displayed list
+			// rather than littering the console with per-message
+			// stack traces.
 			const privateKey = getStoredPrivateKey();
+			let undecryptableCount = 0;
+			const decrypted: Message[] = [];
 			if (privateKey) {
-				for (const message of messages) {
+				for (const message of allMessages) {
 					try {
 						const encrypted: EncryptedMessage = {
 							cipher_text: message.cipher_text,
@@ -131,12 +141,20 @@
 							iv: message.iv
 						};
 						message.decrypted_text = await decryptMessage(encrypted, privateKey);
-					} catch (error) {
-						console.error('Decryption error:', error);
-						message.decryption_error = true;
+						decrypted.push(message);
+					} catch {
+						undecryptableCount++;
 					}
 				}
+			} else {
+				decrypted.push(...allMessages);
 			}
+			if (undecryptableCount > 0) {
+				console.warn(
+					`messages: ${undecryptableCount} older message(s) couldn't be decrypted with the current key — hiding them.`
+				);
+			}
+			messages = decrypted;
 
 			// Scroll to bottom
 			setTimeout(() => {
