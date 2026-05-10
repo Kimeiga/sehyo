@@ -17,9 +17,21 @@
 
 	const ogUrl = $derived(`${SITE}${page.url.pathname}`);
 	const ogTitle = $derived('Sehyo — the most human social media on earth™');
+	// OG description (Twitter / Facebook share previews) leans into the
+	// daily prompt when one exists — that's the most enticing thing to
+	// show in a share card.
 	const ogDescription = $derived(
 		data.prompt
 			? `Today on Sehyo: ${data.prompt.text} A calm, thoughtful place to share what you really think.`
+			: DEFAULT_DESC
+	);
+	// Standard <meta description> — surfaced in search results, summary
+	// snippets, and "View page source" tooling. Always lead with the
+	// tagline so the home page reads as Sehyo first, today's question
+	// second.
+	const metaDescription = $derived(
+		data.prompt
+			? `Sehyo — the most human social media on earth™. Today's question: ${data.prompt.text}`
 			: DEFAULT_DESC
 	);
 	// Dynamic prompt-of-the-day image. Generated edge-side via workers-og.
@@ -64,8 +76,11 @@
 	<meta name="twitter:description" content={ogDescription} />
 	<meta name="twitter:image" content={ogImage} />
 
-	<!-- Per-page description. Not OG, just standard. -->
-	<meta name="description" content={ogDescription} />
+	<!-- Per-page description. Not OG, just standard. Lead with the
+	     "the most human social media on earth™" tagline — the home
+	     page used to lose it because the OG copy was overriding it
+	     here too. -->
+	<meta name="description" content={metaDescription} />
 </svelte:head>
 
 <div class="app" class:names-blurred={data.namesBlurred}>
