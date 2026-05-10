@@ -5,9 +5,20 @@
 	import LoginModal from '$lib/components/LoginModal.svelte';
 	import { menuOpen, toggleMenu } from '$lib/stores/menu';
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import { pwaInfo } from 'virtual:pwa-info';
 
 	let { data, children }: LayoutProps = $props();
+
+	const SITE = 'https://sehyo.com';
+	const DEFAULT_DESC = 'A daily question. Share your thoughts.';
+
+	const ogUrl = $derived(`${SITE}${page.url.pathname}`);
+	const ogTitle = $derived('Sehyo — share your thoughts');
+	const ogDescription = $derived(
+		data.prompt ? `Today's question: ${data.prompt.text}` : DEFAULT_DESC
+	);
+	const ogImage = $derived(`${SITE}/og-default.png`);
 
 	onMount(async () => {
 		if (pwaInfo) {
@@ -25,6 +36,27 @@
 	<link rel="icon" type="image/svg+xml" href="/sehyo-logo.svg" />
 	<link rel="alternate icon" type="image/png" href="/favicon.png" />
 	<link rel="apple-touch-icon" href="/pwa-192x192.png" />
+	<link rel="canonical" href={ogUrl} />
+
+	<!-- Open Graph -->
+	<meta property="og:site_name" content="Sehyo" />
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content={ogUrl} />
+	<meta property="og:title" content={ogTitle} />
+	<meta property="og:description" content={ogDescription} />
+	<meta property="og:image" content={ogImage} />
+	<meta property="og:image:width" content="1200" />
+	<meta property="og:image:height" content="630" />
+	<meta property="og:image:type" content="image/png" />
+
+	<!-- Twitter card -->
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content={ogTitle} />
+	<meta name="twitter:description" content={ogDescription} />
+	<meta name="twitter:image" content={ogImage} />
+
+	<!-- Per-page description. Not OG, just standard. -->
+	<meta name="description" content={ogDescription} />
 </svelte:head>
 
 <div class="app" class:names-blurred={data.namesBlurred}>

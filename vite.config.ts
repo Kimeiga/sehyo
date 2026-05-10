@@ -17,7 +17,7 @@ export default defineConfig({
 			manifest: {
 				name: 'Sehyo',
 				short_name: 'Sehyo',
-				description: 'A modern social media platform built with SvelteKit and Cloudflare',
+				description: 'A daily question. Share your thoughts.',
 				theme_color: '#00A5D8',
 				background_color: '#ffffff',
 				display: 'standalone',
