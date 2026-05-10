@@ -9,6 +9,7 @@ interface AnswerRow {
 	username: string | null;
 	bot_id: string | null;
 	comment_count: number;
+	is_question?: number;
 }
 
 interface DayBucket {
@@ -89,6 +90,7 @@ export const load: PageServerLoad = async ({ platform }) => {
 				p.user_id,
 				p.content,
 				p.created_at,
+				p.is_question,
 				u.name as display_name,
 				u.username,
 				u.bot_id,
