@@ -27,10 +27,10 @@ export const GET: RequestHandler = async ({ params, platform, locals }) => {
 					m.created_at,
 					m.read_at,
 					u.username as sender_username,
-					u.display_name as sender_display_name,
-					u.profile_picture_url as sender_profile_picture
+					u.name as sender_display_name,
+					u.image as sender_profile_picture
 				FROM messages m
-				JOIN users u ON u.id = m.sender_id
+				JOIN user u ON u.id = m.sender_id
 				WHERE (m.sender_id = ? AND m.recipient_id = ?)
 				   OR (m.sender_id = ? AND m.recipient_id = ?)
 				ORDER BY m.created_at ASC`

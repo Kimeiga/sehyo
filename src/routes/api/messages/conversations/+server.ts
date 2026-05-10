@@ -12,32 +12,37 @@ export const GET: RequestHandler = async ({ platform, locals }) => {
 	}
 
 	try {
-		// Get all unique conversations (users you've messaged with)
+		// Get all unique conversations (users you've messaged with).
+		// Uses a CTE so the "other party" id is materialized before the
+		// correlated unread-count subquery references it (SQLite can't
+		// resolve outer-SELECT aliases inside a subquery WHERE clause).
 		const conversations = await db
 			.prepare(
-				`SELECT DISTINCT
-					CASE 
-						WHEN sender_id = ? THEN recipient_id
-						ELSE sender_id
-					END as user_id,
+				`WITH conv AS (
+					SELECT
+						CASE WHEN sender_id = ?1 THEN recipient_id ELSE sender_id END AS other_id,
+						created_at,
+						sender_id,
+						recipient_id
+					FROM messages
+					WHERE sender_id = ?1 OR recipient_id = ?1
+				)
+				SELECT
+					conv.other_id AS user_id,
 					u.username,
-					u.display_name,
-					u.profile_picture_url,
-					MAX(m.created_at) as last_message_at,
-					(SELECT COUNT(*) FROM messages 
-					 WHERE sender_id = user_id 
-					 AND recipient_id = ? 
-					 AND read_at IS NULL) as unread_count
-				FROM messages m
-				JOIN users u ON u.id = CASE 
-					WHEN m.sender_id = ? THEN m.recipient_id
-					ELSE m.sender_id
-				END
-				WHERE sender_id = ? OR recipient_id = ?
-				GROUP BY user_id
+					u.name AS display_name,
+					u.image AS profile_picture_url,
+					MAX(conv.created_at) AS last_message_at,
+					(SELECT COUNT(*) FROM messages
+					 WHERE messages.sender_id = conv.other_id
+					   AND messages.recipient_id = ?1
+					   AND messages.read_at IS NULL) AS unread_count
+				FROM conv
+				JOIN user u ON u.id = conv.other_id
+				GROUP BY conv.other_id, u.username, u.name, u.image
 				ORDER BY last_message_at DESC`
 			)
-			.bind(locals.user.id, locals.user.id, locals.user.id, locals.user.id, locals.user.id)
+			.bind(locals.user.id)
 			.all();
 
 		return json({

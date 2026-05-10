@@ -19,20 +19,20 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
 		if (type === 'friends') {
 			// Get accepted friends
 			const results = await platform.env.DB.prepare(
-				`SELECT f.*, 
+				`SELECT f.*,
 					u.id as friend_id,
-					u.display_name,
+					u.name as display_name,
 					u.username,
-					u.profile_picture_url,
+					u.image as profile_picture_url,
 					u.bio
 				FROM friendships f
-				JOIN users u ON (
-					CASE 
-						WHEN f.user_id = ? THEN u.id = f.friend_id
-						ELSE u.id = f.user_id
+				JOIN user u ON (
+					CASE
+						WHEN f.requester_id = ? THEN u.id = f.addressee_id
+						ELSE u.id = f.requester_id
 					END
 				)
-				WHERE (f.user_id = ? OR f.friend_id = ?) 
+				WHERE (f.requester_id = ? OR f.addressee_id = ?)
 				AND f.status = 'accepted'
 				ORDER BY f.created_at DESC`
 			)
@@ -43,15 +43,15 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
 		} else if (type === 'pending') {
 			// Get pending friend requests (received)
 			const results = await platform.env.DB.prepare(
-				`SELECT f.*, 
+				`SELECT f.*,
 					u.id as requester_id,
-					u.display_name,
+					u.name as display_name,
 					u.username,
-					u.profile_picture_url,
+					u.image as profile_picture_url,
 					u.bio
 				FROM friendships f
-				JOIN users u ON u.id = f.user_id
-				WHERE f.friend_id = ? AND f.status = 'pending'
+				JOIN user u ON u.id = f.requester_id
+				WHERE f.addressee_id = ? AND f.status = 'pending'
 				ORDER BY f.created_at DESC`
 			)
 				.bind(locals.user.id)
@@ -61,14 +61,14 @@ export const GET: RequestHandler = async ({ url, platform, locals }) => {
 		} else if (type === 'sent') {
 			// Get sent friend requests
 			const results = await platform.env.DB.prepare(
-				`SELECT f.*, 
+				`SELECT f.*,
 					u.id as recipient_id,
-					u.display_name,
+					u.name as display_name,
 					u.username,
-					u.profile_picture_url
+					u.image as profile_picture_url
 				FROM friendships f
-				JOIN users u ON u.id = f.friend_id
-				WHERE f.user_id = ? AND f.status = 'pending'
+				JOIN user u ON u.id = f.addressee_id
+				WHERE f.requester_id = ? AND f.status = 'pending'
 				ORDER BY f.created_at DESC`
 			)
 				.bind(locals.user.id)
@@ -107,9 +107,9 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	try {
 		// Check if friendship already exists
 		const existing = await platform.env.DB.prepare(
-			`SELECT * FROM friendships 
-			WHERE (user_id = ? AND friend_id = ?) 
-			OR (user_id = ? AND friend_id = ?)`
+			`SELECT * FROM friendships
+			WHERE (requester_id = ? AND addressee_id = ?)
+			OR (requester_id = ? AND addressee_id = ?)`
 		)
 			.bind(locals.user.id, friend_id, friend_id, locals.user.id)
 			.first();
@@ -127,7 +127,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 		// Create friend request
 		const friendshipId = crypto.randomUUID();
 		await platform.env.DB.prepare(
-			`INSERT INTO friendships (id, user_id, friend_id, status, created_at)
+			`INSERT INTO friendships (id, requester_id, addressee_id, status, created_at)
 			VALUES (?, ?, ?, 'pending', ?)`
 		)
 			.bind(friendshipId, locals.user.id, friend_id, Math.floor(Date.now() / 1000))

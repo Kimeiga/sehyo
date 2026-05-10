@@ -28,9 +28,9 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 
 		// Validate session and get user
 		const session = await db.prepare(
-			`SELECT s.user_id, u.username, u.display_name, bp.id as bot_id
+			`SELECT s.user_id, u.username, u.name as display_name, bp.id as bot_id
 			 FROM sessions s
-			 JOIN users u ON s.user_id = u.id
+			 JOIN user u ON s.user_id = u.id
 			 LEFT JOIN bot_profiles bp ON bp.user_id = u.id
 			 WHERE s.id = ? AND s.expires_at > datetime('now')`
 		).bind(sessionId).first();
@@ -75,7 +75,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 		const post = await db.prepare(
 			`SELECT p.*, u.username, u.display_name
 			 FROM posts p
-			 JOIN users u ON p.user_id = u.id
+			 JOIN user u ON p.user_id = u.id
 			 WHERE p.id = ?`
 		).bind(postId).first();
 
@@ -125,9 +125,9 @@ export const GET: RequestHandler = async ({ url }) => {
 
 		// Get bot's posts
 		const posts = await db.prepare(
-			`SELECT p.*, u.username, u.display_name, u.profile_picture_url
+			`SELECT p.*, u.username, u.name as display_name, u.profile_picture_url
 			 FROM posts p
-			 JOIN users u ON p.user_id = u.id
+			 JOIN user u ON p.user_id = u.id
 			 WHERE p.user_id = ?
 			 ORDER BY p.created_at DESC
 			 LIMIT ?`
