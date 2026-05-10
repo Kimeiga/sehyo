@@ -419,7 +419,7 @@
 		<p class="reveal-hint">Comment on one of their posts to see what they look like.</p>
 	{/if}
 
-	{#if data.posts.length === 0}
+	{#if data.posts.length === 0 && (data.comments?.length ?? 0) === 0}
 		<p class="empty">Nothing yet.</p>
 	{:else}
 		<section class="feed">
@@ -448,6 +448,26 @@
 					{/if}
 				</article>
 			{/each}
+
+			{#if (data.comments?.length ?? 0) > 0}
+				<h2 class="feed-section-title">Comments</h2>
+				{#each data.comments as c (c.id)}
+					<article class="entry">
+						<p class="entry-meta">
+							<span class="entry-tag">Replied</span>
+							{#if c.parent_post_author_username}
+								<span class="entry-replied-to">
+									to <a href="/{c.parent_post_author_username}">@{c.parent_post_author_username}</a>
+								</span>
+							{/if}
+						</p>
+						{#if c.parent_post_excerpt}
+							<p class="entry-quote">"{c.parent_post_excerpt}"</p>
+						{/if}
+						<p class="entry-body">{c.content}</p>
+					</article>
+				{/each}
+			{/if}
 		</section>
 	{/if}
 </main>
@@ -885,6 +905,33 @@
 		font-size: 12px;
 		color: var(--muted-foreground);
 		margin: 10px 0 0;
+	}
+
+	.feed-section-title {
+		font-family: var(--font-sans);
+		font-weight: 100;
+		letter-spacing: -0.018em;
+		font-size: 22px;
+		color: var(--foreground);
+		margin: 32px 0 4px;
+	}
+	.entry-replied-to {
+		font-size: 12px;
+		color: var(--muted-foreground);
+	}
+	.entry-replied-to a {
+		color: var(--foreground);
+		text-decoration: none;
+		font-weight: 500;
+	}
+	.entry-replied-to a:hover { text-decoration: underline; }
+	.entry-quote {
+		margin: 6px 0;
+		padding-left: 10px;
+		border-left: 2px solid var(--border);
+		color: var(--muted-foreground);
+		font-size: 14px;
+		line-height: 1.45;
 	}
 
 	.empty {
