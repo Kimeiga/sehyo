@@ -415,7 +415,11 @@
 	}
 
 	/* Today's prompt — thin and dramatic, wider than the body column on
-	   desktop so the question has room to breathe. */
+	   desktop so the question has room to breathe. On desktop the
+	   headline becomes a hero block: min-height fills most of the
+	   viewport, text vertically centered, with extra bottom padding
+	   for air before the composer. Mobile keeps the existing tight
+	   layout. */
 	.prompt-today {
 		font-family: var(--font-sans);
 		font-weight: 100;
@@ -424,7 +428,15 @@
 		line-height: 1.05;
 		color: var(--foreground);
 		margin: 0 auto 32px;
-		max-width: 920px;
+		max-width: 1000px;
+	}
+	@media (min-width: 768px) {
+		.prompt-today {
+			display: flex;
+			align-items: center;
+			min-height: 60dvh;
+			padding-bottom: 80px;
+		}
 	}
 
 	/* Past prompts — same thin treatment, scaled down. */
