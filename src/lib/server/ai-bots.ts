@@ -1,7 +1,10 @@
 import type { D1Database, Ai } from '@cloudflare/workers-types';
 
-const PROMPT_MODEL = '@cf/meta/llama-3.1-8b-instruct';
-const ANSWERS_MODEL = '@cf/meta/llama-3.1-8b-instruct';
+// 8B was too literal — it parroted the system prompt's poetic-flourish
+// banned-list and still hit them. 70B handles nuance better. We
+// generate ~9 calls per day total so the extra compute is fine.
+const PROMPT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+const ANSWERS_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
 // Number of seed answers to generate per prompt. Stays small so the feed
 // doesn't look bot-flooded; real human posts mix in over the day.
@@ -25,38 +28,79 @@ function answersSystemPrompt(authors: SeedAuthor[]) {
 		.map((a, i) => `${i + 1}. ${a.name} — ${a.personality ?? 'no specific personality'}`)
 		.join('\n');
 
-	return `You are simulating ${n} different anonymous people typing answers on a daily-question forum. Each line of output is ONE PERSON'S OWN answer, in their first-person voice.
+	return `You are simulating ${n} different anonymous people typing on a daily-question forum. Each line is ONE person's first-person reply.
 
 ROSTER (in order — line N comes from person N):
 ${roster}
 
-CRITICAL RULES:
-- Write each answer FIRST PERSON, as the person themselves typing. NEVER use third-person narration ("X said with a smile", "X shrugged", "X mused"). NO action tags, NO dialogue tags, NO scene-setting, NO mention of the person's own name. Just the words they would type.
-- EVERY ANSWER MUST ACTUALLY ATTEMPT THE QUESTION. Banned: "great question", "honestly i dont know what to say", "no comment", "interesting question", or any answer that is just a deflection without a payoff. Even a wry sidestep needs to land — give a punchline or an angle.
-- Output exactly ${n} lines. Line 1 = person 1's answer, line 2 = person 2's answer, etc. No numbering, no labels, no name prefixes, no quote marks around the answers, no markdown.
-- Personality should flavor the voice (a deadpan person sounds different from a contrarian one) but the actual content of the answers must still be DISTINCT — different angles, different points.
-- Keep it safe-for-work. No vulgarity, no slurs, no NSFW references.
+═══ CRITICAL RULES ═══
 
-LENGTH AND ANECDOTES (very important):
-- 1 or 2 of the ${n} answers should be a small anecdote (40-70 words): a specific concrete moment from this person's life that bears on the question, then one short line of why it stuck or what they took from it. Make it feel like a real memory, not a parable.
-- The rest are short (5-20 words). One or two can be a fragment ("idk", "couldnt tell ya, but i'd rather not find out").
-- Choose the anecdote-tellers based on personality: "concrete example", "anecdotal", "warm", "philosophical", "earnest" types are natural storytellers. Avoid stories from "deadpan", "sardonic", "contrarian" types.
+1. FIRST PERSON ONLY. Never write "X said", "X shrugged", "X chuckled". No narration, no scene-setting, no name-dropping the speaker. Just what they'd type.
 
-STYLE VARIANCE across the ${n} lines (deliberately mix these — do not make them all the same):
-- Some lowercase-first ("i think it's fine"), some properly capitalized.
-- Some ending in a period, some not, some trailing off with "...".
-- Contractions without apostrophes occasionally ("dont", "its", "wont").
-- Avoid: clichés, motivational lines, hashtags, emoji, quotation marks, every line starting with "I think" / "Honestly" / "Actually".
+2. ACTUALLY ATTEMPT THE QUESTION. No "great question", "honestly idk", "no comment". Even a sidestep must land a joke or an angle.
 
-Example. Roster: "1. Calixto — contrarian; 2. Aoife — concrete-example storyteller; 3. Idony — sidesteps with humor; 4. Aurelio — self-deprecating."
-Question: "How do you handle stress?"
-Correct output (4 lines, no narration, first person, one anecdote):
-the framing is wrong. you dont handle stress, you reorganize your life so it doesnt show up
-i had a panic attack on the M5 around 2019, parked at a service station and just sat there for 40 minutes watching people buy crisps. it didnt fix anything but i learned that pulling over is allowed. now i pull over a lot, even metaphorically.
-couldnt tell ya, mine is currently undefeated
-i would tell you my method but my method is also why im stressed in the first place
+3. Output exactly ${n} lines. Line 1 from person 1, line 2 from person 2, etc. No numbering, no labels, no quotes around answers, no markdown.
 
-Now produce exactly ${n} first-person answers for the actual question, matched to the roster above. Output nothing but the ${n} answer lines.`;
+4. Safe for work.
+
+═══ AVOID THESE "AI TELLS" ═══
+
+These patterns make answers smell like ChatGPT. AVOID them across ALL ${n} lines:
+
+- "X not Y" constructions ("flight patterns not street maps", "the journey not the destination", "experience not consumption"). Banned outright.
+- Closing metaphors / aphorisms ("like rain through a screen door", "data input in my brain"). Most lines should NOT end on a profound flourish.
+- "It's all just ___" / "in the end" / "ultimately" / "at the heart of it". Banned.
+- Setup-then-twist rhythm where every line is "[claim], [poetic reframe]". Most lines should be ONE blunt thing, no twist.
+- Identical sentence shape across the batch. If two lines have the same rhythm, rewrite one.
+
+═══ MANDATORY VARIETY (across the ${n} lines) ═══
+
+The batch should feel like a real comment thread, not a writers' room. Mix:
+
+- LENGTH: 2-3 lines should be VERY SHORT (3-12 words, even fragments — "books are cheaper", "idk i just like trains", "lol no", "airports are all the same"). 1-2 lines should be a longer ANECDOTE (40-70 words, see below). The rest are 8-25 words.
+
+- EFFORT: at least one line should feel low-effort or even slightly boring. Not every line needs to be insightful. Real people post throwaway takes.
+
+- POSITIONS: include actual disagreement or a half-formed contradiction. Don't have everyone politely agreeing on the same vibe.
+
+- REGISTER: mix lowercase-first sentences, properly-capitalized ones, fragments, occasional missing apostrophes ("dont", "its"), occasional ALL caps for emphasis on ONE word ("airports are MOSTLY the same to me").
+
+═══ ANECDOTE INSTRUCTIONS (for 1-2 of the lines) ═══
+
+When a personality calls for an anecdote, name SPECIFIC concrete things:
+- a place name (Lisbon, Tulsa, Ueno Station — not "a small town")
+- a price ($14 coffee, €9 bottled water)
+- a weather / smell / time of day
+- an awkward embarrassment (cried, got lost, missed a flight, said the wrong word)
+- a brand or object (a Nokia 3310, a Rough Guide, a CVS receipt)
+
+Let the anecdote accidentally reveal something — class anxiety, loneliness, vanity, romanticism — sideways, not as the point. The memory IS the answer; no moral, no "what i learned was".
+
+═══ FEW-SHOT EXAMPLE ═══
+
+Roster:
+1. Calixto — blunt, contrarian, short
+2. Aoife — concrete-example storyteller, names specifics
+3. Idony — sidesteps with a punchline
+4. Dashiell — deadpan, low effort
+5. Aurelio — salty self-deprecating about money
+6. Yael — warm, oversharing memory
+7. Mireille — direct, structural
+8. Theron — earnest, slightly awkward
+
+Question: "Do you think travel broadens your perspective more than reading about it?"
+
+Correct output (8 lines, varied length and shape, NO poetic flourishes):
+no, you just become more annoying
+i went to porto for four days in 2018 and the only thing i remember clearly is the lady at the pastel de nata place laughing at my pronunciation. didnt feel broader, felt small.
+travel changed me, mostly into someone with worse skin
+books are cheaper
+travel broadens my perspective on how much i hate my bank account
+my mom moved from beirut to detroit at 22 and never went back, and i think about that almost every time i get on a plane for fun. i still cant tell if she'd be jealous or relieved. probably both.
+depends on what youre trying to broaden — vocabulary or empathy
+i think the answer changes a lot depending on like, how old you are and what you read i guess. for me reading kind of did more because i was already pretty observant in real life
+
+NOW. Produce exactly ${n} first-person answers for the actual question, matched to the roster above. Output nothing but the ${n} lines. No prelude.`;
 }
 
 export interface SeedAuthor {
@@ -157,6 +201,58 @@ function shuffle<T>(arr: T[]): T[] {
 		[a[i], a[j]] = [a[j], a[i]];
 	}
 	return a;
+}
+
+/**
+ * Regenerate seed-author answers for today's existing prompt without
+ * touching the prompt itself or any user-authored content. Used for
+ * dev iteration when the LLM prompt or model changes.
+ */
+export async function regenerateSeedAnswersForToday(
+	db: D1Database,
+	ai: Ai
+): Promise<{ prompt_id: string; prompt_text: string; answers_inserted: number }> {
+	const date = todayUTC();
+	const prompt = await db
+		.prepare('SELECT id, prompt_text FROM daily_prompts WHERE active_date = ?')
+		.bind(date)
+		.first<{ id: string; prompt_text: string }>();
+	if (!prompt) throw new Error('No prompt for today');
+
+	// Drop only seed-author posts attached to this prompt. User content
+	// stays.
+	await db
+		.prepare(
+			`DELETE FROM posts
+			 WHERE prompt_id = ?
+			   AND user_id IN (SELECT id FROM user WHERE bot_id LIKE 'seed_%')`
+		)
+		.bind(prompt.id)
+		.run();
+
+	const authors = await getSeedAuthors(db);
+	const n = Math.min(ANSWER_COUNT, authors.length);
+	const picked = shuffle(authors).slice(0, n);
+	const answers = await generateSeedAnswers(ai, prompt.prompt_text, picked);
+
+	let inserted = 0;
+	for (let i = 0; i < answers.length; i++) {
+		const a = answers[i];
+		const author = picked[i];
+		if (!a || !author) continue;
+		try {
+			const postId = crypto.randomUUID();
+			await db
+				.prepare('INSERT INTO posts (id, user_id, prompt_id, content) VALUES (?, ?, ?, ?)')
+				.bind(postId, author.user_id, prompt.id, a)
+				.run();
+			inserted++;
+		} catch (err) {
+			console.error('Seed insert failed for', author.name, err);
+		}
+	}
+
+	return { prompt_id: prompt.id, prompt_text: prompt.prompt_text, answers_inserted: inserted };
 }
 
 /**
