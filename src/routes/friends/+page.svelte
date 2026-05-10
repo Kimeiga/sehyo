@@ -121,6 +121,36 @@
 	</span>
 {/snippet}
 
+{#snippet findRow(u: {
+	id: string;
+	display_name: string | null;
+	username: string | null;
+	bio?: string | null;
+	profile_picture_url?: string | null;
+})}
+	{@const fs = data.friendshipByUser?.[u.id]}
+	<li class="row">
+		<a class="row-main" href={u.username ? `/${u.username}` : `/profile/${u.id}`}>
+			{@render avatarMd(u.id, u.profile_picture_url)}
+			<div class="row-text">
+				<p class="row-headline">
+					<span class="row-title">{u.display_name ?? 'Anonymous'}</span>{#if u.username}<span class="row-sub">@{u.username}</span>{/if}
+				</p>
+				{#if u.bio}<p class="row-bio">{u.bio}</p>{/if}
+			</div>
+		</a>
+		{#if fs === 'accepted'}
+			<button type="button" class="ghost-button" disabled>Friends</button>
+		{:else if fs === 'pending_outgoing'}
+			<button type="button" class="ghost-button" disabled>Requested</button>
+		{:else if fs === 'pending_incoming'}
+			<button type="button" class="ghost-button" disabled>Awaiting you</button>
+		{:else}
+			<button type="button" class="primary-button" onclick={() => sendRequest(u.id)}>Add</button>
+		{/if}
+	</li>
+{/snippet}
+
 <svelte:head>
 	<title>Friends · Sehyo</title>
 </svelte:head>
@@ -222,17 +252,7 @@
 				{:else}
 					<ul class="list">
 						{#each searchResults as u (u.id)}
-							<li class="row">
-								<a class="row-main" href={u.username ? `/${u.username}` : `/profile/${u.id}`}>
-									{@render avatarMd(u.id, (u as { profile_picture_url?: string | null }).profile_picture_url)}
-									<div class="row-text">
-										<p class="row-title">{u.display_name ?? 'Anonymous'}</p>
-										{#if u.username}<p class="row-sub">@{u.username}</p>{/if}
-										{#if u.bio}<p class="row-bio">{u.bio}</p>{/if}
-									</div>
-								</a>
-								<button type="button" class="primary-button" onclick={() => sendRequest(u.id)}>Add</button>
-							</li>
+							{@render findRow(u as { id: string; display_name: string | null; username: string | null; bio?: string | null; profile_picture_url?: string | null })}
 						{/each}
 					</ul>
 				{/if}
@@ -245,14 +265,7 @@
 				{:else}
 					<ul class="list">
 						{#each data.allUsers as u (u.id)}
-							<li class="row">
-								<a class="row-main" href={u.username ? `/${u.username}` : `/profile/${u.id}`}>
-									<p class="row-title">{u.display_name ?? 'Anonymous'}</p>
-									{#if u.username}<p class="row-sub">@{u.username}</p>{/if}
-									{#if u.bio}<p class="row-bio">{u.bio}</p>{/if}
-								</a>
-								<button type="button" class="primary-button" onclick={() => sendRequest(u.id)}>Add</button>
-							</li>
+							{@render findRow(u)}
 						{/each}
 					</ul>
 				{/if}
@@ -343,10 +356,12 @@
 	}
 	.row-main:hover { opacity: 0.85; }
 	.row-text { flex: 1; min-width: 0; }
-	.row-title { font-weight: 600; font-size: 16px; margin: 0; }
-	.row-sub { font-size: 13px; color: var(--muted-foreground); margin: 2px 0 0; }
-	.row-bio { font-size: 14px; color: var(--muted-foreground); margin: 6px 0 0; }
+	.row-headline { margin: 0; line-height: 1.3; }
+	.row-title { font-weight: 600; font-size: 16px; color: var(--foreground); }
+	.row-sub { font-size: 13px; color: var(--muted-foreground); font-weight: 500; margin-left: 6px; }
+	.row-bio { font-size: 14px; color: var(--muted-foreground); margin: 4px 0 0; }
 	.row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+	.ghost-button[disabled] { opacity: 0.55; cursor: default; }
 
 	.avatar-frame {
 		display: inline-block;
