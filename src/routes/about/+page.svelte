@@ -32,7 +32,44 @@
 	</section>
 
 	<footer class="byline">
-		Built by <a href="https://hakanalpay.com" target="_blank" rel="noopener noreferrer">Hakan Alpay</a> and <a href="https://github.com/tfukaza" target="_blank" rel="noopener noreferrer">Tomoki Fukazawa</a>.
+		<p>
+			Built by <a href="https://hakanalpay.com" target="_blank" rel="noopener noreferrer">Hakan Alpay</a> and <a href="https://github.com/tfukaza" target="_blank" rel="noopener noreferrer">Tomoki Fukazawa</a>.
+		</p>
+		<p class="credit">
+			Sky texture: photos by
+			<a
+				href="https://unsplash.com/@cspek?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText"
+				target="_blank"
+				rel="noopener noreferrer"
+			>Chris Nguyen</a>
+			(<a
+				href="https://unsplash.com/photos/blue-sky-and-white-clouds-lbmrrNgq2lo?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText"
+				target="_blank"
+				rel="noopener noreferrer"
+			>source</a>),
+			<a
+				href="https://unsplash.com/@leronep?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText"
+				target="_blank"
+				rel="noopener noreferrer"
+			>Lerone Pieters</a>
+			(<a
+				href="https://unsplash.com/photos/panoramic-photography-of-sunset-at-the-city-g0enUw24TBI?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText"
+				target="_blank"
+				rel="noopener noreferrer"
+			>source</a>),
+			and
+			<a
+				href="https://unsplash.com/@mnelson?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText"
+				target="_blank"
+				rel="noopener noreferrer"
+			>Matt Nelson</a>
+			(<a
+				href="https://unsplash.com/photos/aerial-view-of-city-lights-and-z4X3yABcf5g?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText"
+				target="_blank"
+				rel="noopener noreferrer"
+			>source</a>)
+			on Unsplash.
+		</p>
 	</footer>
 </main>
 
@@ -79,6 +116,12 @@
 		border-top: 1px solid var(--border);
 		font-size: 14px;
 		color: var(--muted-foreground);
+	}
+	.byline p { margin: 0 0 6px; }
+	.byline p:last-child { margin-bottom: 0; }
+	.byline .credit {
+		font-size: 12px;
+		opacity: 0.75;
 	}
 	.byline a {
 		color: var(--foreground);

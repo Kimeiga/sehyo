@@ -1,7 +1,54 @@
 <script lang="ts">
 	import { onMount, onDestroy, type Snippet } from 'svelte';
 
-	let { text, children }: { text: string; children?: Snippet } = $props();
+	let {
+		text,
+		children,
+		headingStyle,
+		interactive = true,
+		knockout = false,
+		autoRipple
+	}: {
+		text: string;
+		children?: Snippet;
+		/* Inline style applied to the underlying h1. Lets a consumer
+		   override font-size / color / weight / letter-spacing without
+		   needing to pierce scoped CSS. Existing call-sites pass
+		   nothing → h1 keeps its original hero styling. */
+		headingStyle?: string;
+		/* When false, no pointer listeners are attached and the canvas
+		   ripples only fire from the `autoRipple` timer below. Used by
+		   small-scale reuses (e.g. the typing indicator) where mouse
+		   interaction would be noise. */
+		interactive?: boolean;
+		/* When true, the display shader inverts: instead of rendering
+		   the text as white pixels on a transparent background, it
+		   paints a solid white rectangle filling the canvas and
+		   knocks the text shape OUT as transparent holes. Ripples
+		   still distort the cutout edges. Used to render the typing
+		   indicator as a stencil-style label so it reads as a status
+		   tag rather than a plain message. */
+		knockout?: boolean;
+		/* Optional: programmatically fire small random splats on a
+		   timer to mimic "raindrops on a puddle". When set, each tick
+		   queues a splat at a random UV inside the configured region
+		   of the canvas with the configured radius/strength, then
+		   schedules the next tick. Damping defaults to a more
+		   aggressive value when autoRipple is provided so ripples
+		   die out fast. uRange/vRange default to the central 60%×40%
+		   of the canvas — narrow them when the visible text only
+		   occupies part of the canvas (e.g. a left-aligned word) so
+		   ripples land *on the glyphs* and produce visible refraction
+		   instead of disturbing empty space. */
+		autoRipple?: {
+			intervalMs: number;
+			radius?: number;
+			strength?: number;
+			damping?: number;
+			uRange?: [number, number];
+			vRange?: [number, number];
+		};
+	} = $props();
 
 	let host: HTMLDivElement;
 	let h1El: HTMLHeadingElement;
@@ -84,6 +131,7 @@ uniform sampler2D u_height;
 uniform vec2 u_texel;
 uniform float u_strength;
 uniform float u_time;
+uniform float u_invert;
 in vec2 v_uv;
 out vec4 outColor;
 
@@ -131,7 +179,22 @@ void main() {
 	aG = clamp(aG + (nG - 0.5) * grain, 0.0, 1.0);
 	aB = clamp(aB + (nB - 0.5) * grain, 0.0, 1.0);
 
-	outColor = vec4(aR, aG, aB, max(max(aR, aG), aB));
+	float coverageMax = max(max(aR, aG), aB);
+
+	if (u_invert > 0.5) {
+		/* Knockout mode: solid white rectangle filling the canvas
+		   with the text shape cut out (transparent). Chromatic
+		   aberration shows up as soft, slightly chromatic edges
+		   around the cutout during ripples — the max of the three
+		   per-channel samples widens the hole at moving wavefronts
+		   so the colored fringe reads at the cutout's rim. */
+		outColor = vec4(1.0, 1.0, 1.0, 1.0 - coverageMax);
+	} else {
+		/* Text-as-paint (original behavior): glyphs render as the
+		   three offset alpha samples, recombining to white at rest
+		   and splitting into RGB fringes at moving wavefronts. */
+		outColor = vec4(aR, aG, aB, coverageMax);
+	}
 }`;
 
 		function compile(type: number, src: string): WebGLShader {
@@ -216,7 +279,14 @@ void main() {
 					m && m.length >= 3 ? 0.299 * +m[0] + 0.587 * +m[1] + 0.114 * +m[2] : 0;
 				ctx.fillStyle = luma < 128 ? '#ffffff' : '#000000';
 			}
-			ctx.textAlign = 'center';
+			/* Mirror the h1's computed text-align so consumers can
+			   override via inline style (e.g. left-aligned "typing"
+			   indicator). `start`/`end` resolve to left/right under
+			   the assumption of a LTR context. */
+			let canvasAlign: CanvasTextAlign = 'center';
+			if (cs.textAlign === 'left' || cs.textAlign === 'start') canvasAlign = 'left';
+			else if (cs.textAlign === 'right' || cs.textAlign === 'end') canvasAlign = 'right';
+			ctx.textAlign = canvasAlign;
 			ctx.textBaseline = 'top';
 			(ctx as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing =
 				cs.letterSpacing;
@@ -240,9 +310,17 @@ void main() {
 			if (current) lines.push(current);
 
 			let y = textY;
-			const centerX = textX + textW / 2;
+			/* Anchor X depends on the canvas textAlign chosen above:
+			   left → text origin at the left edge of the wrap box,
+			   right → at the right edge, center → at the midpoint. */
+			const anchorX =
+				canvasAlign === 'left'
+					? textX
+					: canvasAlign === 'right'
+						? textX + textW
+						: textX + textW / 2;
 			for (const ln of lines) {
-				ctx.fillText(ln, centerX, y);
+				ctx.fillText(ln, anchorX, y);
 				y += lineH;
 			}
 
@@ -430,7 +508,11 @@ void main() {
 			gl!.bindTexture(gl!.TEXTURE_2D, heightTexs[cIdx]);
 			gl!.uniform1i(gl!.getUniformLocation(updateProg, 'u_curr'), 1);
 			gl!.uniform2f(gl!.getUniformLocation(updateProg, 'u_texel'), 1 / HW, 1 / HH);
-			gl!.uniform1f(gl!.getUniformLocation(updateProg, 'u_damping'), 0.992);
+			/* autoRipple's default damping is more aggressive so the
+			   small ripples decay quickly ("raindrops on a puddle").
+			   Pointer-driven ripples keep the gentler 0.992 default. */
+			const dampingValue = autoRipple?.damping ?? (autoRipple ? 0.945 : 0.992);
+			gl!.uniform1f(gl!.getUniformLocation(updateProg, 'u_damping'), dampingValue);
 			gl!.drawArrays(gl!.TRIANGLES, 0, 6);
 
 			const oldP = pIdx;
@@ -455,6 +537,7 @@ void main() {
 			gl!.uniform2f(gl!.getUniformLocation(displayProg, 'u_texel'), 1 / HW, 1 / HH);
 			gl!.uniform1f(gl!.getUniformLocation(displayProg, 'u_strength'), 0.12);
 			gl!.uniform1f(gl!.getUniformLocation(displayProg, 'u_time'), performance.now() / 1000);
+			gl!.uniform1f(gl!.getUniformLocation(displayProg, 'u_invert'), knockout ? 1.0 : 0.0);
 			gl!.drawArrays(gl!.TRIANGLES, 0, 6);
 		}
 
@@ -521,8 +604,42 @@ void main() {
 		     fire for our ripple while the finger is active.
 		   `passive: true` lets the browser do its own gesture
 		   handling without us blocking it. */
-		window.addEventListener('pointerdown', onPointerDown, { passive: true });
-		window.addEventListener('pointermove', onPointerMove, { passive: true });
+		if (interactive) {
+			window.addEventListener('pointerdown', onPointerDown, { passive: true });
+			window.addEventListener('pointermove', onPointerMove, { passive: true });
+		}
+
+		/* Auto-ripple timer: queue a small splat at a random UV
+		   roughly under the rasterised text every `intervalMs`,
+		   then schedule the next tick. Used by the typing-indicator
+		   prototype to mimic raindrops landing on the "typing"
+		   text. setTimeout (not setInterval) lets each tick jitter
+		   the next delay slightly so the rhythm isn't metronomic. */
+		let autoRippleTimer: number | undefined;
+		if (autoRipple) {
+			const [u0, u1] = autoRipple.uRange ?? [0.2, 0.8];
+			const [v0, v1] = autoRipple.vRange ?? [0.3, 0.7];
+			const tick = () => {
+				if (destroyed) return;
+				/* Random UV inside the caller's configured region (or
+				   the central 60%×40% if none was given). UV y is
+				   inverted in PromptRipple — see clientToUv — so
+				   vRange's high value corresponds to the top of the
+				   canvas, low to the bottom. */
+				const u = u0 + Math.random() * (u1 - u0);
+				const v = v0 + Math.random() * (v1 - v0);
+				pendingSplats.push({
+					uv: [u, v],
+					radius: autoRipple.radius ?? 0.02,
+					strength: autoRipple.strength ?? 0.4
+				});
+				/* ±25% jitter on the interval so back-to-back drops
+				   feel a touch irregular rather than mechanical. */
+				const jitter = autoRipple.intervalMs * 0.5 * (Math.random() - 0.5);
+				autoRippleTimer = window.setTimeout(tick, autoRipple.intervalMs + jitter);
+			};
+			autoRippleTimer = window.setTimeout(tick, 400);
+		}
 
 		/* ResizeObserver handles canvas-pixel-size changes (viewport
 		   resizes the host, FBOs need to be recreated). h1 *position*
@@ -547,8 +664,11 @@ void main() {
 		return () => {
 			destroyed = true;
 			cancelAnimationFrame(raf);
-			window.removeEventListener('pointerdown', onPointerDown);
-			window.removeEventListener('pointermove', onPointerMove);
+			if (autoRippleTimer !== undefined) window.clearTimeout(autoRippleTimer);
+			if (interactive) {
+				window.removeEventListener('pointerdown', onPointerDown);
+				window.removeEventListener('pointermove', onPointerMove);
+			}
 			ro.disconnect();
 			for (const t of heightTexs) gl!.deleteTexture(t);
 			for (const f of heightFbos) gl!.deleteFramebuffer(f);
@@ -574,7 +694,12 @@ void main() {
 <div class="ripple-host" bind:this={host}>
 	<canvas class="ripple-canvas" class:ready bind:this={canvas} aria-hidden="true"></canvas>
 	<div class="ripple-content">
-		<h1 class="ripple-h1" class:is-faded={ready} bind:this={h1El}>{text}</h1>
+		<h1
+			class="ripple-h1"
+			class:is-faded={ready}
+			style={headingStyle ?? ''}
+			bind:this={h1El}
+		>{text}</h1>
 		{@render children?.()}
 	</div>
 </div>
