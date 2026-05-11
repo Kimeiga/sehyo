@@ -25,7 +25,6 @@
 	let host: HTMLDivElement | undefined = $state();
 	let canvas: HTMLCanvasElement | undefined = $state();
 	let navList: HTMLElement | undefined = $state();
-	let canvasReady = $state(false);
 	/* Local mount + closing state. The DOM is gated on `mounted`,
 	   not directly on $menuOpen, so the close transition has time
 	   to play before unmount. When $menuOpen flips false, we set
@@ -86,7 +85,23 @@
 		if (!navbar) return;
 		const update = () => {
 			const r = navbar.getBoundingClientRect();
-			navbarRect = { top: r.top, left: r.left, width: r.width, height: r.height };
+			/* Subtract the navbar's border widths from the host's
+			   measured rect so the menu canvas stops just inside
+			   the border instead of painting OVER it. The previous
+			   code used the full bounding rect (which includes
+			   border), so the canvas covered the navbar's
+			   border-bottom while it was rendering. */
+			const cs = getComputedStyle(navbar);
+			const borderTop = parseFloat(cs.borderTopWidth) || 0;
+			const borderBottom = parseFloat(cs.borderBottomWidth) || 0;
+			const borderLeft = parseFloat(cs.borderLeftWidth) || 0;
+			const borderRight = parseFloat(cs.borderRightWidth) || 0;
+			navbarRect = {
+				top: r.top + borderTop,
+				left: r.left + borderLeft,
+				width: r.width - borderLeft - borderRight,
+				height: r.height - borderTop - borderBottom
+			};
 		};
 		update();
 		const ro = new ResizeObserver(update);
@@ -246,7 +261,6 @@
 			cancelled = true;
 			webglTeardown?.();
 			webglTeardown = null;
-			canvasReady = false;
 		};
 	});
 
@@ -294,6 +308,20 @@ uniform float u_waveAmp;
 uniform float u_dissolveT;
 uniform float u_textFadeStart;
 uniform float u_textFadeEnd;
+uniform sampler2D u_sky;
+uniform float u_skyDarkness;
+uniform vec2 u_skyDrift;
+/* 1.0 = sample sky texture as background, 0.0 = fall back to flat
+   u_bgColor. The sky JPEG is only visually appropriate in compact
+   mode where the navbar is short and wide; on fullscreen (mobile)
+   the same sampling stretches awkwardly and competes with the menu
+   text. The CPU side just flips this per-mode. */
+uniform float u_useSky;
+/* Native aspect ratio of the sky JPEG (width / height). Used to
+   convert v_uv into sky-texture-space coordinates that preserve the
+   sky's own aspect — without it, a 20:1 navbar canvas stretches the
+   sky horizontally into long smears. */
+uniform float u_skyAspect;
 in vec2 v_uv;
 out vec4 outColor;
 
@@ -366,6 +394,11 @@ void main() {
 	vec2 dir = pixelDist > 0.5 ? toCenter / pixelDist : vec2(0.0);
 	float withinReveal = u_revealR - pixelDist;
 	float withinWave = u_waveR - pixelDist;
+	/* Hoisted to the top of main() so it's available for the wake-
+	   spacing scaler below as well as the sky/perlin sections
+	   later. canvasAspect > 5 is the marker for "compact navbar
+	   mode" (the only mode with a hugely-wide canvas). */
+	float canvasAspect = u_resolution.x / max(u_resolution.y, 1.0);
 
 	/* Wave bands ride u_waveR (its own slow propagation),
 	   independent of u_revealR (which expands fast for the
@@ -379,10 +412,32 @@ void main() {
 	   stays high across most of its band; trailing wakes use
 	   sharper decay (1.5) so they read as quick echoes. */
 	float waveDispPx = 0.0;
+	/* Trailing wake spacing — on the wide compact navbar canvas
+	   (aspect > 5) the wave propagates faster in screen pixels so
+	   the wakes arrive too quickly behind the primary. Stretch
+	   their offsets ~1.8× on compact so the gap between successive
+	   wakes feels paced rather than crowded. Mobile fullscreen
+	   keeps the original 0.75/1.40 spacing where the wave already
+	   feels appropriately spaced relative to the canvas size. */
+	float wakeSpacing = canvasAspect > 5.0 ? 1.8 : 1.0;
 	waveDispPx += wakeAt(withinWave, 0.0, u_waveBand, u_wavePeakPx, 0.5);
-	waveDispPx += wakeAt(withinWave, u_waveBand * 0.75, u_waveBand * 0.85, u_wavePeakPx * 0.30, 1.5);
-	waveDispPx += wakeAt(withinWave, u_waveBand * 1.40, u_waveBand * 0.65, u_wavePeakPx * 0.13, 1.5);
+	waveDispPx += wakeAt(withinWave, u_waveBand * 0.75 * wakeSpacing, u_waveBand * 0.85, u_wavePeakPx * 0.30, 1.5);
+	waveDispPx += wakeAt(withinWave, u_waveBand * 1.40 * wakeSpacing, u_waveBand * 0.65, u_wavePeakPx * 0.13, 1.5);
 	waveDispPx *= u_waveAmp;
+	/* Radius-based amplitude falloff — simulates the energy
+	   conservation of a real expanding ripple. Wave energy spreads
+	   along an ever-growing ring perimeter (~2π·r), and since
+	   energy ~ amplitude², amplitude ~ 1/sqrt(r). Reference radius
+	   is u_waveBand so the amplitude is unattenuated while the
+	   wave is still close to the epicenter (waveR < waveBand) and
+	   only starts falling off once the ring has expanded past one
+	   wave-band's worth of distance. By the time waveR has grown
+	   to ~4× waveBand, amplitude is at 50%; at ~16× waveBand it's
+	   at 25%. This makes the ripple visibly "die out" as it
+	   reaches the screen edges, matching how dropped-stone water
+	   ripples behave. */
+	float radiusFalloff = sqrt(u_waveBand / max(u_waveR, u_waveBand));
+	waveDispPx *= radiusFalloff;
 
 	/* Per-channel chromatic offsets, displaced radially from the
 	   epicenter — so the wave reads as a shockwave moving outward. */
@@ -429,8 +484,145 @@ void main() {
 	   stays vec3(1.0) and mixes properly with bg by alpha; a
 	   chromatic-split pixel keeps its color tilt. */
 	vec3 textColor = coverage > 0.001 ? vec3(aR, aG, aB) / coverage : vec3(0.0);
-	vec3 baseColor = mix(u_bgColor, textColor, coverage);
-	float revealAlpha = 1.0 - smoothstep(u_revealR - u_revealFeather, u_revealR, pixelDist);
+
+	/* Background: heavily-darkened sky texture in BOTH modes now
+	   (compact navbar + mobile fullscreen). The sky reads as
+	   "almost black" but retains enough cloud texture to make the
+	   reveal circle visibly different from the surrounding bg —
+	   solving the "black expanding on black" problem. u_skyDrift
+	   gives it a slow pan so it doesn't feel static, and a sqrt-ish
+	   gamma (pow 0.7) gently boosts the highlights so cloud edges
+	   stay legible after the darkness multiplier.
+
+	   Cover-fit (handles both wider-than-sky AND taller-than-sky
+	   canvases). The "scale" is canvasAspect / skyAspect:
+	     - scale > 1  → canvas is wider than sky → fit sky width to
+	       canvas width, crop top/bottom (compact navbar case).
+	     - scale < 1  → canvas is taller than sky → fit sky height
+	       to canvas height, crop left/right (mobile fullscreen).
+	   The branchless min() picks the right sample axis lengths so
+	   the smaller axis stays at 1 (full coverage) and the larger
+	   one shrinks (cropping the overflow). Centered on 0.5 so the
+	   crop sits in the middle of the sky by default. */
+	/* canvasAspect was hoisted to the top of main() — see there. */
+	float coverScale = canvasAspect / max(u_skyAspect, 0.01);
+	vec2 skySampleAxes = vec2(min(coverScale, 1.0), min(1.0 / coverScale, 1.0));
+	vec2 skyUv = vec2(
+		(v_uv.x - 0.5) * skySampleAxes.x + 0.5,
+		(v_uv.y - 0.5) * skySampleAxes.y + 0.5
+	) + u_skyDrift;
+	/* Gamma-correct the raw sky once — this is the "natural" cloud
+	   color we'll mix toward for the brightening effect below. The
+	   darkened-by-u_skyDarkness version is what shows as the
+	   ambient bg. */
+	vec3 skyNatural = pow(texture(u_sky, skyUv).rgb, vec3(0.7));
+	vec3 skyDim = skyNatural * u_skyDarkness;
+	vec3 bg = mix(u_bgColor, skyDim, u_useSky);
+	vec3 baseColor = mix(bg, textColor, coverage);
+
+	/* Back to amplitude-based crest/trough detection — the
+	   curvature/dFdx approach worked in theory but the highlights
+	   ended up reading as inconsistent thin bands that didn't
+	   track the visible wave shape well. Plain amplitude
+	   thresholding gives a more legible "this part of the wave is
+	   the bright/dark moment" feel even though it scales with
+	   displacement (trailing wakes get less highlight, which is
+	   actually consistent with the radius-falloff above).
+
+	   waveSignal is normalized against u_wavePeakPx (the nominal
+	   max before u_waveAmp and the radius-falloff modulate it),
+	   so it naturally fades as the wave expands and settles. The
+	   smoothstep keeps the dead-zone for low |waveSignal| but is
+	   tightened (0.6 → 0.85, was 0.5 → 0.9) so the highlight is
+	   concentrated near the actual peak amplitude rather than
+	   smeared across most of the wake. */
+	float waveSignal = waveDispPx / max(u_wavePeakPx, 0.001);
+	float waveCrest = max(waveSignal, 0.0);
+	float waveTrough = max(-waveSignal, 0.0);
+	/* Smoothstep window widened to [0.0, 0.4] (was [0.05, 0.2]) for
+	   a gentler ramp into and out of the affected band. The
+	   previous narrower window had a visible "hard edge" where
+	   the effect kicked in — the transition from unaffected to
+	   affected pixels happened over only a small range of wave
+	   amplitudes, which read as a sharp boundary. The wider
+	   window stretches that transition across more amplitude,
+	   giving a soft gradient that fades in/out invisibly. The
+	   lower bound at 0.0 means the effect starts as soon as
+	   there's any wave at all (even sub-percent amplitudes get a
+	   tiny ramp), and the upper bound at 0.4 means most of each
+	   wake is in the partial-effect regime rather than fully
+	   saturated.
+
+	   Asymmetric crest/trough treatment: crests get a meaningful
+	   color brighten (×0.25 → up to 25% lift toward the saturated
+	   sky target). Troughs hardly darken the color at all (×0.02
+	   → 2% mix toward black, basically imperceptible) but DO
+	   open up an alpha hollow (×0.5 → alpha drops as low as 0.5),
+	   so the trough reads as "translucent" rather than as a dark
+	   counterpart to the crest. The visual focus is the bright
+	   crest; the trough is a subtle see-through of the page. */
+	float crestRamp = smoothstep(0.0, 0.4, waveCrest);
+	float troughRamp = smoothstep(0.0, 0.4, waveTrough);
+	/* Multiply BOTH the brighten and darken caps by the same
+	   radiusFalloff already applied to waveDispPx — so the visible
+	   color/alpha modulation fades in lockstep with the ripple's
+	   amplitude as it expands. At the epicenter (waveR ≤ waveBand)
+	   the cap is at full strength (×0.25 brighten, ×0.2 alpha
+	   drop). By the time the ripple has expanded ~4 wave-bands
+	   out, both caps are halved; at the screen edge they're at
+	   ~25-37% of nominal. The visual effect: highlights are punchy
+	   near the epicenter and gracefully die away as the wave
+	   spreads, matching the displacement falloff. */
+	float brightenFactor = crestRamp * 0.25 * radiusFalloff;
+	/* Trough no longer shifts the color toward black at all — the
+	   entire trough effect is now an alpha drop. darkenAlphaFactor
+	   peaks at 0.2 (capped here, also scaled by radiusFalloff),
+	   so a peak trough near the epicenter drops alpha to 0.8 and
+	   the see-through fades gracefully as the wave spreads. */
+	float darkenAlphaFactor = troughRamp * 0.2 * radiusFalloff;
+	/* Brighten target = a more-SATURATED version of the sky
+	   texture, not just a brighter one. Pushing toward gray/white
+	   at the crest washed the color out — the highlight read as
+	   "lit but bland". Increasing saturation instead makes the
+	   crest look like the sky's underlying colors are more vivid
+	   (cloud blues deepen, warm patches glow), which is what
+	   "illuminated by the wave" actually looks like in nature.
+
+	   Saturation boost works by extrapolating away from the
+	   luminance: mix(vec3(luma), color, k) with k > 1 pushes the
+	   color further from gray than the source. k=2.2 roughly
+	   doubles the apparent chroma. We then gently lift the result
+	   (× 1.15) so it's also slightly brighter, then clamp to
+	   keep channels in [0,1]. Falls back to mid-gray when sky
+	   is disabled so the effect still reads in the no-sky path. */
+	float skyLuma = dot(skyNatural, vec3(0.299, 0.587, 0.114));
+	vec3 skySaturated = clamp(
+		mix(vec3(skyLuma), skyNatural, 2.2) * 1.15,
+		vec3(0.0),
+		vec3(1.0)
+	);
+	vec3 brightTarget = mix(vec3(0.7), skySaturated, u_useSky);
+	baseColor = mix(baseColor, brightTarget, brightenFactor);
+	/* Trough alpha — at peak trough the alpha drops to 0.5 (the
+	   coefficient on troughRamp), opening a translucent hollow
+	   the page peeks through. Color of baseColor is unchanged in
+	   the trough — the dark side is purely a see-through, never
+	   a color shift. Crests stay fully opaque. */
+	float waveAlphaMul = 1.0 - darkenAlphaFactor;
+
+	/* Reveal-edge perturbation. The angular wave (sin/cos at
+	   different harmonics around the angle from epicenter) makes
+	   the leading boundary curl and ripple — looking like water
+	   spreading rather than a hard expanding circle. Modulated by
+	   u_waveAmp so it dies down as the wave settles, and by a small
+	   constant (12px) so the curl reads but doesn't shatter the
+	   circle's overall shape. */
+	/* toCenter was already computed at the top of main(); reuse it
+	   here for the angular calculation. */
+	float angle = atan(toCenter.y, toCenter.x);
+	float edgeWake = sin(angle * 7.0 - u_time * 5.0) * cos(angle * 4.0 + u_time * 3.0) * 12.0 * u_waveAmp;
+	float perturbedR = u_revealR + edgeWake;
+	float revealAlpha = 1.0 - smoothstep(perturbedR - u_revealFeather, perturbedR, pixelDist);
 
 	/* Exit dissolve. u_dissolveT animates 0 → 1 during the closing
 	   phase. We sample fbm noise at this UV (the "Perlin field" the
@@ -444,13 +636,27 @@ void main() {
 	   Blue noise IGN dithers the threshold per pixel, breaking the
 	   smooth contour of the binary mask into a fuzzy/pixelated
 	   border — the requested "blue noise dithering" look. */
-	float perlinValue = fbm(v_uv * 6.0);
+	/* Aspect-correct the perlin sampling too — without this the
+	   noise blobs squash into long horizontal streaks on a 20:1
+	   navbar canvas. Multiplying x by canvasAspect gives roughly
+	   square blobs in screen space.
+
+	   Frequency: × 6.0 was tuned for the mobile canvas (~800px
+	   tall) where it produces ~130px blobs. On the compact navbar
+	   (~63px tall) the same multiplier yields ~10px granular
+	   speckle that reads as fine noise rather than the intended
+	   "blob" dissolve. The aspect threshold (> 5) cleanly
+	   distinguishes the two modes — compact navbar aspect is ~20,
+	   mobile fullscreen is < 1. Compact uses ~1.5× to give blobs
+	   sized ~40px (proportional to the navbar's height). */
+	float perlinFreq = canvasAspect > 5.0 ? 1.5 : 6.0;
+	float perlinValue = fbm(vec2(v_uv.x * canvasAspect, v_uv.y) * perlinFreq);
 	float bn = blueNoiseIGN(gl_FragCoord.xy);
 	float effThresh = mix(-0.1, 1.1, u_dissolveT);
 	float ditheredThresh = effThresh + (bn - 0.5) * 0.18;
 	float dissolveMask = step(ditheredThresh, perlinValue);
 
-	outColor = vec4(baseColor, revealAlpha * dissolveMask);
+	outColor = vec4(baseColor, revealAlpha * dissolveMask * waveAlphaMul);
 }`;
 
 		function compile(type: number, src: string): WebGLShader {
@@ -497,7 +703,87 @@ void main() {
 			gl!.vertexAttribPointer(loc, 2, gl!.FLOAT, false, 0, 0);
 		}
 
+		/* Hoisted up here (was declared later by the frame loop) so
+		   the async skyImage.onload below can check whether the
+		   component has already been torn down before touching gl. */
+		let destroyed = false;
+
 		let textTex: WebGLTexture | null = null;
+
+		/* Sky texture used as the menu background — really dark but
+		   with visible cloud pattern so the expanding reveal circle
+		   reads against the surrounding bg. Initialised to a 1×1
+		   black pixel so the shader has SOMETHING to sample before
+		   the JPEG arrives, then upgraded to the real image when
+		   the load completes. */
+		const skyTex = gl.createTexture()!;
+		gl.bindTexture(gl.TEXTURE_2D, skyTex);
+		gl.texImage2D(
+			gl.TEXTURE_2D,
+			0,
+			gl.RGBA,
+			1,
+			1,
+			0,
+			gl.RGBA,
+			gl.UNSIGNED_BYTE,
+			new Uint8Array([0, 0, 0, 255])
+		);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+		/* Pick the sky texture by local time of day:
+		     5–7   → sunset.jpg (dawn / early morning twilight)
+		     7–17  → sky.jpg    (full daylight)
+		     17–19 → sunset.jpg (dusk / late afternoon twilight)
+		     19–5  → night.jpg  (nighttime)
+		   Reads the local clock at setup time, so the texture choice
+		   matches the user's current local hour. (No live update if
+		   the menu happens to be open across the hour boundary —
+		   probably not worth the complexity for an animation that
+		   typically renders for <2 seconds.) */
+		const localHour = new Date().getHours();
+		let skyFilename: string;
+		if (localHour >= 7 && localHour < 17) skyFilename = '/sky.jpg';
+		else if (localHour >= 19 || localHour < 5) skyFilename = '/night.jpg';
+		else skyFilename = '/sunset.jpg';
+
+		/* Track aspect ratio dynamically from whichever image actually
+		   loads — the three textures have different native aspects
+		   (sky 0.75, night/sunset ~0.67), so a hard-coded uniform
+		   would crop incorrectly for two of them. The shader uses
+		   u_skyAspect every frame, so we just update it from the
+		   loaded image's naturalWidth/naturalHeight inside onload. */
+		let dynamicSkyAspect = 2268 / 3024; // initial guess (sky.jpg's ratio)
+
+		const skyImage = new Image();
+		skyImage.onload = () => {
+			if (destroyed) return;
+			dynamicSkyAspect = skyImage.naturalWidth / skyImage.naturalHeight;
+			/* Pre-blur the image once at load time via a 2D canvas
+			   with CSS filter blur(16px). Softer than 8px (more
+			   diffuse cloud/sunset washes) but still preserves the
+			   dominant color structure of the new textures. One-time
+			   cost on load instead of a per-frame Gaussian in the
+			   shader. Falls back to the raw image if the 2D canvas
+			   context is unavailable. */
+			const blurCanvas = document.createElement('canvas');
+			blurCanvas.width = skyImage.naturalWidth;
+			blurCanvas.height = skyImage.naturalHeight;
+			const blurCtx = blurCanvas.getContext('2d');
+			let textureSource: HTMLImageElement | HTMLCanvasElement = skyImage;
+			if (blurCtx) {
+				blurCtx.filter = 'blur(16px)';
+				blurCtx.drawImage(skyImage, 0, 0);
+				textureSource = blurCanvas;
+			}
+			gl!.bindTexture(gl!.TEXTURE_2D, skyTex);
+			gl!.pixelStorei(gl!.UNPACK_FLIP_Y_WEBGL, true);
+			gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGBA, gl!.RGBA, gl!.UNSIGNED_BYTE, textureSource);
+			gl!.pixelStorei(gl!.UNPACK_FLIP_Y_WEBGL, false);
+		};
+		skyImage.src = skyFilename;
 
 		/* Iterate every visible nav-item label and draw its text at the
 		   label's exact viewport-relative position. The result texture
@@ -601,13 +887,18 @@ void main() {
 		const TEXT_FADE_START = compact ? 4 : 20;
 		const TEXT_FADE_END = compact ? 24 : 90;
 
-		const revealStart = performance.now();
-		/* Wave timing is its own variable so future interactive
-		   triggers could reset it. For now it's only set once at
-		   open — the navbar menu plays its ripple automatically
-		   when opened, and no mouse movement inside the navbar
-		   re-triggers it. */
-		const waveStart = performance.now();
+		/* Reveal/wave start timestamps are LAZILY initialised inside
+		   the first render() call — not here at setup time. Capturing
+		   them at setup means the time between setup and first visible
+		   paint (text-texture upload + at least one rAF + Svelte's
+		   reactive update tick) counts toward the elapsed clock, so
+		   by the time the user sees the canvas the sqrt easing has
+		   already advanced the reveal radius hundreds of pixels.
+		   Deferring to first render aligns the clock-zero with the
+		   user's first perceived frame, so the circle truly opens
+		   from `initialRevealR` instead of mid-easing. */
+		let revealStart = 0;
+		let waveStart = 0;
 		/* Compute reveal geometry from the host's actual bounding
 		   rect (works for both fullscreen and compact modes — in
 		   compact mode the host is positioned over the navbar's
@@ -623,6 +914,15 @@ void main() {
 			1 - (originY - hostInitRect.top) / hostInitH
 		];
 		const revealFinalPx = Math.hypot(hostInitW, hostInitH) * 1.15;
+		/* Reveal starts at radius 0 — the easing then expands to
+		   revealFinalPx. Anchoring to the hamburger button size
+		   didn't help in practice because the rAF scheduling +
+		   compositor latency still let the circle flash in at a
+		   visible size by the time it was painted; starting at 0
+		   makes the very first painted frame strictly invisible
+		   (smoothstep collapses inside the feather), and growth
+		   becomes apparent on subsequent frames. */
+		const initialRevealR = 0;
 
 		const bgString = getComputedStyle(document.body).backgroundColor;
 		const bgMatch = bgString.match(/\d+(?:\.\d+)?/g);
@@ -637,19 +937,34 @@ void main() {
 			gl!.clearColor(0, 0, 0, 0);
 			gl!.clear(gl!.COLOR_BUFFER_BIT);
 
+			/* Lazy clock init — see the declaration above for why this
+			   is deferred to the first render call. After this point
+			   both timestamps are in sync with the first paint. */
+			if (revealStart === 0) {
+				const t0 = performance.now();
+				revealStart = t0;
+				waveStart = t0;
+			}
 			const elapsed = performance.now() - revealStart;
 
-			/* Reveal radius — fast sqrt easing over REVEAL_DURATION_MS,
-			   then continues at terminal velocity (no need to fade
-			   reveal-alpha since we want it to stay full once the
-			   circle has covered the screen). */
+			/* Reveal radius — quadratic ease-out: 1 - (1-t)². Fast
+			   initial expansion that decelerates into a soft
+			   landing at REVEAL_DURATION_MS. Slope at t=0 is 2 (in
+			   normalized units), so the first painted frame lifts
+			   the radius by ~46px on a 1500px diagonal — visible
+			   motion from frame one but no sqrt-style flash where
+			   frame 1 was already at ~190px. Slope tapers to 0 at
+			   t=1, so the circle gracefully settles at
+			   revealFinalPx instead of overshooting. */
 			const revealT = Math.min(1, elapsed / REVEAL_DURATION_MS);
-			let revealR = Math.sqrt(revealT) * revealFinalPx;
-			if (elapsed > REVEAL_DURATION_MS) {
-				const revealSettleElapsed = elapsed - REVEAL_DURATION_MS;
-				const revealTerminalV = (0.5 * revealFinalPx) / REVEAL_DURATION_MS;
-				revealR += revealSettleElapsed * revealTerminalV;
-			}
+			const oneMinusT = 1 - revealT;
+			const revealEase = 1 - oneMinusT * oneMinusT;
+			let revealR = initialRevealR + revealEase * (revealFinalPx - initialRevealR);
+			/* Ease-out's slope at t=1 is 0, so there's no velocity
+			   to "continue" past REVEAL_DURATION_MS — the radius
+			   just stays at revealFinalPx. revealFinalPx already
+			   includes a 1.15× hypot multiplier, so it covers the
+			   canvas with margin from any epicenter. */
 
 			/* Wave radius — front-loaded easing over WAVE_PROPAGATION_MS
 			   (independent of the reveal), then continues at its own
@@ -693,6 +1008,30 @@ void main() {
 			gl!.activeTexture(gl!.TEXTURE0);
 			gl!.bindTexture(gl!.TEXTURE_2D, textTex);
 			gl!.uniform1i(gl!.getUniformLocation(displayProg, 'u_text'), 0);
+			gl!.activeTexture(gl!.TEXTURE1);
+			gl!.bindTexture(gl!.TEXTURE_2D, skyTex);
+			gl!.uniform1i(gl!.getUniformLocation(displayProg, 'u_sky'), 1);
+			/* Sky is stationary — no drift. The cloud pattern reads
+			   fine without animation, and removing the pan saves
+			   a per-frame uniform update plus avoids any cognitive
+			   distraction from a slowly-moving background. */
+			gl!.uniform2f(gl!.getUniformLocation(displayProg, 'u_skyDrift'), 0, 0);
+			gl!.uniform1f(gl!.getUniformLocation(displayProg, 'u_skyDarkness'), 0.18);
+			/* Sky background applied to BOTH modes now — compact navbar
+			   AND mobile fullscreen. The shader's cover-fit logic
+			   handles each mode's aspect (wide → fit-width, tall →
+			   fit-height), so the sky doesn't stretch awkwardly in
+			   either case. */
+			gl!.uniform1f(gl!.getUniformLocation(displayProg, 'u_useSky'), 1);
+			/* Aspect ratio of whichever sky/sunset/night image is
+			   currently loaded — set by the onload handler from the
+			   image's naturalWidth/naturalHeight. The three textures
+			   have different ratios (sky 0.75, sunset/night ~0.67),
+			   so a single hard-coded value would mis-crop two of
+			   them. Until the image arrives, dynamicSkyAspect holds
+			   the initial 0.75 guess so the shader has a reasonable
+			   value to sample with against the 1×1 black placeholder. */
+			gl!.uniform1f(gl!.getUniformLocation(displayProg, 'u_skyAspect'), dynamicSkyAspect);
 			gl!.uniform2f(
 				gl!.getUniformLocation(displayProg, 'u_revealCenter'),
 				revealCenterUv[0],
@@ -724,7 +1063,6 @@ void main() {
 		}
 
 		let raf = 0;
-		let destroyed = false;
 		function frame() {
 			if (destroyed) return;
 			render();
@@ -732,7 +1070,15 @@ void main() {
 		}
 
 		renderTextToTexture();
-		canvasReady = true;
+		/* Synchronous first render — guarantees the canvas's first
+		   composited paint contains an actual frame (initial circle
+		   at `initialRevealR`) rather than the default-cleared
+		   transparent state. Without this, the browser would paint
+		   the empty canvas first, then a frame later paint the
+		   shader's first output — and during that gap the easing
+		   clock advances enough to make the circle look "already
+		   big" by the time it becomes visible. */
+		render();
 		raf = requestAnimationFrame(frame);
 
 		document.fonts?.ready.then(() => {
@@ -757,12 +1103,14 @@ void main() {
 			   reference to `host`/`canvas` after they're unbound. */
 			const ctx = gl!;
 			const tex = textTex;
+			const sky = skyTex;
 			const q = quad;
 			const dp = displayProg;
 			const v = vs;
 			requestAnimationFrame(() => {
 				requestAnimationFrame(() => {
 					if (tex) ctx.deleteTexture(tex);
+					ctx.deleteTexture(sky);
 					ctx.deleteBuffer(q);
 					ctx.deleteProgram(dp);
 					ctx.deleteShader(v);
@@ -787,7 +1135,6 @@ void main() {
 	>
 		<canvas
 			class="menu-canvas"
-			class:ready={canvasReady}
 			bind:this={canvas}
 			aria-hidden="true"
 		></canvas>
@@ -842,21 +1189,21 @@ void main() {
 	/* The canvas sits in front of the nav list and renders the label
 	   text with the WebGL ripple effect. `pointer-events: none` so
 	   clicks pass through to the underlying buttons (which still
-	   handle navigation and a11y). Fades in once the WebGL pipeline
-	   has rasterized the first text texture. */
+	   handle navigation and a11y). No opacity fade-in — setupRipple
+	   does a synchronous first render() before yielding, so the
+	   first composited paint already contains a real frame. Adding
+	   an 80ms transition would just defer the visible animation
+	   start by 80ms, by which time the easing has already advanced
+	   enough to make the reveal circle look "already big". */
 	.menu-canvas {
 		position: absolute;
 		inset: 0;
 		width: 100%;
 		height: 100%;
 		display: block;
-		opacity: 0;
-		pointer-events: none;
-		transition: opacity 80ms ease;
-		z-index: 1;
-	}
-	.menu-canvas.ready {
 		opacity: 1;
+		pointer-events: none;
+		z-index: 1;
 	}
 	/* DOM labels are NEVER visible — the canvas is the only renderer.
 	   Keeping the label spans in the DOM (with opacity:0) preserves

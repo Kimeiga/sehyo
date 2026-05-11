@@ -26,10 +26,17 @@
 		type="button"
 		class="mobile-toggle"
 		onclick={(e) => {
-			/* Pass the button's screen-space center so the Menu's
-			   reveal animation can use it as the circle epicenter. */
+			/* Pass the button's screen-space center AND its half-
+			   extent so the Menu's reveal animation can use the
+			   center as the circle epicenter and start the reveal
+			   circle at exactly the button's size (no jarring
+			   first-frame jump from 0 → ~hundreds of pixels). */
 			const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
-			toggleMenu({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+			toggleMenu({
+				x: rect.left + rect.width / 2,
+				y: rect.top + rect.height / 2,
+				r: Math.max(rect.width, rect.height) / 2
+			});
 		}}
 		aria-label={$menuOpen ? 'Close menu' : 'Open menu'}
 		aria-expanded={$menuOpen}
