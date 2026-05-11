@@ -1,13 +1,25 @@
 <script lang="ts">
 	import { onMount, onDestroy, type Snippet } from 'svelte';
 
+	type PendingSplat = { uv: [number, number]; radius: number; strength: number };
+	/* Pending-splat queue hoisted to component scope (was previously
+	   local to setupRipple) so the burstSignal $effect below can push
+	   to it from outside the WebGL setup closure. The tick loop drains
+	   this on each frame. */
+	const pendingSplats: PendingSplat[] = [];
+
 	let {
 		text,
 		children,
 		headingStyle,
 		interactive = true,
 		knockout = false,
-		autoRipple
+		autoRipple,
+		burstSignal,
+		burstUv,
+		burstSpeed,
+		burstWidth,
+		burstStrength
 	}: {
 		text: string;
 		children?: Snippet;
@@ -48,7 +60,53 @@
 			uRange?: [number, number];
 			vRange?: [number, number];
 		};
+		/* A monotonically-increasing counter bumped by the parent to
+		   request a single big ripple. Each new non-zero value queues
+		   a splat at `burstUv` with `burstRadius` / `burstStrength`.
+		   Used to fire "ripple-in" and "ripple-out" bursts when the
+		   typing indicator appears or disappears. Initial value 0
+		   means no burst (skipped). */
+		burstSignal?: number;
+		/* Position (in UV coords, 0–1) where the burst splat should
+		   land. Defaults to the canvas center. Callers can target the
+		   text's actual center if the text isn't centered in the
+		   canvas (e.g. left-aligned label in a wider row). */
+		burstUv?: [number, number];
+		/* Procedural-ring tuning (used when burstSignal fires).
+		   - burstSpeed: how fast the ring's radius grows in UV/sec.
+		     Default 1.5 means the ring reaches the canvas edge in
+		     ~0.66s for a square canvas.
+		   - burstWidth: Gaussian sigma of the ring's radial profile
+		     in UV. Default 0.06 — wide enough to read as a band,
+		     narrow enough that the leading and trailing edges'
+		     gradients are clearly distinct.
+		   - burstStrength: empirical scale applied to the analytical
+		     ring gradient. The wave-equation grad is in `Δ-height
+		     per 2-texel`; the procedural gradient is `per-UV`, so
+		     this small factor (~0.01) brings them into the same
+		     visual range. */
+		burstSpeed?: number;
+		burstWidth?: number;
+		burstStrength?: number;
 	} = $props();
+
+	/* Burst is rendered as a PROCEDURAL ring expanding from
+	   `burstUv`, separate from the wave-equation FBOs. Each new
+	   non-zero burstSignal restarts the ring's age clock. The
+	   render() loop passes the current age to the display shader,
+	   which analytically adds a Gaussian-profile ring's gradient
+	   to whatever the wave equation produced — so the ring sweeps
+	   outward cleanly without sloshing against the canvas edges
+	   the way a wave-equation splat does at small canvas sizes. */
+	let burstStartTime = -Infinity;
+	let lastBurstSignal: number | undefined;
+	$effect(() => {
+		const sig = burstSignal;
+		if (sig === undefined || sig === 0) return;
+		if (sig === lastBurstSignal) return;
+		lastBurstSignal = sig;
+		burstStartTime = performance.now();
+	});
 
 	let host: HTMLDivElement;
 	let h1El: HTMLHeadingElement;
@@ -132,6 +190,15 @@ uniform vec2 u_texel;
 uniform float u_strength;
 uniform float u_time;
 uniform float u_invert;
+/* Procedural ring "burst" — independent of the wave-equation
+   FBOs. Each frame the JS side passes the burst's age (or a
+   negative value when inactive) and we analytically add a
+   Gaussian-profile ring's gradient to the existing wave grad. */
+uniform vec2 u_burstCenter;
+uniform float u_burstAge;
+uniform float u_burstSpeed;
+uniform float u_burstWidth;
+uniform float u_burstStrength;
 in vec2 v_uv;
 out vec4 outColor;
 
@@ -146,15 +213,38 @@ void main() {
 	float hU = texture(u_height, v_uv + vec2(0.0, u_texel.y)).r;
 	vec2 grad = vec2(hR - hL, hU - hD);
 
-	/* Three "layers" of text — red, green, blue — each displaced
-	   by a different multiple of the gradient. When the wave is
-	   quiet, grad == 0 so all three samples land at the same UV
-	   and the channels recombine to white. When the wave is
-	   active, the three samples diverge and the offset shows up
-	   as RGB chromatic aberration along moving wavefronts. */
-	vec2 uvR = clamp(v_uv + grad * (u_strength * 0.55), 0.0, 1.0);
-	vec2 uvG = clamp(v_uv + grad * (u_strength * 1.00), 0.0, 1.0);
-	vec2 uvB = clamp(v_uv + grad * (u_strength * 1.45), 0.0, 1.0);
+	/* Procedural ring contribution. At any pixel, the heightfield
+	   contribution from the ring is a Gaussian centered at radius
+	   ringR = burstAge * burstSpeed, measured from u_burstCenter.
+	   The radial derivative of that Gaussian is what gets added to
+	   the grad — so the leading edge of the ring (d > 0) pulls in
+	   one direction and the trailing edge (d < 0) pulls the other,
+	   exactly like a real wavefront passing through. The ring
+	   amplitude decays exponentially with age so it doesn't ring
+	   forever. */
+	if (u_burstAge >= 0.0) {
+		vec2 toPx = v_uv - u_burstCenter;
+		float dist = length(toPx);
+		if (dist > 1e-5) {
+			float ringR = u_burstAge * u_burstSpeed;
+			float d = dist - ringR;
+			float sigma = u_burstWidth;
+			float gauss = exp(-(d * d) / (2.0 * sigma * sigma));
+			float radialDeriv = -d / (sigma * sigma) * gauss;
+			float decay = exp(-u_burstAge * 1.5);
+			grad += (toPx / dist) * (radialDeriv * u_burstStrength * decay);
+		}
+	}
+
+	/* Three "layers" of text — red, green, blue — sampled with a
+	   shared base displacement around 1.0 × grad (so the whole
+	   word translates with the wave) plus a ±0.5 chromatic split
+	   for visible aberration at smaller text scales. Wider spread
+	   than the previous ±0.15 makes the colored fringe legible
+	   on the small 12px monospace label. */
+	vec2 uvR = clamp(v_uv + grad * (u_strength * 0.5), 0.0, 1.0);
+	vec2 uvG = clamp(v_uv + grad * (u_strength * 1.0), 0.0, 1.0);
+	vec2 uvB = clamp(v_uv + grad * (u_strength * 1.5), 0.0, 1.0);
 	float aR = texture(u_text, uvR).a;
 	float aG = texture(u_text, uvG).a;
 	float aB = texture(u_text, uvB).a;
@@ -416,8 +506,9 @@ void main() {
 			return true;
 		}
 
-		type PendingSplat = { uv: [number, number]; radius: number; strength: number };
-		const pendingSplats: PendingSplat[] = [];
+		/* pendingSplats + PendingSplat type are hoisted to component
+		   scope above so the burstSignal $effect can write to them.
+		   The setup closure just reads/drains. */
 
 		/* Convert viewport-space client coords to canvas-relative UV,
 		   clamped to [0, 1]. This means the cursor anywhere on the
@@ -538,6 +629,22 @@ void main() {
 			gl!.uniform1f(gl!.getUniformLocation(displayProg, 'u_strength'), 0.12);
 			gl!.uniform1f(gl!.getUniformLocation(displayProg, 'u_time'), performance.now() / 1000);
 			gl!.uniform1f(gl!.getUniformLocation(displayProg, 'u_invert'), knockout ? 1.0 : 0.0);
+
+			/* Burst ring uniforms. burstStartTime stays at -Infinity
+			   until a burstSignal triggers, so initially u_burstAge
+			   is -∞ and the shader's `if (u_burstAge >= 0.0)` skips
+			   the ring entirely. After 1.5s the decay term has
+			   shrunk to <5% so we also gate by lifetime. */
+			const burstLifetimeMs = 1500;
+			const ageMs = performance.now() - burstStartTime;
+			const burstAge = ageMs >= 0 && ageMs < burstLifetimeMs ? ageMs / 1000 : -1;
+			const bc = burstUv ?? [0.5, 0.5];
+			gl!.uniform2f(gl!.getUniformLocation(displayProg, 'u_burstCenter'), bc[0], bc[1]);
+			gl!.uniform1f(gl!.getUniformLocation(displayProg, 'u_burstAge'), burstAge);
+			gl!.uniform1f(gl!.getUniformLocation(displayProg, 'u_burstSpeed'), burstSpeed ?? 1.5);
+			gl!.uniform1f(gl!.getUniformLocation(displayProg, 'u_burstWidth'), burstWidth ?? 0.06);
+			gl!.uniform1f(gl!.getUniformLocation(displayProg, 'u_burstStrength'), burstStrength ?? 0.012);
+
 			gl!.drawArrays(gl!.TRIANGLES, 0, 6);
 		}
 
@@ -713,6 +820,11 @@ void main() {
 		position: relative;
 		isolation: isolate;
 		width: 100%;
+		/* height: 100% so the canvas fills the parent's box vertically
+		   when the parent has an explicit height (e.g. .typing-row at
+		   36px). min-height: inherit is kept as a fallback for cases
+		   like .hero where the parent only sets min-height. */
+		height: 100%;
 		min-height: inherit;
 		display: flex;
 		flex-direction: column;
