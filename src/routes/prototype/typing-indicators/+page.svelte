@@ -17,12 +17,14 @@
 		return {
 			duration,
 			easing: cubicOut,
-			/* Epicenter at ~28px from the row's left — the approximate
-			   horizontal center of the "typing" glyphs at 14px font.
-			   The circle expands outward from the middle of the word
-			   on enter, and shrinks back to the same point on exit. */
+			/* Epicenter at ~55px from the row's left — the approximate
+			   horizontal center of the "[TYPING...]" glyphs (incl.
+			   brackets and dots) at 12px monospace with 0.25em
+			   tracking. The circle expands outward from the middle
+			   of the label on enter and shrinks back to the same
+			   point on exit. */
 			css: (t: number) =>
-				`clip-path: circle(${(t * 90).toFixed(1)}px at 28px 50%); opacity: ${t.toFixed(3)};`
+				`clip-path: circle(${(t * 90).toFixed(1)}px at 55px 50%); opacity: ${t.toFixed(3)};`
 		};
 	}
 
@@ -37,6 +39,15 @@
 
 	let typing = $state(true);
 	let composerValue = $state('');
+	/* Counter bumped each time `typing` toggles, so PromptRipple
+	   fires a single big "ripple-in" / "ripple-out" burst on every
+	   show/hide. Initial 0 means no burst on first render. */
+	let burstSignal = $state(0);
+
+	function toggleTyping() {
+		burstSignal++;
+		typing = !typing;
+	}
 
 	function send() {
 		const t = composerValue.trim();
@@ -94,21 +105,23 @@
 						     direction. -->
 						<div class="typing-row" transition:circleReveal>
 							<PromptRipple
-								text="TYPING"
+								text="[TYPING...]"
 								interactive={false}
-								headingStyle="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-weight: 500; letter-spacing: 0.35em; line-height: 1; max-width: none; text-align: left;"
+								headingStyle="font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-weight: 500; letter-spacing: 0.25em; line-height: 1; max-width: none; text-align: left;"
 								autoRipple={{
 									intervalMs: 800,
 									radius: 0.04,
 									strength: 1.5,
 									damping: 0.945,
-									/* "TYPING" at 12px monospace + 0.35em
-									   tracking spans ~100px in a 140px row →
-									   u ≈ 0–0.71. Constrain splats to that
-									   horizontal band with a little padding. */
-									uRange: [0.05, 0.68],
-									vRange: [0.35, 0.65]
+									/* "[TYPING...]" at 12px monospace + 0.25em
+									   tracking spans ~150px in a 180px row →
+									   u ≈ 0–0.83. Constrain splats inside
+									   that horizontal band. */
+									uRange: [0.04, 0.82],
+									vRange: [0.4, 0.6]
 								}}
+								{burstSignal}
+								burstUv={[0.3, 0.5]}
 							/>
 						</div>
 					</div>
@@ -136,7 +149,7 @@
 
 	<aside class="controls">
 		<label>
-			<input type="checkbox" bind:checked={typing} />
+			<input type="checkbox" checked={typing} onchange={toggleTyping} />
 			Show {PEER.name}'s typing indicator
 		</label>
 	</aside>
@@ -281,13 +294,15 @@
 	   "typing" text + a little surround for ripples to spread
 	   into. Sits in the same column position as `.msg-text` so
 	   the body alignment is identical to a regular message. */
-	/* Sized for "TYPING" rendered in 12px monospace with 0.35em
-	   tracking — roughly 100px of text — plus room around it for
-	   ripples to spread. */
+	/* Sized for "[TYPING...]" rendered in 12px monospace with 0.25em
+	   tracking — roughly 150px of text. Height bumped to ~36px so
+	   there's ~12px of canvas above and below the 12px text — gives
+	   ripples vertical room to expand and fade above/below the
+	   glyphs instead of being clipped right at the baseline. */
 	.typing-row {
 		position: relative;
-		width: 140px;
-		height: 24px;
+		width: 180px;
+		height: 36px;
 	}
 	/* PromptRipple's .ripple-content has padding: 0 12px for the
 	   hero. Strip it here so the all-caps label sits flush against
@@ -298,12 +313,12 @@
 		justify-content: center;
 		align-items: flex-start;
 	}
-	/* The shader paints white glyphs regardless of the h1's CSS
-	   color, so dim the whole canvas to make the label read as a
-	   muted status tag rather than competing with regular message
-	   text. */
+	/* Canvas at full opacity — text renders pure white, same
+	   brightness as the surrounding message bodies. The visual
+	   differentiation now comes from the monospace font + caps
+	   + letter-spacing + brackets, not the color. */
 	.typing-row :global(.ripple-canvas) {
-		opacity: 0.55;
+		opacity: 1;
 	}
 
 	/* ── Composer ─────────────────────────────────────────────── */
