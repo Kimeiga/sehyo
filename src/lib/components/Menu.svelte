@@ -576,10 +576,11 @@ void main() {
 	float brightenFactor = crestRamp * 0.25 * radiusFalloff;
 	/* Trough no longer shifts the color toward black at all — the
 	   entire trough effect is now an alpha drop. darkenAlphaFactor
-	   peaks at 0.2 (capped here, also scaled by radiusFalloff),
-	   so a peak trough near the epicenter drops alpha to 0.8 and
-	   the see-through fades gracefully as the wave spreads. */
-	float darkenAlphaFactor = troughRamp * 0.2 * radiusFalloff;
+	   peaks at 0.15 (capped here, also scaled by radiusFalloff),
+	   so a peak trough near the epicenter drops alpha only to
+	   0.85 (a very subtle translucency) and the see-through fades
+	   gracefully as the wave spreads. */
+	float darkenAlphaFactor = troughRamp * 0.15 * radiusFalloff;
 	/* Brighten target = a more-SATURATED version of the sky
 	   texture, not just a brighter one. Pushing toward gray/white
 	   at the crest washed the color out — the highlight read as
@@ -761,26 +762,45 @@ void main() {
 		skyImage.onload = () => {
 			if (destroyed) return;
 			dynamicSkyAspect = skyImage.naturalWidth / skyImage.naturalHeight;
-			/* Pre-blur the image once at load time via a 2D canvas
-			   with CSS filter blur(16px). Softer than 8px (more
-			   diffuse cloud/sunset washes) but still preserves the
-			   dominant color structure of the new textures. One-time
-			   cost on load instead of a per-frame Gaussian in the
-			   shader. Falls back to the raw image if the 2D canvas
-			   context is unavailable. */
-			const blurCanvas = document.createElement('canvas');
-			blurCanvas.width = skyImage.naturalWidth;
-			blurCanvas.height = skyImage.naturalHeight;
-			const blurCtx = blurCanvas.getContext('2d');
-			let textureSource: HTMLImageElement | HTMLCanvasElement = skyImage;
-			if (blurCtx) {
-				blurCtx.filter = 'blur(16px)';
-				blurCtx.drawImage(skyImage, 0, 0);
-				textureSource = blurCanvas;
+			/* Pre-blur via multi-pass downscale, NOT canvas filter.
+			   iOS Safari's `ctx.filter = 'blur(...)'` is a long-
+			   standing no-op (the property exists but is ignored),
+			   so the previous CSS-filter approach produced sharp
+			   textures on iPhones/iPads while looking soft on every
+			   other browser.
+
+			   Workaround: halve the image N× using drawImage's
+			   built-in bilinear smoothing. Successive box filters
+			   converge to a Gaussian — each halving doubles the
+			   effective blur radius. 4 halvings (16× downscale)
+			   ≈ 16px blur on the compact navbar; 6 halvings (64×
+			   downscale) ≈ 64px blur on mobile fullscreen. Mobile
+			   gets the heavier blur because the canvas is much
+			   larger and a stronger softening keeps the bg from
+			   competing with the menu text. Works in WebKit, Blink,
+			   and Gecko identically (no engine-specific quirks). */
+			const blurPasses = compact ? 4 : 6;
+			let curSrc: CanvasImageSource = skyImage;
+			let curW = skyImage.naturalWidth;
+			let curH = skyImage.naturalHeight;
+			for (let i = 0; i < blurPasses; i++) {
+				const newW = Math.max(1, Math.floor(curW / 2));
+				const newH = Math.max(1, Math.floor(curH / 2));
+				const c = document.createElement('canvas');
+				c.width = newW;
+				c.height = newH;
+				const cx = c.getContext('2d');
+				if (!cx) break;
+				cx.imageSmoothingEnabled = true;
+				cx.imageSmoothingQuality = 'high';
+				cx.drawImage(curSrc, 0, 0, newW, newH);
+				curSrc = c;
+				curW = newW;
+				curH = newH;
 			}
 			gl!.bindTexture(gl!.TEXTURE_2D, skyTex);
 			gl!.pixelStorei(gl!.UNPACK_FLIP_Y_WEBGL, true);
-			gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGBA, gl!.RGBA, gl!.UNSIGNED_BYTE, textureSource);
+			gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGBA, gl!.RGBA, gl!.UNSIGNED_BYTE, curSrc as HTMLCanvasElement);
 			gl!.pixelStorei(gl!.UNPACK_FLIP_Y_WEBGL, false);
 		};
 		skyImage.src = skyFilename;
@@ -1165,7 +1185,23 @@ void main() {
 	   mask. */
 	.menu {
 		position: fixed;
-		inset: 0;
+		/* Switched from `inset: 0` to explicit top/left/right plus
+		   `height: 100lvh` so the menu extends UNDER iOS Safari's
+		   floating URL bar. `inset: 0` resolves the bottom to the
+		   small visual viewport (where the URL bar lives), leaving
+		   a visible gap below the menu when the bar is on-screen.
+		   `100lvh` (large viewport height) is the height of the
+		   viewport when browser chrome is fully retracted, so the
+		   element always covers the maximum possible area —
+		   including the area BEHIND the URL bar. The 100vh line is
+		   a fallback for older browsers without `lvh` support
+		   (which historically computed `vh` as the large viewport
+		   anyway, so behavior is similar). */
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 100vh;
+		height: 100lvh;
 		/* Fullscreen mode (mobile): z-index 90 sits below the
 		   navbar (z-index 100) in the page stack, so the brand +
 		   hamburger remain visible above this overlay and the X
