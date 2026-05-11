@@ -9,6 +9,11 @@
 			href: '/prototype/masonry',
 			name: 'Masonry canvas',
 			summary: '2D-scrollable masonry of posts. Mock data, finite size.'
+		},
+		{
+			href: '/prototype/typing-indicators',
+			name: 'Typing indicators',
+			summary: 'Mock chat UI for iterating on the typing-indicator animation.'
 		}
 	];
 </script>
