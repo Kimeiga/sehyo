@@ -133,11 +133,15 @@
 		display: inline-flex;
 		margin-left: auto;
 		appearance: none;
-		border: 0;
+		/* Transparent border by default so the box reserves the
+		   1px on each side at all times — switching to a visible
+		   white border on hover doesn't shift the icon by 1px. */
+		border: 1px solid transparent;
 		background: transparent;
 		color: var(--foreground);
 		padding: 8px;
-		border-radius: 8px;
+		/* Square corners as requested. */
+		border-radius: 0;
 		cursor: pointer;
 		position: relative;
 		/* Highest of the four navbar children — must stay clickable
@@ -145,10 +149,10 @@
 		z-index: 30;
 		align-items: center;
 		justify-content: center;
-		transition: background 120ms ease;
+		transition: border-color 120ms ease;
 	}
 	.mobile-toggle:hover {
-		background: var(--muted);
+		border-color: #fff;
 	}
 	.mobile-toggle-dot {
 		top: 2px;
