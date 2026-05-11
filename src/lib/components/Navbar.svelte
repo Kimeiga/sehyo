@@ -77,7 +77,7 @@
 	}
 </script>
 
-<header class="navbar">
+<header class="navbar" class:menu-open={$menuOpen}>
 	<a class="brand" href="/" aria-label="Sehyo home">
 		<img src="/sehyo-logo.svg" alt="" width="32" height="32" />
 		<span class="brand-text">SEHYO</span>
@@ -124,7 +124,12 @@
 	<button
 		type="button"
 		class="mobile-toggle"
-		onclick={toggleMenu}
+		onclick={(e) => {
+			/* Pass the button's screen-space center so the Menu's
+			   reveal animation can use it as the circle epicenter. */
+			const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+			toggleMenu({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+		}}
 		aria-label={$menuOpen ? 'Close menu' : 'Open menu'}
 		aria-expanded={$menuOpen}
 	>
@@ -159,6 +164,13 @@
 		backdrop-filter: blur(8px);
 		-webkit-backdrop-filter: blur(8px);
 		border-bottom: 1px solid var(--border);
+	}
+	/* When the menu overlay is open, lift the navbar above it so the
+	   X button stays visible and clickable as the close affordance.
+	   The menu has its own opaque background underneath; the navbar's
+	   own backdrop-blur lets the menu show through faintly behind it. */
+	.navbar.menu-open {
+		z-index: 100;
 	}
 
 	.brand {
