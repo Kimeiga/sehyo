@@ -32,7 +32,7 @@
 	</section>
 
 	<footer class="byline">
-		Built by <a href="https://hakanalpay.com" target="_blank" rel="noopener noreferrer">Hakan Alpay</a>.
+		Built by <a href="https://hakanalpay.com" target="_blank" rel="noopener noreferrer">Hakan Alpay</a> and <a href="https://github.com/tfukaza" target="_blank" rel="noopener noreferrer">Tomoki Fukazawa</a>.
 	</footer>
 </main>
 

@@ -9,8 +9,17 @@
 	interface Props {
 		user: User | null;
 		unreadCount?: number;
+		/* Two instances of this component exist simultaneously — one
+		   in the layout (mode='fullscreen', mobile) and one inside
+		   Navbar (mode='compact', desktop). Each only activates when
+		   its mode matches the current viewport, so only ONE menu is
+		   ever rendered at a time. Splitting the instances lets the
+		   compact one share Navbar's stacking context (allowing the
+		   logo + hamburger to z-index above the canvas) while the
+		   fullscreen one stays a global overlay outside the navbar. */
+		mode?: 'fullscreen' | 'compact';
 	}
-	let { user, unreadCount = 0 }: Props = $props();
+	let { user, unreadCount = 0, mode = 'fullscreen' }: Props = $props();
 
 	let signingIn = $state(false);
 	let host: HTMLDivElement | undefined = $state();
@@ -37,17 +46,77 @@
 	let viewportW = $state(typeof window !== 'undefined' ? window.innerWidth : 0);
 	let viewportH = $state(typeof window !== 'undefined' ? window.innerHeight : 0);
 
+	/* compact is now derived from the `mode` prop, not the viewport.
+	   Each instance is hard-wired to its mode. The viewport check
+	   below decides which instance is "active" for the current
+	   viewport; only the active one mounts/renders. */
+	const compact = $derived(mode === 'compact');
+	let navbarRect = $state({ top: 0, left: 0, width: 0, height: 0 });
+
+	/* Viewport detection — picks which instance handles the current
+	   screen width. Desktop ≥641px → compact instance is active.
+	   Below that → fullscreen instance is active. */
+	let viewportIsCompact = $state(
+		typeof window !== 'undefined' ? window.matchMedia('(min-width: 641px)').matches : false
+	);
+	const active = $derived(
+		(mode === 'compact' && viewportIsCompact) ||
+		(mode === 'fullscreen' && !viewportIsCompact)
+	);
+
 	$effect(() => {
-		if (!$menuOpen) return;
+		if (typeof window === 'undefined') return;
+		const mq = window.matchMedia('(min-width: 641px)');
+		const update = () => {
+			viewportIsCompact = mq.matches;
+		};
+		update();
+		mq.addEventListener('change', update);
+		return () => mq.removeEventListener('change', update);
+	});
+
+	/* Track the navbar's bounding rect while the menu is mounted in
+	   compact mode, so the menu host can be positioned exactly over
+	   the navbar. The canvas spans the full navbar width; brand and
+	   hamburger sit ABOVE it via higher z-index inside the navbar's
+	   shared stacking context (Menu is rendered inside Navbar). */
+	$effect(() => {
+		if (!mounted || !compact) return;
+		const navbar = document.querySelector('.navbar') as HTMLElement | null;
+		if (!navbar) return;
+		const update = () => {
+			const r = navbar.getBoundingClientRect();
+			navbarRect = { top: r.top, left: r.left, width: r.width, height: r.height };
+		};
+		update();
+		const ro = new ResizeObserver(update);
+		ro.observe(navbar);
+		window.addEventListener('resize', update);
+		return () => {
+			ro.disconnect();
+			window.removeEventListener('resize', update);
+		};
+	});
+
+	$effect(() => {
+		/* Only the ACTIVE instance (the one whose mode matches the
+		   viewport) does any side effects here — otherwise both
+		   instances would lock body scroll on every open, including
+		   the inactive instance whose compact value disagrees with
+		   the viewport. Compact-mode (desktop) skips the body lock
+		   because the menu sits in the navbar and the page should
+		   stay scrollable behind it. */
+		if (!$menuOpen || !active) return;
+		const lockScroll = !compact;
 		const prev = document.body.style.overflow;
-		document.body.style.overflow = 'hidden';
+		if (lockScroll) document.body.style.overflow = 'hidden';
 		const onResize = () => {
 			viewportW = window.innerWidth;
 			viewportH = window.innerHeight;
 		};
 		window.addEventListener('resize', onResize);
 		return () => {
-			document.body.style.overflow = prev;
+			if (lockScroll) document.body.style.overflow = prev;
 			window.removeEventListener('resize', onResize);
 		};
 	});
@@ -55,9 +124,12 @@
 	/* Mount/dissolve lifecycle. Opening: mount immediately and
 	   cancel any pending close. Closing: keep mounted, switch into
 	   the dissolve phase, schedule the real unmount after the
-	   dissolve duration. */
+	   dissolve duration. Gated on `active` — only the instance
+	   whose mode matches the current viewport responds to open
+	   events. If the viewport changes mid-open (rare) the now-
+	   inactive instance also dismounts via the same path. */
 	$effect(() => {
-		if ($menuOpen) {
+		if ($menuOpen && active) {
 			mounted = true;
 			closing = false;
 			if (closeTimeoutId) {
@@ -220,6 +292,8 @@ uniform float u_wavePeakPx;
 uniform float u_chroma;
 uniform float u_waveAmp;
 uniform float u_dissolveT;
+uniform float u_textFadeStart;
+uniform float u_textFadeEnd;
 in vec2 v_uv;
 out vec4 outColor;
 
@@ -329,9 +403,7 @@ void main() {
 	   behind the fast reveal edge — by the time the slow wave
 	   arrives later, the glyph is already solid and gets visibly
 	   distorted by the ripple as it passes through. */
-	float textFadeStart = 20.0;
-	float textFadeEnd = 90.0;
-	float textShown = smoothstep(textFadeStart, textFadeEnd, withinReveal);
+	float textShown = smoothstep(u_textFadeStart, u_textFadeEnd, withinReveal);
 	aR *= textShown;
 	aG *= textShown;
 	aB *= textShown;
@@ -350,7 +422,13 @@ void main() {
 	aB = clamp(aB + (nB - 0.5) * grain, 0.0, 1.0);
 
 	coverage = max(max(aR, aG), aB);
-	vec3 textColor = vec3(aR, aG, aB);
+	/* Normalize to keep glyph brightness independent of coverage —
+	   without dividing, an AA edge pixel where all 3 channels equal
+	   0.5 would mix into mid-gray (0.25 vs the bg) and the text
+	   reads as washed out. After normalize, an equal-channel pixel
+	   stays vec3(1.0) and mixes properly with bg by alpha; a
+	   chromatic-split pixel keeps its color tilt. */
+	vec3 textColor = coverage > 0.001 ? vec3(aR, aG, aB) / coverage : vec3(0.0);
 	vec3 baseColor = mix(u_bgColor, textColor, coverage);
 	float revealAlpha = 1.0 - smoothstep(u_revealR - u_revealFeather, u_revealR, pixelDist);
 
@@ -482,38 +560,69 @@ void main() {
 		   REVEAL_DURATION_MS is intentionally slow (4s) for testing —
 		   drop to ~420ms once the visual is dialed in. */
 		const REVEAL_DURATION_MS = 1000;
-		const REVEAL_FEATHER_PX = 220;
-		/* Wave timing is decoupled from the reveal. Reveal snaps
-		   open in REVEAL_DURATION_MS; the ripple itself takes
-		   WAVE_PROPAGATION_MS to traverse the menu (slow, so the
-		   wake intervals + lingering match the feel the wave had
-		   back when the entire reveal was 4s long). After
-		   propagation completes, WAVE_SETTLE_MS gives the wakes
-		   trailing time to keep sweeping outward at terminal
-		   velocity while fading their amplitude to zero. */
-		const WAVE_PROPAGATION_MS = 4000;
-		const WAVE_SETTLE_MS = 2200;
-		/* Primary wave: 300px band lets the ripple linger at each
-		   pixel for a meaningful slice of the reveal. 100px peak
-		   displacement is intentionally massive — paired with the
-		   slow `decayPow=0.5` bell in the shader, this puts a lot
-		   of warp into the visible-text zone. Wakes scale off this
-		   in the shader at 0.30× and 0.13×, with sharper decay so
-		   they read as quick echoes rather than competing peers. */
-		const WAVE_BAND_PX = 300;
-		const WAVE_PEAK_PX = 35;
-		/* Chroma multiplier dialed back from 1.0 → 0.55 since the
-		   raw wave displacement is now ~5× larger; without the
-		   compensation the chromatic-aberration fringes would
-		   stretch into rainbow streaks. */
-		const CHROMA = 0.55;
+		/* Compact mode's canvas is much wider (~1265px) than the
+		   mobile fullscreen canvas (~390px), so a 4s propagation
+		   gives the wave roughly 3× the velocity in px/ms — the
+		   wakes arrive too quickly and the oscillation reads as
+		   high-frequency. Slowing to 9s on compact restores wake
+		   intervals comparable to the mobile feel (~800-1500ms
+		   between wake arrivals at any pixel). Settle scales
+		   proportionally. */
+		const WAVE_PROPAGATION_MS = compact ? 9000 : 4000;
+		const WAVE_SETTLE_MS = compact ? 4000 : 2200;
+		/* Spatial constants scale with the menu's overall size — in
+		   compact mode the navbar is ~63px tall with 14px text, so
+		   the wave amplitude and chromatic offsets that look right
+		   on mobile (32-48px text, full-screen canvas) push channel
+		   samples way past glyph extent and the text reads as
+		   colored ghosts. Compact-mode values are roughly scaled to
+		   the navbar text size (14/40 ≈ 0.35×) with extra reduction
+		   on chroma since the small text has even less tolerance for
+		   per-channel offset. */
+		const REVEAL_FEATHER_PX = compact ? 80 : 220;
+		/* Compact band widened from 140 → 200: with the slower
+		   propagation (9s vs 4s) the wave needs a wider band so
+		   the wake spacing in pixels (band * 0.75 = 150, band * 1.4
+		   = 280) stays close to the mobile equivalent in time. */
+		const WAVE_BAND_PX = compact ? 200 : 300;
+		/* Compact mode amplitude bumped further — 26px peak gives a
+		   clearly visible sweep across the smaller text, and a
+		   higher chroma (0.40) makes the R/G/B fringing legible at
+		   14px text where the previous 0.20 was too subtle to spot.
+		   Max per-channel offset is 26 × 1.45 × 0.40 ≈ 15px, which
+		   pushes channels noticeably without being so wide that
+		   each color completely separates from the glyph. */
+		const WAVE_PEAK_PX = compact ? 26 : 35;
+		const CHROMA = compact ? 0.40 : 0.55;
+		/* Text fade-in window (px behind reveal edge). Compact mode
+		   tightens this so glyphs are fully solid almost immediately
+		   after the reveal edge sweeps past — the navbar is small
+		   so withinReveal values stay small. */
+		const TEXT_FADE_START = compact ? 4 : 20;
+		const TEXT_FADE_END = compact ? 24 : 90;
 
 		const revealStart = performance.now();
+		/* Wave timing is its own variable so future interactive
+		   triggers could reset it. For now it's only set once at
+		   open — the navbar menu plays its ripple automatically
+		   when opened, and no mouse movement inside the navbar
+		   re-triggers it. */
+		const waveStart = performance.now();
+		/* Compute reveal geometry from the host's actual bounding
+		   rect (works for both fullscreen and compact modes — in
+		   compact mode the host is positioned over the navbar's
+		   bounds, so hostRect is the navbar). The epicenter is
+		   $menuOrigin (viewport-space) translated into host-space. */
+		const hostInitRect = host!.getBoundingClientRect();
+		const hostInitW = hostInitRect.width;
+		const hostInitH = hostInitRect.height;
+		const originX = $menuOrigin?.x ?? hostInitRect.left + hostInitW / 2;
+		const originY = $menuOrigin?.y ?? hostInitRect.top + hostInitH / 2;
 		const revealCenterUv: [number, number] = [
-			($menuOrigin?.x ?? viewportW / 2) / viewportW,
-			1 - ($menuOrigin?.y ?? viewportH / 2) / viewportH
+			(originX - hostInitRect.left) / hostInitW,
+			1 - (originY - hostInitRect.top) / hostInitH
 		];
-		const revealFinalPx = Math.hypot(viewportW, viewportH) * 1.15;
+		const revealFinalPx = Math.hypot(hostInitW, hostInitH) * 1.15;
 
 		const bgString = getComputedStyle(document.body).backgroundColor;
 		const bgMatch = bgString.match(/\d+(?:\.\d+)?/g);
@@ -554,11 +663,15 @@ void main() {
 			   revealFinal instead of 50%. Total duration is
 			   unchanged, so the lingering tail keeps its slow feel.
 			   Smaller exponents → more front-loaded; sqrt = 0.5. */
-			const waveT = Math.min(1, elapsed / WAVE_PROPAGATION_MS);
+			/* Wave timing uses its own waveStart (vs `elapsed` from
+			   reveal) so interactive triggers in compact mode can
+			   reset it independently of the reveal phase. */
+			const waveElapsed = performance.now() - waveStart;
+			const waveT = Math.min(1, waveElapsed / WAVE_PROPAGATION_MS);
 			let waveR = Math.pow(waveT, 0.3) * revealFinalPx;
 			let waveAmp = 1.0;
-			if (elapsed > WAVE_PROPAGATION_MS) {
-				const waveSettleElapsed = elapsed - WAVE_PROPAGATION_MS;
+			if (waveElapsed > WAVE_PROPAGATION_MS) {
+				const waveSettleElapsed = waveElapsed - WAVE_PROPAGATION_MS;
 				const waveTerminalV = (0.5 * revealFinalPx) / WAVE_PROPAGATION_MS;
 				waveR += waveSettleElapsed * waveTerminalV;
 				const waveSettleT = Math.min(1, waveSettleElapsed / WAVE_SETTLE_MS);
@@ -590,8 +703,8 @@ void main() {
 			gl!.uniform1f(gl!.getUniformLocation(displayProg, 'u_revealFeather'), REVEAL_FEATHER_PX);
 			gl!.uniform2f(
 				gl!.getUniformLocation(displayProg, 'u_resolution'),
-				viewportW,
-				viewportH
+				hostInitW,
+				hostInitH
 			);
 			gl!.uniform3f(
 				gl!.getUniformLocation(displayProg, 'u_bgColor'),
@@ -605,6 +718,8 @@ void main() {
 			gl!.uniform1f(gl!.getUniformLocation(displayProg, 'u_chroma'), CHROMA);
 			gl!.uniform1f(gl!.getUniformLocation(displayProg, 'u_waveAmp'), waveAmp);
 			gl!.uniform1f(gl!.getUniformLocation(displayProg, 'u_dissolveT'), dissolveT);
+			gl!.uniform1f(gl!.getUniformLocation(displayProg, 'u_textFadeStart'), TEXT_FADE_START);
+			gl!.uniform1f(gl!.getUniformLocation(displayProg, 'u_textFadeEnd'), TEXT_FADE_END);
 			gl!.drawArrays(gl!.TRIANGLES, 0, 6);
 		}
 
@@ -628,23 +743,31 @@ void main() {
 		return () => {
 			destroyed = true;
 			cancelAnimationFrame(raf);
-			if (textTex) gl!.deleteTexture(textTex);
-			gl!.deleteBuffer(quad);
-			gl!.deleteProgram(displayProg);
-			gl!.deleteShader(vs);
-			/* Force-release the WebGL context, but defer to the next
-			   animation frame so Svelte's DOM unmount has time to
-			   actually remove the canvas first. Calling loseContext
-			   synchronously between cleanup and DOM removal causes
-			   the canvas to briefly paint its default state — which
-			   reads as a white flash before the menu fully
-			   disappears. The deferred call fires after the canvas
-			   is gone, so the lost-context state is never visible.
-			   The closure captures `gl`, so the deferred call still
-			   works even though the canvas element is already gone. */
+			/* Defer ALL WebGL teardown (resource deletion + context
+			   release) to after the DOM has actually removed the
+			   canvas. Synchronously deleting the program / textures
+			   while the canvas is still mounted leaves the GL state
+			   invalid — and the next compositor pass before the DOM
+			   update can paint the canvas's default state (which
+			   reads as a white flash) before the unmount lands. By
+			   waiting two animation frames, we guarantee Svelte's
+			   DOM update + the browser's composite have both
+			   completed, so the canvas is gone when we touch the GL
+			   handle. The closure captures everything we need; no
+			   reference to `host`/`canvas` after they're unbound. */
 			const ctx = gl!;
+			const tex = textTex;
+			const q = quad;
+			const dp = displayProg;
+			const v = vs;
 			requestAnimationFrame(() => {
-				ctx.getExtension('WEBGL_lose_context')?.loseContext();
+				requestAnimationFrame(() => {
+					if (tex) ctx.deleteTexture(tex);
+					ctx.deleteBuffer(q);
+					ctx.deleteProgram(dp);
+					ctx.deleteShader(v);
+					ctx.getExtension('WEBGL_lose_context')?.loseContext();
+				});
 			});
 		};
 	}
@@ -653,6 +776,10 @@ void main() {
 {#if mounted}
 	<div
 		class="menu"
+		class:compact
+		style={compact
+			? `top: ${navbarRect.top}px; left: ${navbarRect.left}px; width: ${navbarRect.width}px; height: ${navbarRect.height}px;`
+			: ''}
 		role="dialog"
 		aria-modal="true"
 		aria-label="Menu"
@@ -692,10 +819,25 @@ void main() {
 	.menu {
 		position: fixed;
 		inset: 0;
+		/* Fullscreen mode (mobile): z-index 90 sits below the
+		   navbar (z-index 100) in the page stack, so the brand +
+		   hamburger remain visible above this overlay and the X
+		   button stays clickable to close the menu. */
 		z-index: 90;
 		display: flex;
 		align-items: center;
 		justify-content: center;
+	}
+	/* Compact mode (desktop): Menu is rendered INSIDE the navbar
+	   so it shares the navbar's stacking context. Its z-index of
+	   10 sits between the navbar's bg (auto/0) and the brand (20)
+	   / hamburger (30) — keeping all three navbar elements visible
+	   above the canvas. The host is positioned over the navbar's
+	   bounding rect (top/left/width/height set inline from JS).
+	   inset:auto clears the base inset:0. */
+	.menu.compact {
+		inset: auto;
+		z-index: 10;
 	}
 	/* The canvas sits in front of the nav list and renders the label
 	   text with the WebGL ripple effect. `pointer-events: none` so
@@ -778,6 +920,29 @@ void main() {
 	}
 	.nav-item.disabled:hover {
 		opacity: 0.55;
+	}
+	/* Compact-mode list: horizontal flex centered in the navbar,
+	   smaller font sized to sit comfortably inside the navbar's
+	   ~57px height. Items are spaced apart with a fixed gap
+	   instead of stacking vertically. */
+	.menu.compact .nav-list {
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		padding: 0 24px;
+		max-width: none;
+		gap: 28px;
+	}
+	.menu.compact .nav-item {
+		font-size: 14px;
+		font-weight: 400;
+		letter-spacing: 0.02em;
+		padding: 6px 4px;
+		gap: 6px;
+	}
+	.menu.compact .nav-item-dot {
+		width: 7px;
+		height: 7px;
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.menu, .nav-item { animation: none !important; opacity: 1 !important; transform: none !important; }

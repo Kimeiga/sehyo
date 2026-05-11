@@ -40,32 +40,12 @@
 	let composerValue = $state('');
 	let posting = $state(false);
 
-	/* Send-button variants. The pick happens during component
-	   instantiation on the client (gated on `typeof window`) so
-	   the first render already shows the random label — no
-	   "Send" → "Tell 'em" flash on hydration. SSR still serializes
-	   the stable default; Svelte's hydrator reconciles the
-	   one-character text-node difference silently. */
-	const SEND_VARIANTS = [
-		'Send',
-		"Tell 'em",
-		'Let the world know',
-		'Speak up',
-		'Say it',
-		'Post it',
-		'Share',
-		'Spill it',
-		'Make it heard',
-		'Out with it',
-		'Broadcast to the world',
-		'Let your brain juice ooze out',
-		'📡🤔🧠'
-	];
-	let sendLabel = $state(
-		typeof window === 'undefined'
-			? 'Send'
-			: SEND_VARIANTS[Math.floor(Math.random() * SEND_VARIANTS.length)]
-	);
+	/* Send-button label is picked server-side in +page.server.ts and
+	   delivered via `data.sendLabel`. Doing it there guarantees the
+	   SSR HTML already carries the chosen variant — no flicker from
+	   "Send" → random on hydration. */
+	const sendLabel = $derived(data.sendLabel ?? 'Send');
+	const sendLabelMono = $derived(!!data.sendLabelMono);
 
 	let editing = $state(false);
 	let editValue = $state('');
@@ -411,7 +391,7 @@
 									title="Send (Enter)"
 									disabled={posting || composerValue.trim().length === 0}
 								>
-									<span class="send-label">{sendLabel}</span>
+									<span class="send-label" class:mono={sendLabelMono}>{sendLabel}</span>
 									<ArrowUp size="18" strokeWidth="2.4" />
 								</button>
 							</div>
@@ -1088,6 +1068,14 @@
 		cursor: not-allowed;
 	}
 	.send-label { line-height: 1; }
+	/* Mono variant — applied when the picked SEND_VARIANTS entry is
+	   tagged `mono: true` (e.g. the fake SQL command). Makes the label
+	   read as code rather than chatty button copy. */
+	.send-label.mono {
+		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+		font-size: 13px;
+		letter-spacing: 0;
+	}
 	.composer textarea, .edit-textarea, .comment-composer textarea, .reply-composer textarea {
 		width: 100%;
 		font-family: var(--font-sans);
