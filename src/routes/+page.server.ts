@@ -33,10 +33,86 @@ type TimelineItem =
 const PAST_DAYS_LIMIT = 30;
 const PAST_FREE_POSTS_LIMIT = 200;
 
+/* Picked server-side so the SSR HTML already carries the chosen
+   label. Without this, the client would re-roll on hydration and
+   you'd see "Send" flicker into a different variant on first paint. */
+type SendVariant = string | { text: string; mono: true };
+const SEND_VARIANTS: SendVariant[] = [
+	// Plain / direct
+	'Send',
+	'Say it',
+	'Post it',
+	'Share',
+	'Submit',
+	'Upload',
+	'Transmit',
+
+	// Casual, conversational
+	"Tell 'em",
+	'Holler',
+	'Pipe up',
+	'Spit it out',
+	'Throw it out there',
+	'Out with it',
+	'Lay it on us',
+	'Drop a take',
+	'Make a peep',
+	'Cosign',
+
+	// Encouraging / nudging
+	'Speak up',
+	'Spill it',
+	'Let it rip',
+	'Pop off',
+	'Get it off your chest',
+	'Take the plunge',
+	'Sing out',
+	'Crank it out',
+	'Plant your flag',
+	'Put it on the record',
+	'Make some noise',
+	"Let's see how they react",
+
+	// Loud / broadcast-themed
+	'Let the world know',
+	'Make it heard',
+	'Broadcast to the world',
+	'Open the floodgates',
+	'Drop the mic',
+
+	// Playful / absurd
+	'Yeet',
+	'Let your brain juice ooze out',
+	"I'm feeling lucky",
+	'Whisper to the void',
+	'→→→→→ click that arrow →→→→→',
+	'done playing with the ripple effect?',
+
+	// Sci-fi / on-theme transmission
+	'Beam it up',
+	'Beam your thought',
+	'📡🤔📡',
+
+	// Code / nerdy (rendered in monospace)
+	'Ship it',
+	{ text: 'INSERT thought INTO TABLE answer', mono: true },
+	{ text: 'POST /api/answer', mono: true },
+	{ text: 'console.log(thought)', mono: true },
+	{ text: 'git push --force', mono: true }
+];
+
 export const load: PageServerLoad = async ({ platform }) => {
+	const picked = SEND_VARIANTS[Math.floor(Math.random() * SEND_VARIANTS.length)];
+	const sendLabel = typeof picked === 'string' ? picked : picked.text;
+	const sendLabelMono = typeof picked === 'string' ? false : picked.mono;
 	const db = platform?.env?.DB;
 	if (!db) {
-		return { timeline: [] as TimelineItem[], todayFreePosts: [] as AnswerRow[] };
+		return {
+			timeline: [] as TimelineItem[],
+			todayFreePosts: [] as AnswerRow[],
+			sendLabel,
+			sendLabelMono
+		};
 	}
 
 	const today = todayUTC();
@@ -175,7 +251,9 @@ export const load: PageServerLoad = async ({ platform }) => {
 	return {
 		timeline,
 		todayFreePosts,
-		commentsByPost
+		commentsByPost,
+		sendLabel,
+		sendLabelMono
 	};
 };
 

@@ -1,9 +1,7 @@
 <script lang="ts">
-	import { goto, invalidateAll } from '$app/navigation';
-	import { page } from '$app/state';
-	import { authClient } from '$lib/auth-client';
-	import { promptSignIn } from '$lib/stores/sign-in-modal';
 	import { menuOpen, toggleMenu } from '$lib/stores/menu';
+	import SehyoLogo from '$lib/components/SehyoLogo.svelte';
+	import Menu from '$lib/components/Menu.svelte';
 	import type { User } from '$lib/types';
 
 	interface Props {
@@ -11,116 +9,19 @@
 		unreadCount?: number;
 	}
 	let { user, unreadCount = 0 }: Props = $props();
-
-	let signingIn = $state(false);
-
-	const isSignedIn = $derived(!!user && !user.isAnonymous);
-	const profileHref = $derived(
-		user ? (user.username ? `/${user.username}` : `/profile/${user.id}`) : '/'
-	);
-
-	async function signInGoogle() {
-		if (signingIn) return;
-		signingIn = true;
-		try {
-			await authClient.signIn.social({ provider: 'google', callbackURL: '/' });
-		} catch (err) {
-			console.error('Google sign-in failed:', err);
-			alert('Could not start sign-in. Try again.');
-			signingIn = false;
-		}
-	}
-
-	async function signOut() {
-		try {
-			await authClient.signOut();
-			await goto('/');
-			await invalidateAll();
-		} catch (err) {
-			console.error('Sign-out failed:', err);
-		}
-	}
-
-	function showMessagesSignInGate(e: MouseEvent) {
-		e.preventDefault();
-		promptSignIn('Sign in to use messages.');
-	}
-
-	type NavLink = {
-		label: string;
-		href: string;
-		show: boolean;
-		guarded?: (e: MouseEvent) => void;
-		hasUnread?: boolean;
-	};
-
-	const links = $derived<NavLink[]>(
-		[
-			{ label: 'Home', href: '/', show: true },
-			{ label: 'Search', href: '/search', show: true },
-			{
-				label: 'Messages',
-				href: '/messages',
-				show: isSignedIn,
-				hasUnread: unreadCount > 0
-			},
-			{ label: 'Messages', href: '/messages', show: !isSignedIn, guarded: showMessagesSignInGate },
-			{ label: 'Friends', href: '/friends', show: isSignedIn },
-			{ label: 'Profile', href: profileHref, show: isSignedIn },
-			{ label: 'About', href: '/about', show: true }
-		].filter((l) => l.show)
-	);
-
-	function isActive(href: string): boolean {
-		if (href === '/') return page.url.pathname === '/';
-		return page.url.pathname === href || page.url.pathname.startsWith(href + '/');
-	}
 </script>
 
-<header class="navbar" class:menu-open={$menuOpen}>
+<header class="navbar">
 	<a class="brand" href="/" aria-label="Sehyo home">
-		<img src="/sehyo-logo.svg" alt="" width="32" height="32" />
-		<span class="brand-text">SEHYO</span>
+		<SehyoLogo size={32} />
 	</a>
 
-	<nav class="nav-links" aria-label="Primary">
-		{#each links as link (link.label + (link.guarded ? ':guarded' : ''))}
-			{#if link.guarded}
-				<a
-					class="nav-link disabled"
-					href={link.href}
-					onclick={link.guarded}
-					aria-disabled="true"
-				>{link.label}</a>
-			{:else}
-				<a
-					class="nav-link"
-					class:active={isActive(link.href)}
-					href={link.href}
-				>
-					{link.label}
-					{#if link.hasUnread}
-						<span
-							class="unread-dot"
-							aria-label={`${unreadCount} unread message${unreadCount === 1 ? '' : 's'}`}
-						></span>
-					{/if}
-				</a>
-			{/if}
-		{/each}
-	</nav>
-
-	<div class="auth">
-		{#if !isSignedIn}
-			<button type="button" class="auth-button primary" onclick={signInGoogle} disabled={signingIn}>
-				{signingIn ? 'Signing in…' : 'Sign in'}
-			</button>
-		{/if}
-	</div>
-
-	<!-- Mobile hamburger: hidden ≥641px. Toggles the full-screen Menu
-	     overlay. Shows the same unread-dot indicator so mobile users
-	     don't lose the notification cue. -->
+	<!-- The hamburger toggle is the only nav affordance on both mobile
+	     and desktop now. Clicking it opens the Menu overlay (full-
+	     screen on mobile, navbar-confined on desktop) which renders
+	     the link list with the WebGL ripple effect. The previous
+	     inline .nav-links and .auth elements were removed since they
+	     duplicated what the Menu now does. -->
 	<button
 		type="button"
 		class="mobile-toggle"
@@ -149,13 +50,31 @@
 			{/if}
 		{/if}
 	</button>
+
+	<!-- Compact-mode Menu instance — only activates on desktop
+	     viewports (≥641px). Living inside the navbar means all
+	     four elements (navbar bg, menu canvas, brand, hamburger)
+	     share the navbar's stacking context, so the z-index
+	     ordering — navbar bg (auto/0) < menu (10) < brand (20) <
+	     hamburger (30) — works without page-level z-index gymnastics.
+	     The fullscreen instance lives in +layout.svelte. -->
+	<Menu {user} {unreadCount} mode="compact" />
 </header>
 
 <style>
 	.navbar {
 		position: sticky;
 		top: 0;
-		z-index: 80;
+		/* z-index 100 puts the navbar (and everything inside it,
+		   including the desktop compact-mode Menu instance) above
+		   the fullscreen Menu instance (z-index 90) which lives
+		   outside the navbar in the layout. On mobile, this keeps
+		   the brand + hamburger visible above the fullscreen
+		   overlay so the X close button stays clickable. On
+		   desktop, the compact Menu is INSIDE this stacking
+		   context, so its inner z-index ordering (canvas 10 <
+		   brand 20 < hamburger 30) handles the layering there. */
+		z-index: 100;
 		display: flex;
 		align-items: center;
 		gap: 24px;
@@ -165,13 +84,6 @@
 		-webkit-backdrop-filter: blur(8px);
 		border-bottom: 1px solid var(--border);
 	}
-	/* When the menu overlay is open, lift the navbar above it so the
-	   X button stays visible and clickable as the close affordance.
-	   The menu has its own opaque background underneath; the navbar's
-	   own backdrop-blur lets the menu show through faintly behind it. */
-	.navbar.menu-open {
-		z-index: 100;
-	}
 
 	.brand {
 		display: inline-flex;
@@ -180,47 +92,18 @@
 		color: var(--foreground);
 		text-decoration: none;
 		flex-shrink: 0;
-	}
-	.brand img {
-		display: block;
-		width: 32px;
-		height: 32px;
-		border-radius: 7px;
-	}
-	.brand-text {
-		font-family: var(--font-sans);
-		font-weight: 700;
-		font-size: 18px;
-		letter-spacing: 0.04em;
-	}
-
-	.nav-links {
-		display: flex;
-		gap: 4px;
-		flex: 1;
-		min-width: 0;
-		overflow-x: auto;
-		scrollbar-width: none;
-	}
-	.nav-links::-webkit-scrollbar {
-		display: none;
-	}
-
-	.nav-link {
+		/* Stacking inside the navbar (per the spec ordering):
+		   navbar bg (0) < canvas/menu (10) < logo (20) < hamburger (30).
+		   The navbar is `position: sticky` which already forms a
+		   stacking context, so all these z-indices stack relative
+		   to each other inside the navbar — no need to fight the
+		   page-level stacking. */
 		position: relative;
-		color: var(--muted-foreground);
-		text-decoration: none;
-		font-size: 14px;
-		font-weight: 400;
-		padding: 8px 12px;
-		border-radius: 8px;
-		white-space: nowrap;
-		transition: color 120ms ease, background 120ms ease;
+		z-index: 20;
 	}
-
-	/* Unread-DM indicator. The dot sits at the top-right corner of the
-	   nav link, with a background-colored ring so it stays visible
-	   against any link background (hover, active). */
+	/* Unread-DM indicator. Used by the hamburger button's
+	   .mobile-toggle-dot to surface notifications without the user
+	   having to open the menu. */
 	.unread-dot {
 		position: absolute;
 		top: 4px;
@@ -232,57 +115,16 @@
 		box-shadow: 0 0 0 2px var(--background);
 		pointer-events: none;
 	}
-	.nav-link:hover {
-		color: var(--foreground);
-		background: var(--muted);
-	}
-	.nav-link.active {
-		color: var(--foreground);
-	}
-	.nav-link.disabled {
-		color: var(--muted-foreground);
-		opacity: 0.5;
-		cursor: pointer;
-	}
 
-	.auth {
-		flex-shrink: 0;
-	}
-	.auth-button {
-		appearance: none;
-		border: 1px solid var(--border);
-		background: transparent;
-		color: var(--foreground);
-		font: inherit;
-		font-weight: 600;
-		font-size: 14px;
-		padding: 8px 16px;
-		border-radius: 999px;
-		cursor: pointer;
-		transition: background 120ms ease, border-color 120ms ease;
-	}
-	.auth-button:hover {
-		background: var(--muted);
-	}
-	.auth-button.primary {
-		background: var(--foreground);
-		color: var(--background);
-		border-color: var(--foreground);
-	}
-	.auth-button.primary:hover {
-		opacity: 0.88;
-	}
-	.auth-button:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	/* Mobile hamburger button. Hidden on desktop; on mobile it replaces
-	   the inline nav links + auth button. Positioned at the far right
-	   via the flex layout (after `.auth`, which is itself hidden on
-	   mobile so this slot collapses to the right edge). */
+	/* Hamburger toggle button. Always visible (mobile + desktop) —
+	   the inline link list and auth button are gone, the hamburger
+	   is the universal entry to the menu overlay. Positioned at
+	   the far right by margin-left: auto pushing past the empty
+	   middle of the navbar. Lifted above the menu canvas via
+	   z-index 2 so the X stays clickable while the menu is open. */
 	.mobile-toggle {
-		display: none;
+		display: inline-flex;
+		margin-left: auto;
 		appearance: none;
 		border: 0;
 		background: transparent;
@@ -291,6 +133,9 @@
 		border-radius: 8px;
 		cursor: pointer;
 		position: relative;
+		/* Highest of the four navbar children — must stay clickable
+		   above the menu canvas so the user can close the menu. */
+		z-index: 30;
 		align-items: center;
 		justify-content: center;
 		transition: background 120ms ease;
@@ -299,9 +144,6 @@
 		background: var(--muted);
 	}
 	.mobile-toggle-dot {
-		/* The hamburger lives in flex flow, not relative to a nav link
-		   that's bigger than the dot. Pin to the top-right corner of
-		   the button itself. */
 		top: 2px;
 		right: 2px;
 	}
@@ -310,19 +152,6 @@
 		.navbar {
 			gap: 12px;
 			padding: 10px 12px;
-		}
-		.brand-text {
-			display: none;
-		}
-		/* Hide the inline link list and the auth pill on mobile — they
-		   live inside the full-screen Menu overlay instead. */
-		.nav-links,
-		.auth {
-			display: none;
-		}
-		.mobile-toggle {
-			display: inline-flex;
-			margin-left: auto;
 		}
 	}
 </style>

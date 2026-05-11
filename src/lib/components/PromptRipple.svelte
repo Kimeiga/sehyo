@@ -355,7 +355,21 @@ void main() {
 			return [u, v];
 		}
 
+		/* Only fire ripples when the cursor is actually over the
+		   prompt text. The .ripple-h1 sits beneath the canvas (which
+		   has pointer-events:none) so elementFromPoint will return
+		   the h1 — or one of its ancestors via .closest — whenever
+		   the cursor is on the text region. This naturally excludes
+		   the navbar, the composer, comments below, and any other
+		   page chrome without us needing to explicitly check for
+		   each one. */
+		function isOverText(clientX: number, clientY: number): boolean {
+			const el = document.elementFromPoint(clientX, clientY);
+			return !!el?.closest('.ripple-h1');
+		}
+
 		function onPointerDown(e: PointerEvent) {
+			if (!isOverText(e.clientX, e.clientY)) return;
 			const uv = clientToUv(e.clientX, e.clientY);
 			if (!uv) return;
 			pendingSplats.push({ uv, radius: 0.04, strength: 0.5 });
@@ -377,6 +391,10 @@ void main() {
 			if (dx * dx + dy * dy < MOVE_MIN_DIST_SQ) return;
 			lastMoveX = e.clientX;
 			lastMoveY = e.clientY;
+			/* Throttle check is cheap and runs first; the text hit-test
+			   uses elementFromPoint (DOM hit-test) so we only do it
+			   for the ~6/sec moves that pass the throttle. */
+			if (!isOverText(e.clientX, e.clientY)) return;
 			const uv = clientToUv(e.clientX, e.clientY);
 			if (!uv) return;
 			// Smaller, weaker than a click — we want a trail, not bursts.

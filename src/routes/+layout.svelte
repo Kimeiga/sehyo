@@ -88,7 +88,9 @@
 
 	{@render children?.()}
 
-	<Menu user={data.user} unreadCount={data.unreadMessageCount ?? 0} />
+	<!-- Fullscreen Menu instance — only activates on mobile viewports
+	     (<641px). The compact instance lives inside Navbar. -->
+	<Menu user={data.user} unreadCount={data.unreadMessageCount ?? 0} mode="fullscreen" />
 	<LoginModal open={data.showLoginModal} />
 	<SignInModal />
 </div>
