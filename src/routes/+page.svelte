@@ -1152,7 +1152,22 @@
 		     - `soft` is `strong` × 0.5 absolute alpha — the gradient
 		       endpoint at the TOP of each vertical segment, where it
 		       approaches a profile pic or a T-junction. */
-		--line-strong: color-mix(in oklab, var(--muted-foreground), var(--border) 65%);
+		/* Dimmer line color with a subtle blue cast:
+		     1. Base muted-mix (muted-foreground × 0.35 + border × 0.65)
+		     2. Tinted toward --brand (#00A5D8) at 18% in oklab
+		     3. Reduced to 60% alpha for the dimming
+		   --line-soft then steps that result down to 0.3 of strong
+		   for the gradient endpoint, giving an effective ~0.18 alpha
+		   at the top of each vertical segment. */
+		--line-strong: color-mix(
+			in srgb,
+			color-mix(
+				in oklab,
+				color-mix(in oklab, var(--muted-foreground), var(--border) 65%),
+				var(--brand) 9%
+			) 60%,
+			transparent
+		);
 		--line-soft: color-mix(in srgb, var(--line-strong) 30%, transparent);
 	}
 

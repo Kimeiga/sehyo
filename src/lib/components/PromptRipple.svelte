@@ -477,6 +477,7 @@ void main() {
 				gl!.deleteProgram(splatProg);
 				gl!.deleteProgram(displayProg);
 				gl!.deleteShader(vs);
+				gl!.getExtension('WEBGL_lose_context')?.loseContext();
 			};
 		}
 		ready = true;
@@ -539,6 +540,15 @@ void main() {
 			gl!.deleteProgram(splatProg);
 			gl!.deleteProgram(displayProg);
 			gl!.deleteShader(vs);
+			/* Force-release the WebGL context, but defer to the next
+			   animation frame so the DOM unmount has time to remove
+			   the canvas first — calling loseContext synchronously
+			   between cleanup and unmount can cause the canvas to
+			   paint its default state for a frame (white flash). */
+			const ctx = gl!;
+			requestAnimationFrame(() => {
+				ctx.getExtension('WEBGL_lose_context')?.loseContext();
+			});
 		};
 	}
 </script>
