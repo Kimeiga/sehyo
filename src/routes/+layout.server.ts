@@ -14,6 +14,22 @@ interface AnswerRow {
 	image: string | null;
 }
 
+/* Routes that bypass the "answer today's prompt first" gate. Anything
+   outside this set redirects to `/` when the viewer hasn't posted a
+   reply to today's daily_prompt. The home page itself decides what to
+   render in the not-yet-answered state (just the prompt + composer);
+   /api keeps working for the composer submit + auth endpoints; /auth
+   keeps the sign-in flow reachable; /about stays as an info page. */
+const GATE_ALLOWLIST_EXACT = new Set(['/', '/about']);
+const GATE_ALLOWLIST_PREFIXES = ['/api/', '/auth/'] as const;
+function isAllowlistedPath(pathname: string): boolean {
+	if (GATE_ALLOWLIST_EXACT.has(pathname)) return true;
+	for (const p of GATE_ALLOWLIST_PREFIXES) {
+		if (pathname.startsWith(p)) return true;
+	}
+	return false;
+}
+
 export const load: LayoutServerLoad = async ({ platform, locals, url }) => {
 	if (url.searchParams.get('modal') === 'login') {
 		throw redirect(302, '/auth/login');
@@ -26,7 +42,8 @@ export const load: LayoutServerLoad = async ({ platform, locals, url }) => {
 			prompt: null,
 			answers: [] as AnswerRow[],
 			namesBlurred: !locals.user,
-			unreadMessageCount: 0
+			unreadMessageCount: 0,
+			hasAnsweredToday: false
 		};
 	}
 
@@ -125,6 +142,17 @@ export const load: LayoutServerLoad = async ({ platform, locals, url }) => {
 	];
 	const todayCommentsByPost = await loadCommentsForPosts(db, todayPostIds);
 
+	const hasAnsweredToday = !!myAnswer;
+
+	/* Content gate. Until the viewer has posted today's answer, every
+	   non-allowlisted path bounces back to `/` so they can't sneak past
+	   the prompt via direct URLs (shared post links, profile pages, the
+	   search page, etc). After they answer once, the gate disappears
+	   for the rest of the UTC day — until the next prompt rolls in. */
+	if (!hasAnsweredToday && !isAllowlistedPath(url.pathname)) {
+		throw redirect(302, '/');
+	}
+
 	return {
 		user: locals.user,
 		prompt: prompt ? { id: prompt.id, text: prompt.prompt_text, active_date: prompt.active_date } : null,
@@ -133,7 +161,8 @@ export const load: LayoutServerLoad = async ({ platform, locals, url }) => {
 		namesBlurred,
 		unlockedAvatars,
 		todayCommentsByPost,
-		unreadMessageCount
+		unreadMessageCount,
+		hasAnsweredToday
 	};
 };
 
