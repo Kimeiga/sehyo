@@ -413,10 +413,10 @@
 					image: (data.user as { image?: string | null } | null)?.image ?? null,
 					comment_count: data.myAnswer.comment_count
 				}, { isMine: true })}
-				{#each data.answers as a (a.id)}
-					{@render postArticle(a, { isMine: false })}
-				{/each}
 			{/if}
+			{#each data.answers as a (a.id)}
+				{@render postArticle(a, { isMine: false })}
+			{/each}
 		</section>
 
 		{#if !data.myAnswer}
@@ -562,10 +562,10 @@
 {#snippet authorMeta(displayName: string | null | undefined, username: string | null | undefined, isOwn: boolean)}
 	<header class="tw-meta">
 		{#if username}
-			<a class="tw-name" href="/{username}">{displayName ?? 'Anonymous'}</a>
-			<a class="tw-handle" href="/{username}">@{username}</a>
+			<a class="tw-name" class:author-mask={!isOwn} href="/{username}">{displayName ?? 'Anonymous'}</a>
+			<a class="tw-handle" class:author-mask={!isOwn} href="/{username}">@{username}</a>
 		{:else}
-			<span class="tw-name">{displayName ?? 'Anonymous'}</span>
+			<span class="tw-name" class:author-mask={!isOwn}>{displayName ?? 'Anonymous'}</span>
 		{/if}
 		{#if isOwn && isAnon}
 			<button

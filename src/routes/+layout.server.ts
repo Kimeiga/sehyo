@@ -99,22 +99,11 @@ export const load: LayoutServerLoad = async ({ platform, locals, url }) => {
 		}
 	}
 
-	// Names are blurred for signed-out viewers AND for signed-in viewers
-	// who haven't authored anything yet. Either an answer to today's
-	// prompt OR a comment counts — any content you've created unlocks.
-	let hasInteracted = false;
-	if (locals.user) {
-		const r = await db
-			.prepare(
-				`SELECT
-					(EXISTS (SELECT 1 FROM posts    WHERE user_id = ?1)) +
-					(EXISTS (SELECT 1 FROM comments WHERE user_id = ?1)) AS n`
-			)
-			.bind(locals.user.id)
-			.first<{ n: number }>();
-		hasInteracted = (r?.n ?? 0) > 0;
-	}
-	const namesBlurred = !locals.user || !hasInteracted;
+	/* Names blur until the viewer has replied to TODAY'S prompt. This
+	   is the engagement gate: you can see what everyone else said but
+	   can't tell who said it until you say something yourself. Resets
+	   each UTC day along with the prompt. */
+	const namesBlurred = !myAnswer;
 
 	// Set of user_ids the viewer has commented on at least one post by.
 	// This drives the avatar unblur and the "add friend" gate. We pass it
