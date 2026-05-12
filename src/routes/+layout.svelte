@@ -88,9 +88,9 @@
 
 	{@render children?.()}
 
-	<!-- Fullscreen Menu instance — only activates on mobile viewports
-	     (<641px). The compact instance lives inside Navbar. -->
-	<Menu user={data.user} unreadCount={data.unreadMessageCount ?? 0} mode="fullscreen" />
+	<!-- Fullscreen Menu overlay — opened by the hamburger in Navbar.
+	     Same component, every viewport. -->
+	<Menu user={data.user} unreadCount={data.unreadMessageCount ?? 0} />
 	<LoginModal open={data.showLoginModal} />
 	<SignInModal />
 </div>
