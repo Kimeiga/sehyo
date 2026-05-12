@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { menuOpen, toggleMenu } from '$lib/stores/menu';
 	import SehyoLogo from '$lib/components/SehyoLogo.svelte';
-	import Menu from '$lib/components/Menu.svelte';
 	import type { User } from '$lib/types';
 
 	interface Props {
@@ -16,12 +15,10 @@
 		<SehyoLogo size={32} />
 	</a>
 
-	<!-- The hamburger toggle is the only nav affordance on both mobile
-	     and desktop now. Clicking it opens the Menu overlay (full-
-	     screen on mobile, navbar-confined on desktop) which renders
-	     the link list with the WebGL ripple effect. The previous
-	     inline .nav-links and .auth elements were removed since they
-	     duplicated what the Menu now does. -->
+	<!-- The hamburger toggle is the only nav affordance on every
+	     viewport. Clicking it opens the fullscreen Menu overlay
+	     (defined once in +layout.svelte) which renders the link
+	     list with the WebGL ripple effect. -->
 	<button
 		type="button"
 		class="mobile-toggle"
@@ -57,30 +54,16 @@
 			{/if}
 		{/if}
 	</button>
-
-	<!-- Compact-mode Menu instance — only activates on desktop
-	     viewports (≥641px). Living inside the navbar means all
-	     four elements (navbar bg, menu canvas, brand, hamburger)
-	     share the navbar's stacking context, so the z-index
-	     ordering — navbar bg (auto/0) < menu (10) < brand (20) <
-	     hamburger (30) — works without page-level z-index gymnastics.
-	     The fullscreen instance lives in +layout.svelte. -->
-	<Menu {user} {unreadCount} mode="compact" />
 </header>
 
 <style>
 	.navbar {
 		position: sticky;
 		top: 0;
-		/* z-index 100 puts the navbar (and everything inside it,
-		   including the desktop compact-mode Menu instance) above
-		   the fullscreen Menu instance (z-index 90) which lives
-		   outside the navbar in the layout. On mobile, this keeps
-		   the brand + hamburger visible above the fullscreen
-		   overlay so the X close button stays clickable. On
-		   desktop, the compact Menu is INSIDE this stacking
-		   context, so its inner z-index ordering (canvas 10 <
-		   brand 20 < hamburger 30) handles the layering there. */
+		/* z-index 100 puts the navbar above the fullscreen Menu
+		   overlay (z-index 90), so the brand + hamburger stay
+		   visible while the menu is open and the X close button
+		   stays clickable. */
 		z-index: 100;
 		display: flex;
 		align-items: center;
@@ -99,14 +82,6 @@
 		color: var(--foreground);
 		text-decoration: none;
 		flex-shrink: 0;
-		/* Stacking inside the navbar (per the spec ordering):
-		   navbar bg (0) < canvas/menu (10) < logo (20) < hamburger (30).
-		   The navbar is `position: sticky` which already forms a
-		   stacking context, so all these z-indices stack relative
-		   to each other inside the navbar — no need to fight the
-		   page-level stacking. */
-		position: relative;
-		z-index: 20;
 	}
 	/* Unread-DM indicator. Used by the hamburger button's
 	   .mobile-toggle-dot to surface notifications without the user
@@ -125,10 +100,7 @@
 
 	/* Hamburger toggle button. Always visible (mobile + desktop) —
 	   the inline link list and auth button are gone, the hamburger
-	   is the universal entry to the menu overlay. Positioned at
-	   the far right by margin-left: auto pushing past the empty
-	   middle of the navbar. Lifted above the menu canvas via
-	   z-index 2 so the X stays clickable while the menu is open. */
+	   is the universal entry to the fullscreen menu overlay. */
 	.mobile-toggle {
 		display: inline-flex;
 		margin-left: auto;
@@ -144,9 +116,6 @@
 		border-radius: 0;
 		cursor: pointer;
 		position: relative;
-		/* Highest of the four navbar children — must stay clickable
-		   above the menu canvas so the user can close the menu. */
-		z-index: 30;
 		align-items: center;
 		justify-content: center;
 		transition: border-color 120ms ease;
