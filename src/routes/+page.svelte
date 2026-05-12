@@ -413,10 +413,10 @@
 					image: (data.user as { image?: string | null } | null)?.image ?? null,
 					comment_count: data.myAnswer.comment_count
 				}, { isMine: true })}
+				{#each data.answers as a (a.id)}
+					{@render postArticle(a, { isMine: false })}
+				{/each}
 			{/if}
-			{#each data.answers as a (a.id)}
-				{@render postArticle(a, { isMine: false })}
-			{/each}
 		</section>
 
 		{#if !data.myAnswer}
@@ -504,7 +504,7 @@
 			</div>
 		{/if}
 
-		{#if data.timeline?.length}
+		{#if data.myAnswer && data.timeline?.length}
 			<div class="past">
 				{#each data.timeline as item (item.kind === 'prompt' ? `q-${item.data.id}` : `p-${item.data.id}`)}
 					{#if item.kind === 'prompt'}
