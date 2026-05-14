@@ -45,12 +45,11 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 		.bind(postId, locals.user.id, prompt.id, content)
 		.run();
 
-	// Generate ~4 bot replies on the user's answer in parallel. This
-	// powers the "X people responded — sign in to read" engagement
-	// loop. Adds ~5s of latency to submit; acceptable for the value
-	// it provides. If the AI binding is missing or any reply fails
-	// individually, we still return success — the post itself has
-	// already been saved.
+	// Generate ~4 bot replies on the user's answer in a single batched
+	// LLM call. Powers the "X people responded — sign in to read"
+	// engagement loop. Adds a few seconds of latency; acceptable. If
+	// the AI binding is missing or generation fails, we still return
+	// success — the post itself has already been saved.
 	const ai = platform?.env?.AI;
 	let bot_replies = 0;
 	if (ai) {
