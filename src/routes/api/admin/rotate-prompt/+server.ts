@@ -1,6 +1,6 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { rotatePrompt, generateSeedAnswers } from '$lib/server/ai-bots';
+import { rotatePrompt, generateSeedAnswers, DEFAULT_MODEL } from '$lib/server/ai-bots';
 
 /**
  * Triggers today's prompt rotation. Idempotent: if today's prompt already
@@ -10,6 +10,9 @@ import { rotatePrompt, generateSeedAnswers } from '$lib/server/ai-bots';
  * Pass `?bots=force` to skip the idempotence check and re-roll just the
  * seed-author answers for the existing prompt (dev iteration). User
  * content is preserved.
+ *
+ * Pass `?model=<workers-ai-id>` to override the LLM for this run. Useful
+ * for trying a different model in production without a redeploy.
  */
 export const POST: RequestHandler = async ({ request, platform, url }) => {
 	const secret = request.headers.get('x-admin-secret');
@@ -20,10 +23,12 @@ export const POST: RequestHandler = async ({ request, platform, url }) => {
 	if (!env.DB || !env.AI) {
 		throw error(500, 'Bindings missing');
 	}
+	const model = url.searchParams.get('model') || DEFAULT_MODEL;
+
 	if (url.searchParams.get('bots') === 'force') {
-		const result = await generateSeedAnswers(env.DB, env.AI);
+		const result = await generateSeedAnswers(env.DB, env.AI, model);
 		return json(result);
 	}
-	const result = await rotatePrompt(env.DB, env.AI);
+	const result = await rotatePrompt(env.DB, env.AI, model);
 	return json(result);
 };

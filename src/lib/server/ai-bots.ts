@@ -3,11 +3,17 @@ import { drizzle } from 'drizzle-orm/d1';
 import { and, desc, eq, inArray, like } from 'drizzle-orm';
 import { user, dailyPrompts, posts, comments, botProfiles } from './db/schema';
 
-// 8B was too literal — it parroted the system prompt's poetic-flourish
-// banned-list and still hit them. 70B handles nuance better. We
-// generate ~9 calls per day total so the extra compute is fine.
-const PROMPT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
-const ANSWERS_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+// Workers AI model used for prompt + answer + comment generation.
+// Picked via the test harness — see scripts/compare-models.mjs and
+// the /api/admin/test-model endpoint. Switching models is a one-line
+// constant change; everything below is model-agnostic.
+//
+// The bigger quality fix in this file is BATCHING the inter-bot
+// comments: the old per-comment loop produced "same here" / "my
+// grandma…" spirals because each bot wrote independently. The
+// batched call lets the model see its own prior outputs in the same
+// completion and avoid restating.
+export const DEFAULT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 
 // Number of seed answers to generate per prompt. With 18 bots in the
 // pool, picking 10 per batch gives variety across days while still
@@ -163,7 +169,11 @@ export async function getSeedAuthors(d1: D1Database): Promise<SeedAuthor[]> {
  * less likely to produce a near-duplicate. Pass `[]` to skip the avoid
  * section entirely.
  */
-export async function generatePromptText(ai: Ai, recentPrompts: string[]): Promise<string> {
+export async function generatePromptText(
+	ai: Ai,
+	recentPrompts: string[],
+	model: string = DEFAULT_MODEL
+): Promise<string> {
 	const systemContent =
 		recentPrompts.length === 0
 			? PROMPT_GENERATION_SYSTEM
@@ -173,13 +183,13 @@ export async function generatePromptText(ai: Ai, recentPrompts: string[]): Promi
 The following questions were used in the last ${recentPrompts.length} days. Your new question must NOT be similar in topic, framing, or angle to any of these — pick something meaningfully different:
 ${recentPrompts.map((q, i) => `${i + 1}. ${q}`).join('\n')}`;
 
-	const res = (await ai.run(PROMPT_MODEL, {
+	const res = (await ai.run(model, {
 		messages: [
 			{ role: 'system', content: systemContent },
 			{ role: 'user', content: PROMPT_GENERATION_USER }
 		],
 		temperature: 1.0,
-		max_tokens: 80
+		max_tokens: 200
 	})) as { response?: string };
 	return cleanLine(res.response ?? '');
 }
@@ -201,21 +211,18 @@ async function getRecentPromptTexts(d1: D1Database, limit: number): Promise<stri
 export async function generateAnswerLines(
 	ai: Ai,
 	promptText: string,
-	authors: SeedAuthor[]
+	authors: SeedAuthor[],
+	model: string = DEFAULT_MODEL
 ): Promise<string[]> {
-	const res = (await ai.run(ANSWERS_MODEL, {
+	const res = (await ai.run(model, {
 		messages: [
 			{ role: 'system', content: answersSystemPrompt(authors) },
 			{ role: 'user', content: promptText }
 		],
 		temperature: 0.95,
-		// Most answers run 50-70 words now (substantive takes), with a
-		// couple shorter and a couple longer; budget enough for the
-		// whole batch.
-		max_tokens: 1800
+		max_tokens: 3000
 	})) as { response?: string };
-	const raw = res.response ?? '';
-	return splitAnswers(raw, authors.length);
+	return splitAnswers(res.response ?? '', authors.length);
 }
 
 function splitAnswers(raw: string, n: number): string[] {
@@ -311,41 +318,80 @@ interface CommentContext {
 	isNested?: boolean;
 }
 
-function commentSystemPrompt(ctx: CommentContext): string {
-	const persona = ctx.commenter.personality ?? 'no specific personality';
-	return `You are ${ctx.commenter.name} on a daily-question forum. Your personality: ${persona}.
+/**
+ * Generate N inter-bot comments in a SINGLE LLM call.
+ *
+ * The old per-comment approach (one Workers AI call per comment, all
+ * in parallel) produced heavy repetition: 5 bots independently
+ * deciding to write "same here" or "my grandma…" with no awareness
+ * of each other. Batching into one call lets Opus 4.7 see the
+ * comments it has already written for prior slots and actively
+ * avoid restating them, which is what the rubric wants anyway.
+ */
+async function generateBatchedComments(
+	ai: Ai,
+	slots: CommentContext[],
+	model: string = DEFAULT_MODEL
+): Promise<(string | null)[]> {
+	if (slots.length === 0) return [];
 
-You are replying to ${ctx.parentAuthorName}'s ${ctx.isNested ? 'comment' : 'post'}:
-"${ctx.parentText}"
+	const slotBlock = slots
+		.map((s, i) => {
+			const persona = s.commenter.personality ?? 'no specific personality';
+			const parentKind = s.isNested ? 'comment' : 'post';
+			return `=== SLOT ${i + 1} ===
+Voice: ${s.commenter.name} — ${persona}
+Replying to ${s.parentAuthorName}'s ${parentKind}: "${s.parentText.replace(/"/g, "'")}"`;
+		})
+		.join('\n\n');
 
-Write ONE short reply in your character's first-person voice. Constraints:
-- 3 to ${ctx.isNested ? 14 : 22} words. Most should be on the shorter side.
-- Plain prose. No quotation marks, no name labels, no markdown, no narration ("X said"), no emoji, no hashtags.
-- React to what was said — agree / disagree / joke / ask / share a tiny related thought / @ them ("@${ctx.parentAuthorName.toLowerCase()} same"). Be conversational, not summarizing.
-- Match the messy register of the forum: occasional missing apostrophes ok, lowercase fine, fragments fine.
-- DO NOT close on a profound flourish, metaphor, or "X not Y" construction. Keep it casual and grounded.
-- If your personality is anecdote-heavy you can squeeze in ONE concrete tiny detail; if it's deadpan/sardonic, stay short.
+	const system = `You are simulating a daily-question forum's comment thread. For each numbered SLOT below, write ONE short reply in that voice's first-person register.
 
-Output ONLY the reply text. Nothing else.`;
-}
+Constraints applied to EVERY slot:
+- 3 to 22 words per comment (most should be on the shorter side; nested-reply slots can be even tighter).
+- Plain prose. No quotation marks around your reply, no name labels, no markdown, no narration ("X said"), no emoji, no hashtags.
+- React to what was said — agree, disagree, joke, ask, share a tiny related thought, or @-reply ("@name same"). Be conversational, not summarizing.
+- Match the messy register of a forum: occasional missing apostrophes ok, lowercase fine, fragments fine.
+- DO NOT close on a profound flourish, metaphor, or "X not Y" construction. Keep it grounded.
+- If a voice's personality is anecdote-heavy, ONE concrete tiny detail is fine; if deadpan/sardonic, stay short.
 
-async function generateBotComment(ai: Ai, ctx: CommentContext): Promise<string | null> {
+═══ CRITICAL: VARIETY ACROSS THE BATCH ═══
+
+You are writing ALL slots in one pass. You will SEE the comments you write for earlier slots before writing later ones. Use that visibility:
+
+- NEVER repeat the SAME OPENING across slots ("same here", "got X too", "same thing happened", "happened to me", "honestly", "i mean"). If you've used an opening in an earlier slot, pick something different for the next.
+- NEVER repeat the SAME ANECDOTE TRIGGER ("my grandma", "got lost in the woods", "had bad street food"). One memory hook is fine; a SECOND slot riffing on the same one is forbidden.
+- Mix reply STRATEGIES across the batch: agreement, pushback, tangent, dry one-liner, @-reply, asking a follow-up question. Don't write 4 agreements in a row.
+- Mix LENGTHS: short (3-6 words), medium (8-15 words), occasional longer (15-22 words). Don't write 8 mediums.
+
+Output exactly ${slots.length} lines, one per slot, in order. No numbering, no labels, no quotes around the lines, no blank lines between them.`;
+
 	try {
-		const res = (await ai.run(ANSWERS_MODEL, {
+		const res = (await ai.run(model, {
 			messages: [
-				{ role: 'system', content: commentSystemPrompt(ctx) },
-				{ role: 'user', content: 'Write your reply.' }
+				{ role: 'system', content: system },
+				{ role: 'user', content: slotBlock }
 			],
 			temperature: 0.92,
-			max_tokens: 140
+			max_tokens: 1800
 		})) as { response?: string };
-		const cleaned = cleanLine(res.response ?? '').trim();
-		// Skip empty / suspiciously long output.
-		if (!cleaned || cleaned.length > 350) return null;
-		return cleaned;
+		const text = res.response ?? '';
+		const lines = text
+			.split(/\r?\n/)
+			.map((l) => cleanLine(l))
+			.filter((l) => l.length > 0 && l.length <= 350);
+
+		// Pad or truncate to exactly slots.length so caller indexing
+		// stays sane. Missing lines become null so the caller can skip
+		// them on insert.
+		const out: (string | null)[] = new Array(slots.length).fill(null);
+		for (let i = 0; i < Math.min(lines.length, slots.length); i++) {
+			out[i] = lines[i] ?? null;
+		}
+		return out;
 	} catch (err) {
-		console.error('generateBotComment failed:', err);
-		return null;
+		console.error('generateBatchedComments failed:', err);
+		return new Array(slots.length).fill(null);
 	}
 }
 
@@ -359,7 +405,8 @@ async function runMultiPassComments(
 	d1: D1Database,
 	ai: Ai,
 	prompt: { id: string; prompt_text: string },
-	authors: SeedAuthor[]
+	authors: SeedAuthor[],
+	model: string = DEFAULT_MODEL
 ): Promise<{ pass2: number; pass3: number }> {
 	const db = drizzle(d1);
 	// Load the seed-bot answers we just inserted (so we have post ids +
@@ -402,18 +449,27 @@ async function runMultiPassComments(
 		});
 	}
 
-	const pass2Results = await Promise.all(
-		pass2Plan.map(async (p) => {
-			const text = await generateBotComment(ai, {
-				commenter: p.commenter,
-				parentAuthorName: p.parentAuthorName,
-				parentText: p.parentText,
-				isNested: false
-			});
-			return text ? { ...p, text, commentId: crypto.randomUUID() } : null;
-		})
+	// ONE batched call writes all 8 comments at once — the model sees
+	// what it's already written for earlier slots and avoids repeating
+	// itself. Replaces 8 independent calls that produced "same here"
+	// spirals.
+	const pass2Texts = await generateBatchedComments(
+		ai,
+		pass2Plan.map((p) => ({
+			commenter: p.commenter,
+			parentAuthorName: p.parentAuthorName,
+			parentText: p.parentText,
+			isNested: false
+		})),
+		model
 	);
-	const pass2Inserted = pass2Results.filter((x): x is NonNullable<typeof x> => !!x);
+	const pass2Inserted = pass2Plan
+		.map((p, i) => {
+			const text = pass2Texts[i];
+			if (!text) return null;
+			return { ...p, text, commentId: crypto.randomUUID() };
+		})
+		.filter((x): x is NonNullable<typeof x> => !!x);
 
 	for (const c of pass2Inserted) {
 		try {
@@ -452,18 +508,23 @@ async function runMultiPassComments(
 		});
 	}
 
-	const pass3Results = await Promise.all(
-		pass3Plan.map(async (p) => {
-			const text = await generateBotComment(ai, {
-				commenter: p.commenter,
-				parentAuthorName: p.parentAuthorName,
-				parentText: p.parentText,
-				isNested: true
-			});
-			return text ? { ...p, text, commentId: crypto.randomUUID() } : null;
-		})
+	const pass3Texts = await generateBatchedComments(
+		ai,
+		pass3Plan.map((p) => ({
+			commenter: p.commenter,
+			parentAuthorName: p.parentAuthorName,
+			parentText: p.parentText,
+			isNested: true
+		})),
+		model
 	);
-	const pass3Inserted = pass3Results.filter((x): x is NonNullable<typeof x> => !!x);
+	const pass3Inserted = pass3Plan
+		.map((p, i) => {
+			const text = pass3Texts[i];
+			if (!text) return null;
+			return { ...p, text, commentId: crypto.randomUUID() };
+		})
+		.filter((x): x is NonNullable<typeof x> => !!x);
 
 	for (const c of pass3Inserted) {
 		try {
@@ -492,33 +553,40 @@ export async function generateBotRepliesOnUserAnswer(
 	ai: Ai,
 	postId: string,
 	postContent: string,
-	postAuthorName: string
+	postAuthorName: string,
+	model: string = DEFAULT_MODEL
 ): Promise<number> {
 	const authors = await getSeedAuthors(d1);
 	if (authors.length === 0) return 0;
 
 	const db = drizzle(d1);
 	const picked = shuffle(authors).slice(0, REPLIES_ON_USER_ANSWER);
-	const results = await Promise.all(
-		picked.map((commenter) =>
-			generateBotComment(ai, {
-				commenter,
-				parentAuthorName: postAuthorName,
-				parentText: postContent,
-				isNested: false
-			}).then((text) => (text ? { commenter, text } : null))
-		)
+
+	// Batched: one call generates all 4 replies, so the bots don't
+	// independently land on "same here" / "got X too" the way they did
+	// when these ran as N parallel calls.
+	const texts = await generateBatchedComments(
+		ai,
+		picked.map((commenter) => ({
+			commenter,
+			parentAuthorName: postAuthorName,
+			parentText: postContent,
+			isNested: false
+		})),
+		model
 	);
 
 	let inserted = 0;
-	for (const r of results) {
-		if (!r) continue;
+	for (let i = 0; i < picked.length; i++) {
+		const text = texts[i];
+		const commenter = picked[i];
+		if (!text || !commenter) continue;
 		try {
 			await db.insert(comments).values({
 				id: crypto.randomUUID(),
 				post_id: postId,
-				user_id: r.commenter.user_id,
-				content: r.text
+				user_id: commenter.user_id,
+				content: text
 			});
 			inserted++;
 		} catch (err) {
@@ -537,7 +605,8 @@ export async function generateBotRepliesOnUserAnswer(
  */
 export async function generateSeedAnswers(
 	d1: D1Database,
-	ai: Ai
+	ai: Ai,
+	model: string = DEFAULT_MODEL
 ): Promise<{
 	prompt_id: string;
 	prompt_text: string;
@@ -569,7 +638,7 @@ export async function generateSeedAnswers(
 	const authors = await getSeedAuthors(d1);
 	const n = Math.min(ANSWER_COUNT, authors.length);
 	const picked = pickAuthors(authors, n);
-	const answers = await generateAnswerLines(ai, prompt.prompt_text, picked);
+	const answers = await generateAnswerLines(ai, prompt.prompt_text, picked, model);
 
 	let inserted = 0;
 	for (let i = 0; i < answers.length; i++) {
@@ -591,7 +660,7 @@ export async function generateSeedAnswers(
 
 	// Pass 2 + Pass 3: inter-bot comments to make the thread look alive.
 	const allAuthors = await getSeedAuthors(d1);
-	const passes = await runMultiPassComments(d1, ai, prompt, allAuthors);
+	const passes = await runMultiPassComments(d1, ai, prompt, allAuthors, model);
 	return {
 		prompt_id: prompt.id,
 		prompt_text: prompt.prompt_text,
@@ -610,7 +679,8 @@ export async function generateSeedAnswers(
  */
 export async function rotatePrompt(
 	d1: D1Database,
-	ai: Ai
+	ai: Ai,
+	model: string = DEFAULT_MODEL
 ): Promise<{
 	prompt_id: string;
 	prompt_text: string;
@@ -621,7 +691,7 @@ export async function rotatePrompt(
 	const date = todayUTC();
 
 	const recentPrompts = await getRecentPromptTexts(d1, 10);
-	const promptText = await generatePromptText(ai, recentPrompts);
+	const promptText = await generatePromptText(ai, recentPrompts, model);
 	const promptId = crypto.randomUUID();
 
 	await db.insert(dailyPrompts).values({
@@ -633,7 +703,7 @@ export async function rotatePrompt(
 	const authors = await getSeedAuthors(d1);
 	const n = Math.min(ANSWER_COUNT, authors.length);
 	const picked = pickAuthors(authors, n);
-	const answers = await generateAnswerLines(ai, promptText, picked);
+	const answers = await generateAnswerLines(ai, promptText, picked, model);
 
 	let inserted = 0;
 	for (let i = 0; i < answers.length; i++) {
@@ -657,7 +727,8 @@ export async function rotatePrompt(
 		d1,
 		ai,
 		{ id: promptId, prompt_text: promptText },
-		authors
+		authors,
+		model
 	);
 	return {
 		prompt_id: promptId,
