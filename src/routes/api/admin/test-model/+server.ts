@@ -37,6 +37,35 @@ interface CommentSlot {
 	isNested?: boolean;
 }
 
+// Local copy of ai-bots.ts's extractModelText so the test endpoint
+// handles all the same response shapes (Llama-style { response },
+// OpenAI chat-completion-style { choices[0].message.content }, +
+// <think>...</think> stripping for reasoning models).
+function extractText(res: unknown): string {
+	if (!res || typeof res !== 'object') return '';
+	const r = res as Record<string, unknown>;
+	let text = '';
+	if (typeof r.response === 'string') {
+		text = r.response;
+	} else {
+		const choices = (r.choices as Array<{ message?: Record<string, unknown> }> | undefined) ?? [];
+		const message = choices[0]?.message ?? {};
+		if (typeof message.content === 'string' && message.content.length > 0) {
+			text = message.content;
+		} else if (typeof message.reasoning_content === 'string') {
+			text = message.reasoning_content;
+		} else if (typeof message.reasoning === 'string') {
+			text = message.reasoning;
+		}
+	}
+	text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+	if (text.startsWith('<think>')) {
+		const idx = text.indexOf('\n\n');
+		if (idx > 0) text = text.slice(idx + 2).trim();
+	}
+	return text;
+}
+
 // Inlined batched-comment helper (the production one in ai-bots.ts
 // is internal). Identical prompt + parsing logic.
 async function generateBatchedComments(
@@ -76,16 +105,16 @@ You are writing ALL slots in one pass. You will SEE the comments you write for e
 
 Output exactly ${slots.length} lines, one per slot, in order. No numbering, no labels, no quotes, no blank lines.`;
 
-	const res = (await ai.run(model, {
+	const res = await ai.run(model, {
 		messages: [
 			{ role: 'system', content: system },
 			{ role: 'user', content: slotBlock }
 		],
 		temperature: 0.92,
 		max_tokens: 1800
-	})) as { response?: string };
+	});
 
-	const text = res.response ?? '';
+	const text = extractText(res);
 	const lines = text
 		.split(/\r?\n/)
 		.map((l) => l.trim())
