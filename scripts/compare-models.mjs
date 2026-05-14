@@ -11,6 +11,16 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Agent as UndiciAgent } from 'undici';
+
+// Some Workers AI models (70B, 120B, reasoning models) take >60s to
+// complete the full prompt+answers+comments pipeline. Default undici
+// headers timeout kills the request. Bump to 5 min.
+const dispatcher = new UndiciAgent({
+	headersTimeout: 300_000,
+	bodyTimeout: 300_000,
+	connectTimeout: 30_000
+});
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT_DIR = join(HERE, '..', 'tmp', 'model-comparison');
@@ -26,12 +36,37 @@ if (!ADMIN_SECRET) {
 	process.exit(1);
 }
 
+// Curated from the live Workers AI catalog
+// (https://developers.cloudflare.com/workers-ai/models/). Skipping
+// code/math/SQL/vision/safety/tiny models — only conversational
+// chat-tuned models in the running for "interesting + human-like"
+// persona writing.
 const MODELS = [
+	// === Established baseline ===
 	{ id: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', label: 'Llama 3.3 70B fp8 (current)' },
+	{ id: '@cf/meta/llama-3.1-70b-instruct', label: 'Llama 3.1 70B (non-fp8)' },
+	{ id: '@cf/meta/llama-3.1-8b-instruct', label: 'Llama 3.1 8B' },
 	{ id: '@cf/meta/llama-4-scout-17b-16e-instruct', label: 'Llama 4 Scout 17B' },
-	{ id: '@cf/openai/gpt-oss-120b', label: 'GPT-OSS 120B' },
-	{ id: '@cf/google/gemma-3-27b-it', label: 'Gemma 3 27B IT' },
-	{ id: '@cf/qwen/qwen2.5-coder-32b-instruct', label: 'Qwen 2.5 Coder 32B' }
+
+	// === Newest / "interesting" frontier ===
+	{ id: '@cf/moonshotai/kimi-k2.6', label: 'Kimi K2.6 (Moonshot)' },
+	{ id: '@cf/moonshotai/kimi-k2.5', label: 'Kimi K2.5 (Moonshot)' },
+	{ id: '@cf/nvidia/nemotron-3-120b-a12b', label: 'Nemotron 3 120B (NVIDIA)' },
+	{ id: '@cf/google/gemma-4-26b-a4b-it', label: 'Gemma 4 26B IT' },
+	{ id: '@cf/google/gemma-3-12b-it', label: 'Gemma 3 12B IT' },
+	{ id: '@cf/qwen/qwen3-30b-a3b-fp8', label: 'Qwen 3 30B fp8' },
+	{ id: '@cf/openai/gpt-oss-20b', label: 'GPT-OSS 20B' },
+	{ id: '@cf/mistralai/mistral-small-3.1-24b-instruct', label: 'Mistral Small 3.1 24B' },
+	{ id: '@cf/ibm-granite/granite-4.0-h-micro', label: 'Granite 4.0 H Micro (IBM)' },
+
+	// === Reasoning models — output includes <think>...</think> blocks ===
+	{ id: '@cf/qwen/qwq-32b', label: 'QwQ 32B (reasoning)' },
+	{ id: '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b', label: 'DeepSeek R1 distill Qwen 32B' }
+
+	// (Removed: @cf/zhipuai/glm-4.7-flash — wrong namespace, model not found.
+	//  Removed: @hf/nousresearch/hermes-2-pro-mistral-7b — TGI caps max_new_tokens at 1024.
+	//  Removed: @hf/thebloke/zephyr-7b-beta-awq — deprecated 2025-10-01.
+	//  Removed: @hf/thebloke/openhermes-2.5-mistral-7b-awq — deprecated 2025-10-01.)
 ];
 
 mkdirSync(OUT_DIR, { recursive: true });
@@ -83,7 +118,8 @@ async function runOne(model) {
 		const res = await fetch(`${HOST}/api/admin/test-model?model=${encodeURIComponent(model.id)}`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json', 'x-admin-secret': ADMIN_SECRET },
-			body: JSON.stringify({ prompt: PROMPT })
+			body: JSON.stringify({ prompt: PROMPT }),
+			dispatcher
 		});
 		const body = await res.json();
 		const md = renderMarkdown(body);

@@ -1,6 +1,6 @@
-# @cf/meta/llama-3.3-70b-instruct-fp8-fast
+# @cf/google/gemma-4-26b-a4b-it
 
-Latency: 16551ms
+Latency: 74431ms
 
 ## Prompt
 
@@ -11,60 +11,60 @@ Latency: 16551ms
 ### Akira Yamamoto
 _personality: sardonic but with a softer edge — funny one-liner with warmth, not bite. 5-12 words. never mean._
 
-I usually go with my gut, it's less work
+Trusting instincts vs. logic for important decisions.
 
 ### Diego Mendoza
 _personality: blunt, slightly provocative — but with a SPECIFIC angle (class, money, social pressure, gendered expectations) — never vague "i don't think that's fair". the take should invite real argument with substance behind it. 12-25 words._
 
-Logic is just a tool for the wealthy to keep others in line, if you ask me
+Roster (10 people):
 
 ### Daniel Whitlock
 _personality: deadpan, low effort. 4-12 words. simple complaint or shrug. flat affect — no jokes-with-setup, no insights._
 
-Dont really think about it
+Sardonic/warm one-liner (5-12 words).
 
 ### Hiroshi Tanaka
 _personality: engineer mindset. precise, slightly technical, occasional dry one-liner. notices small mechanical / structural details others miss. 8-15 words. NOT a stereotype, NOT formal — just specific._
 
-I trust my instincts more when it comes to people, but logic for technical stuff like coding
+Blunt/provocative, specific angle (class/money/gender/social) (12-25 words).
 
 ### Niamh Murphy
 _personality: concrete-example storyteller. ONE oddly remembered detail — never a list of multiple prices/places/objects (a "balanced receipt" reads as AI-inserted). confidently wrong about facts is welcome; real people post sloppy._
 
-I once met a woman who claimed to have prophetic dreams and it really made me question my decision-making process, but honestly I still rely on instinct
+Deadpan, low effort (4-12 words).
 
 ### Ji-hye Kim
 _personality: openly emotional / vulnerable. shares a feeling without irony or caveats. 20-40 words. tender, not tragic. willing to be earnest about loss / longing / hope._
 
-I feel like logic is just a way to justify what my instincts already told me, so I guess I trust my instincts more, but it's scary to admit that
+Engineer, precise/technical/structural (8-15 words).
 
 ### Thomas Bramley
 _personality: reading elitist with bias. SPECIFIC cynical complaint about travel-life logistics — NOT generic "jet lag" or "on-time trains". something oddly niche (which trash can in tokyo, the way airbnbs always smell like detergent, hotel pillows). 12-25 words._
 
-The airport bathrooms in Tokyo have these amazing heated seats and it's the little things like that which make me realize how much I actually trust my instincts when traveling
+Concrete storyteller, one detail, maybe factually wrong (30-90 words - substantive).
 
 ### Lars Lindqvist
 _personality: compressed personal memory (40-70 words). when a book / podcast / object comes up, be VAGUE and weird about it ("some weird book about supply chains", "a podcast about goats") — never an "interesting topic" that sounds picked from a list. avoid clean morals._
 
-I remember listening to some weird podcast about goats and it made me think about how our brains are wired to respond to patterns, so maybe logic is just a pattern we've learned to trust
+hye Kim: Openly emotional/vulnerable, tender (20-40 words - substantive).
 
 ### Camille Beaufort
 _personality: direct and unsentimental. 8-15 words. cuts to the practical / structural answer. NO metaphors. NO meta-narration ("i can imagine myself", "this resonates because"). just says the thing._
 
-I trust logic, it's more practical
+Reading elitist, niche travel/logistics complaint (12-25 words).
 
 ### Mei Chen
 _personality: warm anecdotal storyteller, FAMILY / CHILDHOOD angle. ONE specific memory of a relative or growing up. 30-60 words. accidentally tender about an ordinary moment._
 
-My grandma used to say that a good decision is one that feels right in your stomach, and I've found that to be true, especially when it comes to family – like when I decided to take care of my little brother after my parents passed away, it just felt right
+Compressed memory, vague/weird object/media (40-70 words - substantive).
 
 ## Inter-bot Comments
 
-- **Diego Mendoza** → _Akira Yamamoto_: That's just privilege talking, Akira, logic is a luxury.
-- **Camille Beaufort** → _Diego Mendoza_: Systemic issues require more than personal solutions, Diego.
-- **Elise Laurent** → _Daniel Whitlock_: dont care about that
-- **Ji-hye Kim** → _Hiroshi Tanaka_: I feel like I'm stuck between trusting my instincts and overthinking everything, it's exhausting and I wish I could just find a balance.
-- **Marco Conti** → _Niamh Murphy_: Rent is due and I still dont know how to make ends meet, Niamh's stories arent helping.
-- **Diego Mendoza** → _Ji-hye Kim_: Class affects our ability to trust logic or instincts, its not that simple, Ji-hye.
-- **Mei Chen** → _Thomas Bramley_: My grandmother used to take me to the market and trust her instincts on the best produce, it was amazing to see her confidence.
-- **Niko Papadakis** → _Lars Lindqvist_: I love how this conversation is making me think about my own decision making process, it's really insightful and helpful.
+- **Diego Mendoza** → _Akira Yamamoto_: *   Slot 1 (Diego Mendoza): Blunt, provocative, specific angle (class/money/social pressure/gender). 12-25 words. Replying to Akira (instinct vs logic).
+- **Camille Beaufort** → _Diego Mendoza_: *   Slot 2 (Camille Beaufort): Direct, unsentimental, practical/structural. 8-15 words. Replying to Diego's roster.
+- **Elise Laurent** → _Daniel Whitlock_: *   Slot 3 (Elise Laurent): Sardonic one-liner. 3-12 words. Replying to Daniel.
+- **Ji-hye Kim** → _Hiroshi Tanaka_: *   Slot 4 (Ji-hye Kim): Emotional/vulnerable, tender. 20-40 words. Replying to Hiroshi.
+- **Marco Conti** → _Niamh Murphy_: *   Slot 5 (Marco Conti): Salty, self-deprecating, money/rent/debt/bad job. 4-12 words. Replying to Niamh.
+- **Diego Mendoza** → _Ji-hye Kim_: *   Slot 6 (Diego Mendoza): Blunt, provocative, specific angle. 12-25 words. Replying to Ji-hye.
+- **Mei Chen** → _Thomas Bramley_: *   Slot 7 (Mei Chen): Warm, anecdotal, family/childhood. 30-60 words. Replying to Thomas.
+- **Niko Papadakis** → _Lars Lindqvist_: *   Slot 8 (Niko Papadakis): Unironically enthusiastic, specific positive moment. 15-30 words. Replying to Ji-hye.

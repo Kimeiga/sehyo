@@ -13,7 +13,7 @@ import { user, dailyPrompts, posts, comments, botProfiles } from './db/schema';
 // grandma…" spirals because each bot wrote independently. The
 // batched call lets the model see its own prior outputs in the same
 // completion and avoid restating.
-export const DEFAULT_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+export const DEFAULT_MODEL = '@cf/google/gemma-3-12b-it';
 
 // Number of seed answers to generate per prompt. With 18 bots in the
 // pool, picking 10 per batch gives variety across days while still
@@ -183,15 +183,15 @@ export async function generatePromptText(
 The following questions were used in the last ${recentPrompts.length} days. Your new question must NOT be similar in topic, framing, or angle to any of these — pick something meaningfully different:
 ${recentPrompts.map((q, i) => `${i + 1}. ${q}`).join('\n')}`;
 
-	const res = (await ai.run(model, {
+	const res = await ai.run(model, {
 		messages: [
 			{ role: 'system', content: systemContent },
 			{ role: 'user', content: PROMPT_GENERATION_USER }
 		],
 		temperature: 1.0,
 		max_tokens: 200
-	})) as { response?: string };
-	return cleanLine(res.response ?? '');
+	});
+	return cleanLine(extractModelText(res));
 }
 
 /**
@@ -214,15 +214,15 @@ export async function generateAnswerLines(
 	authors: SeedAuthor[],
 	model: string = DEFAULT_MODEL
 ): Promise<string[]> {
-	const res = (await ai.run(model, {
+	const res = await ai.run(model, {
 		messages: [
 			{ role: 'system', content: answersSystemPrompt(authors) },
 			{ role: 'user', content: promptText }
 		],
 		temperature: 0.95,
 		max_tokens: 3000
-	})) as { response?: string };
-	return splitAnswers(res.response ?? '', authors.length);
+	});
+	return splitAnswers(extractModelText(res), authors.length);
 }
 
 function splitAnswers(raw: string, n: number): string[] {
@@ -232,6 +232,53 @@ function splitAnswers(raw: string, n: number): string[] {
 		.filter((l) => l.length > 0 && l.length <= 500);
 	// If the model returned more than n, take the first n. If fewer, return what we have.
 	return lines.slice(0, n);
+}
+
+/**
+ * Workers AI responses come in TWO shapes depending on model family:
+ *
+ *   1. Llama-family + a few others: { response: "...", usage: ... }
+ *   2. OpenAI-compatible chat-completion (Kimi, Nemotron, Gemma 4,
+ *      Qwen 3, GPT-OSS, Granite, etc.):
+ *      { choices: [{ message: { content, reasoning_content } }] }
+ *
+ * Some reasoning models (QwQ, DeepSeek R1 distill) also wrap their
+ * final answer in <think>...</think> blocks that must be stripped
+ * before parsing.
+ */
+function extractModelText(res: unknown): string {
+	if (!res || typeof res !== 'object') return '';
+	const r = res as Record<string, unknown>;
+
+	let text = '';
+	if (typeof r.response === 'string') {
+		text = r.response;
+	} else {
+		const choices = (r.choices as Array<{ message?: Record<string, unknown> }> | undefined) ?? [];
+		const message = choices[0]?.message ?? {};
+		if (typeof message.content === 'string' && message.content.length > 0) {
+			text = message.content;
+		} else if (typeof message.reasoning_content === 'string') {
+			// Some chat-completion models put the user-visible answer in
+			// reasoning_content when content is null (length-truncated
+			// thinking, or the model never separates the two). Fall back
+			// to it rather than returning empty.
+			text = message.reasoning_content;
+		} else if (typeof message.reasoning === 'string') {
+			text = message.reasoning;
+		}
+	}
+
+	// Strip <think>...</think> chain-of-thought blocks from reasoning
+	// models. Capture across newlines.
+	text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+	// Some reasoning models leave a dangling unclosed <think> — drop
+	// everything before the next blank line if it starts with <think>.
+	if (text.startsWith('<think>')) {
+		const idx = text.indexOf('\n\n');
+		if (idx > 0) text = text.slice(idx + 2).trim();
+	}
+	return text;
 }
 
 function cleanLine(s: string): string {
@@ -367,15 +414,15 @@ You are writing ALL slots in one pass. You will SEE the comments you write for e
 Output exactly ${slots.length} lines, one per slot, in order. No numbering, no labels, no quotes around the lines, no blank lines between them.`;
 
 	try {
-		const res = (await ai.run(model, {
+		const res = await ai.run(model, {
 			messages: [
 				{ role: 'system', content: system },
 				{ role: 'user', content: slotBlock }
 			],
 			temperature: 0.92,
 			max_tokens: 1800
-		})) as { response?: string };
-		const text = res.response ?? '';
+		});
+		const text = extractModelText(res);
 		const lines = text
 			.split(/\r?\n/)
 			.map((l) => cleanLine(l))
