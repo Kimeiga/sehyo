@@ -6,6 +6,8 @@
 	   hardcoded sample data, so the visuals can be eyeballed in
 	   isolation. Route: /prototype/forum-typing */
 
+	import PromptRipple from '$lib/components/PromptRipple.svelte';
+
 	type TypingUser = { userId: string; displayName: string };
 
 	// Verbatim copy of formatTyping() from +page.svelte. Keep in sync.
@@ -31,6 +33,30 @@
 	let liveVisible = $state(true);
 	let liveCount = $state(1);
 	let sending = $state(false);
+
+	// Ripple variant: render the same typing string through the
+	// WebGL PromptRipple (the component already used by the DM
+	// typing-indicator prototype). `interactive={false}` so no
+	// pointer noise; a gentle autoRipple makes the glyphs shimmer
+	// like raindrops on a puddle. burstSignal fires one bigger
+	// ring each time it (re)appears.
+	let rippleVisible = $state(true);
+	let rippleCount = $state(1);
+	let rippleBurst = $state(1);
+	function toggleRipple() {
+		rippleVisible = !rippleVisible;
+		if (rippleVisible) rippleBurst++;
+	}
+	const SUBTLE_RIPPLE = {
+		intervalMs: 1000,
+		radius: 0.035,
+		strength: 1.2,
+		damping: 0.94,
+		// "<name> is typing…" in 13px sans ≈ 60% of the row width;
+		// keep splats on the glyph band, not the empty surround.
+		uRange: [0.06, 0.78] as [number, number],
+		vRange: [0.42, 0.58] as [number, number]
+	};
 </script>
 
 <svelte:head><title>Prototype — forum typing indicators</title></svelte:head>
@@ -81,6 +107,60 @@
 			rows="3"
 			placeholder="What's on your mind?"
 		></textarea>
+	</section>
+
+	<section>
+		<h2>With ripple — <code>PromptRipple</code> (WebGL, subtle autoRipple)</h2>
+		<p class="note">
+			The same string rendered through the wave-equation ripple component
+			(<code>interactive=false</code>, gentle <code>autoRipple</code>). This is
+			the candidate effect for the real indicator — eyeball it before wiring in.
+		</p>
+
+		<div class="demo-row">
+			<span class="tag">1 typer</span>
+			<div class="ripple-slot">
+				<PromptRipple
+					text={formatTyping(mk(1))}
+					interactive={false}
+					headingStyle="font-family: var(--font-sans); font-size: 13px; font-weight: 400; line-height: 1; max-width: none; text-align: left;"
+					autoRipple={SUBTLE_RIPPLE}
+				/>
+			</div>
+		</div>
+
+		<div class="demo-row">
+			<span class="tag">3 typers</span>
+			<div class="ripple-slot wide">
+				<PromptRipple
+					text={formatTyping(mk(3))}
+					interactive={false}
+					headingStyle="font-family: var(--font-sans); font-size: 13px; font-weight: 400; line-height: 1; max-width: none; text-align: left;"
+					autoRipple={SUBTLE_RIPPLE}
+				/>
+			</div>
+		</div>
+
+		<div class="controls" style="margin-top:16px">
+			<button onclick={toggleRipple}>
+				toggle ripple indicator ({rippleVisible ? 'on' : 'off'})
+			</button>
+			<button onclick={() => (rippleCount = (rippleCount % 5) + 1)}>
+				cycle count ({rippleCount})
+			</button>
+		</div>
+		{#if rippleVisible}
+			<div class="ripple-slot wide">
+				<PromptRipple
+					text={formatTyping(mk(rippleCount))}
+					interactive={false}
+					headingStyle="font-family: var(--font-sans); font-size: 13px; font-weight: 400; line-height: 1; max-width: none; text-align: left;"
+					autoRipple={SUBTLE_RIPPLE}
+					burstSignal={rippleBurst}
+					burstUv={[0.3, 0.5]}
+				/>
+			</div>
+		{/if}
 	</section>
 </div>
 
@@ -198,5 +278,37 @@
 		transition:
 			border-color 120ms ease,
 			box-shadow 120ms ease;
+	}
+
+	/* ── Ripple variant ──────────────────────────────────────────
+	   The WebGL canvas needs explicit room: enough width for the
+	   longest string + a little vertical surround so ripples can
+	   spread above/below the 13px glyphs instead of clipping at
+	   the baseline. */
+	.note {
+		font-size: 13px;
+		color: var(--muted-foreground);
+		margin: 0 0 16px;
+		line-height: 1.5;
+	}
+	.ripple-slot {
+		position: relative;
+		width: 240px;
+		height: 34px;
+	}
+	.ripple-slot.wide {
+		width: 440px;
+		max-width: 100%;
+	}
+	/* Strip PromptRipple's hero padding so the label sits flush
+	   left, and keep the canvas fully opaque (the muted tone for a
+	   real wire-in would come from a lower canvas opacity). */
+	.ripple-slot :global(.ripple-content) {
+		padding: 0;
+		justify-content: flex-start;
+		align-items: center;
+	}
+	.ripple-slot :global(.ripple-canvas) {
+		opacity: 0.72;
 	}
 </style>
