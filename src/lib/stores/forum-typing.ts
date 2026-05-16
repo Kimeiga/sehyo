@@ -32,6 +32,14 @@ const THROTTLE_MS = 2500;
 const RECONNECT_BASE_MS = 500;
 const RECONNECT_MAX_MS = 15000;
 const PRUNE_INTERVAL_MS = 1000;
+// The Worker stamps `expiresAt` using its own (server) clock. Pruning
+// compares against the browser's clock, so any skew between workerd
+// and the client — observed at ~6s in local dev, and unbounded in
+// production where client clocks can be wrong by minutes — makes
+// entries arrive already "expired" and never render. Treat the
+// server timestamp as a liveness ping only; compute the real expiry
+// locally. Must stay >= the Worker's TYPING_TTL_MS.
+const CLIENT_TTL_MS = 5000;
 
 const TAG = '[typing/client]';
 const dbg = (...args: unknown[]) => console.debug(TAG, ...args);
@@ -185,16 +193,20 @@ export function connectForumTyping(
 			typeof m.expiresAt === 'number'
 		) {
 			const threadId = typeof m.threadId === 'string' ? m.threadId : 'world';
+			// Ignore the server-stamped m.expiresAt for timing — it's on
+			// the Worker's clock. Expiry is local-clock relative.
+			const localExpiresAt = Date.now() + CLIENT_TTL_MS;
 			const entry: TypingEntry = {
 				displayName: m.displayName,
-				expiresAt: m.expiresAt,
+				expiresAt: localExpiresAt,
 				threadId
 			};
 			dbg('handleMessage type=typing → map.set', {
 				userId: m.userId,
 				displayName: m.displayName,
 				threadId,
-				expiresIn: m.expiresAt - Date.now()
+				expiresIn: CLIENT_TTL_MS,
+				serverSkewMs: Date.now() - m.expiresAt
 			});
 			map.update((cur) => {
 				const next = new Map(cur);
