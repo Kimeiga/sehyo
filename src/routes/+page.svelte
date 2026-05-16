@@ -208,11 +208,20 @@
 	const worldTypingUsers = writable<TypingUser[]>([]);
 
 	$effect(() => {
-		const gatePassed = isDevTyping || (isFullySignedIn && !!data.myAnswer);
+		// Connect for ANY logged-in viewer (incl. anonymous /
+		// not-yet-answered). Names in the indicator are blurred via
+		// .author-mask until the viewer answers today's prompt (same
+		// engagement gate as the feed) — so a pre-answer viewer sees
+		// "●●● is typing…", a tease to answer, without the identity
+		// leaking. Signed-out viewers have no session cookie for the
+		// typing Worker, so skip them (the WS would just
+		// 401-reconnect-loop).
+		const gatePassed = isDevTyping || !!data.user;
 		tdbg('$effect fire', {
 			isDev: isDevTyping,
 			isFullySignedIn,
 			hasMyAnswer: !!data.myAnswer,
+			namesBlurred: data.namesBlurred,
 			userId: data.user?.id ?? null,
 			devTab: devTabIdentity,
 			gatePassed
@@ -276,13 +285,10 @@
 		return all.filter((u) => u.threadId === threadId && u.userId !== selfId);
 	}
 
-	function formatTyping(users: TypingUser[]): string {
-		if (users.length === 0) return '';
-		const names = users.map((u) => u.displayName);
-		if (names.length === 1) return `${names[0]} is typing…`;
-		if (names.length === 2) return `${names[0]} and ${names[1]} are typing…`;
-		return `${names[0]}, ${names[1]}, and ${names.length - 2} other${names.length - 2 === 1 ? '' : 's'} are typing…`;
-	}
+	// Typing-indicator label is rendered via the {#snippet typingLabel}
+	// in markup (not a string) so each name can sit in its own
+	// .author-mask span — blurred until the viewer answers today's
+	// prompt, same as feed author names.
 
 	const unlockedSet = $derived(new Set(data.unlockedAvatars ?? []));
 	function isAvatarRevealed(userId: string | undefined | null): boolean {
@@ -552,7 +558,7 @@
 
 			{@const worldTypers = typingForThread($worldTypingUsers, 'world', typingSelfId)}
 			<p class="world-typing" aria-live="polite" class:visible={worldTypers.length > 0}>
-				{formatTyping(worldTypers)}
+				{@render typingLabel(worldTypers)}
 			</p>
 
 			<section class="free-section">
@@ -659,6 +665,19 @@
 	                living inside tw-main; the parent's avatar
 	                column keeps the line in the gutter.
 	 ───────────────────────────────────────────────────────────────── -->
+{#snippet typingLabel(users: TypingUser[])}
+	{#if users.length === 1}
+		<span class="author-mask">{users[0].displayName}</span> is typing…
+	{:else if users.length === 2}
+		<span class="author-mask">{users[0].displayName}</span> and
+		<span class="author-mask">{users[1].displayName}</span> are typing…
+	{:else if users.length >= 3}
+		<span class="author-mask">{users[0].displayName}</span>,
+		<span class="author-mask">{users[1].displayName}</span>, and
+		{users.length - 2} other{users.length - 2 === 1 ? '' : 's'} are typing…
+	{/if}
+{/snippet}
+
 {#snippet avatar(userId: string, image: string | null | undefined)}
 	{@const revealed = isAvatarRevealed(userId)}
 	<span class="tw-avatar" class:locked={!revealed} aria-hidden="true">
@@ -820,7 +839,7 @@
 					{#if meUsername}<span class="tw-handle">@{meUsername}</span>{/if}
 				</header>
 				<p class="thread-typing" aria-live="polite" class:visible={typers.length > 0}>
-					{formatTyping(typers)}
+					{@render typingLabel(typers)}
 				</p>
 				<form class="reply-composer" data-reply-target={threadKey} onsubmit={submitActiveReply}>
 					<textarea
