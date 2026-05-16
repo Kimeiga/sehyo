@@ -4,6 +4,21 @@ import { defineConfig } from 'vite';
 import { SvelteKitPWA } from '@vite-pwa/sveltekit';
 
 export default defineConfig({
+	server: {
+		proxy: {
+			// Local-dev hop: forward /ws/* to the typing Worker running under
+			// `wrangler dev` (workers/typing). Keeping the path on the same
+			// origin as Vite means the browser sends our session cookie on
+			// the WebSocket handshake — the typing Worker validates it. In
+			// production this proxy doesn't exist; the client connects
+			// directly to wss://typing.sehyo.com/ws/... instead.
+			'/ws': {
+				target: 'http://localhost:8787',
+				ws: true,
+				changeOrigin: false
+			}
+		}
+	},
 	plugins: [
 		tailwindcss(),
 		sveltekit(),

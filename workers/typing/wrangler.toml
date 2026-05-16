@@ -1,0 +1,40 @@
+name = "sehyo-typing"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+
+# The browser connects to this Worker directly for the forum typing
+# indicator. It MUST be served from the same eTLD+1 as the Pages app
+# (sehyo.com) so the session cookie rides along on the WebSocket
+# upgrade. The recommended setup is a custom subdomain like
+# typing.sehyo.com, configured here so `wrangler deploy` provisions
+# the DNS + route automatically (the zone must already be on your
+# Cloudflare account).
+#
+routes = [
+  { pattern = "typing.sehyo.com", custom_domain = true }
+]
+#
+# Alternative (dashboard route, less repeatable): Workers & Pages →
+# sehyo-typing → Settings → Triggers → Add Custom Domain.
+
+# Durable Object that holds the in-memory set of currently-typing users
+# for a given forum room. One DO instance per room (pinned by name).
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "ForumRoom"
+
+# First-time migration: register the DO class. `new_sqlite_classes` puts
+# the DO on Cloudflare's SQLite-backed storage tier (cheaper, current
+# default for new DOs). We don't persist anything to storage right now —
+# typing state is in-memory only — but the migration is still required
+# the first time a class is introduced.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ForumRoom"]
+
+[vars]
+# Public origin of the Pages app. Used by the upgrade handler to call
+# back into /api/auth/session for cookie validation during local dev.
+# Override in .dev.vars with API_BASE_URL=http://localhost:5174 to point
+# at a local SvelteKit dev server instead.
+API_BASE_URL = "https://sehyo.com"
