@@ -27,6 +27,10 @@ const ddbg = (...args: unknown[]) => console.debug(DTAG, ...args);
 export interface Env {
 	ROOM: DurableObjectNamespace;
 	API_BASE_URL: string;
+	// Shared secret (same value as the Pages app's ADMIN_SECRET) that
+	// guards the server-side /inject route. Set via
+	//   grep '^ADMIN_SECRET=' .dev.vars | cut -d= -f2- | wrangler secret put ADMIN_SECRET
+	ADMIN_SECRET: string;
 }
 
 export default {
@@ -40,6 +44,34 @@ export default {
 			hasUpgrade: request.headers.get('Upgrade') === 'websocket'
 		});
 
+		// Server-side broadcast injection. The Pages app POSTs here to
+		// make a bot "appear typing" / push its reply into a room
+		// without holding a WebSocket. Auth: x-inject-secret must
+		// match ADMIN_SECRET.
+		if (url.pathname === '/inject' && request.method === 'POST') {
+			if (request.headers.get('x-inject-secret') !== env.ADMIN_SECRET) {
+				wdbg('/inject unauthorized');
+				return new Response('Unauthorized', { status: 401 });
+			}
+			let body: { room?: unknown; message?: unknown };
+			try {
+				body = (await request.json()) as typeof body;
+			} catch {
+				return new Response('Bad JSON', { status: 400 });
+			}
+			const room = typeof body.room === 'string' ? body.room : '';
+			if (!/^[a-z0-9_-]+$/i.test(room) || !body.message || typeof body.message !== 'object') {
+				return new Response('Bad request', { status: 400 });
+			}
+			const id = env.ROOM.idFromName(room);
+			const stub = env.ROOM.get(id);
+			wdbg('/inject → DO broadcast', { room, message: body.message });
+			return stub.fetch('https://do/broadcast', {
+				method: 'POST',
+				body: JSON.stringify(body.message)
+			});
+		}
+
 		const match = url.pathname.match(/^\/ws\/([a-z0-9_-]+)$/i);
 		if (!match) {
 			wdbg('path mismatch → 404', { pathname: url.pathname });
@@ -50,8 +82,16 @@ export default {
 			return new Response('Expected websocket upgrade', { status: 426 });
 		}
 
-		const isDev = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
-		wdbg('mode resolved', { isDev });
+		// `wrangler dev` simulates the production hostname once a
+		// custom_domain route exists in wrangler.toml, so a bare
+		// hostname check no longer identifies local dev. Also treat
+		// "API_BASE_URL points at localhost" as dev — that override
+		// is the documented local-dev setup (workers/README.md) and
+		// is never true in production (where it's https://sehyo.com).
+		const apiIsLocal = /\/\/(localhost|127\.0\.0\.1)/.test(env.API_BASE_URL ?? '');
+		const isDev =
+			url.hostname === 'localhost' || url.hostname === '127.0.0.1' || apiIsLocal;
+		wdbg('mode resolved', { isDev, hostname: url.hostname, apiIsLocal });
 		const doUrl = new URL(request.url);
 
 		if (isDev) {
@@ -155,6 +195,15 @@ interface LeaveBroadcast {
 	userId: string;
 }
 
+/** Server-injected: a bot's reply is now live. Clients append it to
+ *  the matching post's comment list without a reload. Shape is
+ *  whatever the Pages app sends; the client validates. */
+interface CommentBroadcast {
+	type: 'comment';
+	postId: string;
+	comment: unknown;
+}
+
 export class ForumRoom {
 	private state: DurableObjectState;
 
@@ -165,6 +214,22 @@ export class ForumRoom {
 
 	async fetch(request: Request): Promise<Response> {
 		const url = new URL(request.url);
+
+		// Server-side injection from the Worker's /inject route: take a
+		// pre-built message and fan it out to every connected socket
+		// (no `except` — the user watching their thread is the target).
+		if (url.pathname === '/broadcast') {
+			let msg: TypingBroadcast | LeaveBroadcast | CommentBroadcast;
+			try {
+				msg = (await request.json()) as typeof msg;
+			} catch {
+				return new Response('Bad JSON', { status: 400 });
+			}
+			ddbg('/broadcast inject', msg);
+			this.broadcast(msg, null);
+			return new Response('ok');
+		}
+
 		const userId = url.searchParams.get('userId');
 		const displayName = url.searchParams.get('displayName');
 		ddbg('fetch() entry', { userId, displayName });
@@ -251,7 +316,10 @@ export class ForumRoom {
 		}
 	}
 
-	private broadcast(msg: TypingBroadcast | LeaveBroadcast, except: WebSocket) {
+	private broadcast(
+		msg: TypingBroadcast | LeaveBroadcast | CommentBroadcast,
+		except: WebSocket | null
+	) {
 		const payload = JSON.stringify(msg);
 		const all = this.state.getWebSockets();
 		let delivered = 0;

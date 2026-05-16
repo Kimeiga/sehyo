@@ -644,6 +644,138 @@ export async function generateBotRepliesOnUserAnswer(
 }
 
 /**
+ * Like generateBotRepliesOnUserAnswer, but choreographed: after the
+ * user posts, each bot "appears to type" (typing indicator pushed
+ * into the post's thread via the typing Worker's /inject route),
+ * pauses a human-like beat, then its reply is inserted AND pushed
+ * live to connected clients as a {type:"comment"} broadcast. The
+ * answer endpoint runs this in waitUntil() so the POST returns
+ * immediately — the bots reply afterward, conversationally.
+ *
+ * Best-effort throughout: any inject/LLM/DB failure for one bot is
+ * logged and skipped; the user's post is already saved by the
+ * caller. Total wall time is bounded (one batched LLM call +
+ * short per-bot delays) to stay inside the Pages waitUntil budget.
+ */
+export async function orchestrateBotRepliesWithTyping(
+	d1: D1Database,
+	ai: Ai,
+	opts: {
+		postId: string;
+		postContent: string;
+		postAuthorName: string;
+		injectUrl: string;
+		injectSecret: string;
+		model?: string;
+	}
+): Promise<void> {
+	const { postId, postContent, postAuthorName, injectUrl, injectSecret } = opts;
+	const model = opts.model ?? DEFAULT_MODEL;
+	const threadId = `post-${postId}`;
+
+	const inject = async (message: unknown) => {
+		try {
+			await fetch(injectUrl, {
+				method: 'POST',
+				headers: { 'content-type': 'application/json', 'x-inject-secret': injectSecret },
+				body: JSON.stringify({ room: 'forum', message })
+			});
+		} catch (err) {
+			console.error('inject failed', err);
+		}
+	};
+	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+	const authors = await getSeedAuthors(d1);
+	if (authors.length === 0) return;
+	const db = drizzle(d1);
+	const picked = shuffle(authors).slice(0, REPLIES_ON_USER_ANSWER);
+
+	// One batched call (model sees its own prior lines → no "same
+	// here" spiral). Generation is the bulk of the wall time.
+	const texts = await generateBatchedComments(
+		ai,
+		picked.map((commenter) => ({
+			commenter,
+			parentAuthorName: postAuthorName,
+			parentText: postContent,
+			isNested: false
+		})),
+		model
+	);
+
+	// Public profile bits (username/avatar) for the live payload so
+	// the appended comment matches the server-rendered shape.
+	const ids = picked.map((p) => p.user_id);
+	const profiles = ids.length
+		? await db
+				.select({ id: user.id, username: user.username, image: user.image })
+				.from(user)
+				.where(inArray(user.id, ids))
+		: [];
+	const profileById = new Map(profiles.map((p) => [p.id, p]));
+
+	for (let i = 0; i < picked.length; i++) {
+		const commenter = picked[i];
+		const text = texts[i];
+		if (!commenter || !text) continue;
+
+		// 1. Bot starts "typing" in the user's thread.
+		await inject({
+			type: 'typing',
+			userId: commenter.user_id,
+			displayName: commenter.name,
+			expiresAt: Date.now() + 8000,
+			threadId
+		});
+
+		// 2. Human-like compose pause, scaled to reply length and
+		//    clamped so 4 bots stay within the waitUntil budget.
+		await sleep(Math.min(4000, Math.max(1200, text.length * 32)));
+
+		// 3. Persist the reply.
+		const commentId = crypto.randomUUID();
+		const createdAt = Math.floor(Date.now() / 1000);
+		try {
+			await db.insert(comments).values({
+				id: commentId,
+				post_id: postId,
+				user_id: commenter.user_id,
+				content: text
+			});
+		} catch (err) {
+			console.error('orchestrated reply insert failed', err);
+			await inject({ type: 'leave', userId: commenter.user_id });
+			continue;
+		}
+
+		// 4. Push it live + clear the typing indicator. Shape matches
+		//    loadCommentsForPosts' CommentRow so the client appends
+		//    it without a reload.
+		const prof = profileById.get(commenter.user_id);
+		await inject({
+			type: 'comment',
+			postId,
+			comment: {
+				id: commentId,
+				post_id: postId,
+				content: text,
+				created_at: createdAt,
+				user_id: commenter.user_id,
+				parent_comment_id: null,
+				user: {
+					id: commenter.user_id,
+					display_name: commenter.name,
+					username: prof?.username ?? null,
+					profile_picture_url: prof?.image ?? null
+				}
+			}
+		});
+		await inject({ type: 'leave', userId: commenter.user_id });
+	}
+}
+
+/**
  * Regenerate seed-author answers on the most recent prompt, regardless of
  * what date that prompt is from. Replaces seed-bot posts on that prompt
  * while leaving user-authored content alone. Used both during the

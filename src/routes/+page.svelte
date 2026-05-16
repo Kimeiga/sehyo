@@ -127,9 +127,24 @@
 	type ReplyTarget = { postId: string; parentCommentId: string | null };
 	let activeReplyTarget = $state<ReplyTarget | null>(null);
 
-	const commentsByPost = $derived<Record<string, CommentRow[]>>({
-		...((data as { todayCommentsByPost?: Record<string, CommentRow[]> }).todayCommentsByPost ?? {}),
-		...((data as { commentsByPost?: Record<string, CommentRow[]> }).commentsByPost ?? {})
+	// Bot replies pushed live over the WS after the user answers
+	// (server choreography). Keyed by postId, appended to the
+	// server-loaded comments below so they appear without a reload.
+	let liveComments = $state<Record<string, CommentRow[]>>({});
+
+	const commentsByPost = $derived.by<Record<string, CommentRow[]>>(() => {
+		const base: Record<string, CommentRow[]> = {
+			...((data as { todayCommentsByPost?: Record<string, CommentRow[]> }).todayCommentsByPost ??
+				{}),
+			...((data as { commentsByPost?: Record<string, CommentRow[]> }).commentsByPost ?? {})
+		};
+		for (const [postId, extra] of Object.entries(liveComments)) {
+			const existing = base[postId] ?? [];
+			const seen = new Set(existing.map((c) => c.id));
+			const merged = existing.concat(extra.filter((c) => !seen.has(c.id)));
+			base[postId] = merged;
+		}
+		return base;
 	});
 
 	let replyContent = $state('');
@@ -237,9 +252,19 @@
 			tdbg('typingUsers subscriber fired', { len: v.length, users: v });
 			worldTypingUsers.set(v);
 		});
+		const unsubLive = handle.liveComment.subscribe((lc) => {
+			if (!lc) return;
+			const c = lc.comment as CommentRow;
+			if (!c || typeof c.id !== 'string') return;
+			tdbg('liveComment received', { postId: lc.postId, commentId: c.id });
+			const cur = liveComments[lc.postId] ?? [];
+			if (cur.some((x) => x.id === c.id)) return;
+			liveComments = { ...liveComments, [lc.postId]: [...cur, c] };
+		});
 		return () => {
 			tdbg('$effect cleanup — unsubscribing + disconnecting');
 			unsub();
+			unsubLive();
 			handle.disconnect();
 			worldTypingHandle = null;
 			worldTypingUsers.set([]);

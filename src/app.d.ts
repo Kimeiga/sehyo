@@ -25,6 +25,7 @@ declare global {
 				GOOGLE_REDIRECT_URI: string;
 				BETTER_AUTH_SECRET: string;
 				ADMIN_SECRET: string;
+				TYPING_INJECT_URL: string;
 				AI: import('@cloudflare/workers-types').Ai;
 			};
 			context: {

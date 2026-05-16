@@ -57,8 +57,21 @@ export interface TypingUser {
 	threadId: string;
 }
 
+/** A bot reply pushed live by the server after its typing indicator.
+ *  `comment` is the loadCommentsForPosts CommentRow shape; left as
+ *  unknown here so the store stays decoupled from the page's types —
+ *  the consumer narrows it. */
+export interface LiveComment {
+	postId: string;
+	comment: unknown;
+}
+
 export interface ForumTypingHandle {
 	typingUsers: Readable<TypingUser[]>;
+	/** Most-recent server-pushed bot reply (or null). The page
+	 *  subscribes and merges each new value into the matching post's
+	 *  comment list, so replies appear without a reload. */
+	liveComment: Readable<LiveComment | null>;
 	/** Returns true if a typing frame was actually sent on the wire,
 	 *  false if it was throttled or the socket isn't open. Pass the
 	 *  threadId so receivers know which composer to attribute the
@@ -87,11 +100,13 @@ export function connectForumTyping(
 			threadId: v.threadId
 		})).sort((a, b) => a.displayName.localeCompare(b.displayName))
 	);
+	const liveComment = writable<LiveComment | null>(null);
 
 	if (!browser) {
 		dbg('non-browser → returning no-op handle');
 		return {
 			typingUsers,
+			liveComment,
 			notifyTyping: (_threadId: string) => false,
 			disconnect: () => {}
 		};
@@ -232,6 +247,20 @@ export function connectForumTyping(
 			return;
 		}
 
+		if (
+			m.type === 'comment' &&
+			typeof (m as { postId?: unknown }).postId === 'string' &&
+			(m as { comment?: unknown }).comment &&
+			typeof (m as { comment?: unknown }).comment === 'object'
+		) {
+			const mc = m as unknown as { postId: string; comment: unknown };
+			dbg('handleMessage type=comment → liveComment.set', { postId: mc.postId });
+			// New object identity each time so the page's subscriber
+			// fires even if the same comment somehow repeats.
+			liveComment.set({ postId: mc.postId, comment: mc.comment });
+			return;
+		}
+
 		dbg('handleMessage rejected — unknown shape', m);
 	}
 
@@ -301,7 +330,7 @@ export function connectForumTyping(
 		map.set(new Map());
 	}
 
-	return { typingUsers, notifyTyping, disconnect };
+	return { typingUsers, liveComment, notifyTyping, disconnect };
 }
 
 function wsUrl(roomId: string, devIdentity?: DevIdentity | null): string {
