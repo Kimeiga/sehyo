@@ -47,11 +47,14 @@
 		rippleVisible = !rippleVisible;
 		if (rippleVisible) rippleBurst++;
 	}
+	// Tuned to read like keystrokes: many tiny, quick blips rather
+	// than a few slow swells. ~6 splats/sec, small radius, fast
+	// decay so each tap stays distinct instead of sloshing.
 	const SUBTLE_RIPPLE = {
-		intervalMs: 1000,
-		radius: 0.035,
-		strength: 1.2,
-		damping: 0.94,
+		intervalMs: 160,
+		radius: 0.015,
+		strength: 0.85,
+		damping: 0.92,
 		// "<name> is typing…" in 13px sans ≈ 60% of the row width;
 		// keep splats on the glyph band, not the empty surround.
 		uRange: [0.06, 0.78] as [number, number],
