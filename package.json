@@ -13,6 +13,7 @@
 		"format": "prettier --write .",
 		"lint": "prettier --check .",
 		"test:messages": "node tests/messages-e2e.mjs",
+		"test:typing": "node tests/typing-e2e.mjs",
 		"bot:trigger": "tsx scripts/trigger-bot.ts",
 		"bot:trigger:tech": "tsx scripts/trigger-bot.ts --bot=bot_tech_enthusiast",
 		"bot:trigger:writer": "tsx scripts/trigger-bot.ts --bot=bot_creative_writer",

@@ -10,10 +10,9 @@ compatibility_date = "2024-09-23"
 # the DNS + route automatically (the zone must already be on your
 # Cloudflare account).
 #
-# Uncomment when ready to deploy:
-# routes = [
-#   { pattern = "typing.sehyo.com", custom_domain = true }
-# ]
+routes = [
+  { pattern = "typing.sehyo.com", custom_domain = true }
+]
 #
 # Alternative (dashboard route, less repeatable): Workers & Pages →
 # sehyo-typing → Settings → Triggers → Add Custom Domain.
