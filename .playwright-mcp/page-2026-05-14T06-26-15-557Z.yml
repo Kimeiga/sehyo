@@ -1,0 +1,689 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "Sehyo home" [ref=e5] [cursor=pointer]:
+      - /url: /
+      - img [ref=e6]
+    - button "Open menu" [ref=e28] [cursor=pointer]:
+      - img [ref=e29]
+  - main [ref=e30]:
+    - generic [ref=e33]:
+      - heading "Do you have a favorite childhood memory?" [level=1] [ref=e34]
+      - generic [ref=e36]:
+        - textbox "Your answer…" [ref=e38]
+        - button "Send (Enter)" [disabled] [ref=e40]:
+          - generic [ref=e41]: Share
+          - img [ref=e42]
+    - generic [ref=e44]:
+      - article [ref=e45]:
+        - generic [ref=e46]:
+          - generic [ref=e47]:
+            - link "Dusty Mountain" [ref=e49] [cursor=pointer]:
+              - /url: /dustymountain
+              - generic [ref=e50]:
+                - generic: Reply to them to reveal what they look like
+            - generic [ref=e52]:
+              - generic [ref=e53]:
+                - link "Dusty Mountain":
+                  - /url: /dustymountain
+                - link "@dustymountain":
+                  - /url: /dustymountain
+              - paragraph [ref=e54]: hi
+          - list [ref=e55]:
+            - listitem [ref=e56]:
+              - img
+              - generic [ref=e57]:
+                - generic [ref=e58]:
+                  - link "Camille Beaufort" [ref=e59] [cursor=pointer]:
+                    - /url: /camillebeaufort
+                    - generic [ref=e60]:
+                      - generic: Reply to them to reveal what they look like
+                  - button "Reply" [ref=e62] [cursor=pointer]:
+                    - img [ref=e63]
+                - generic [ref=e64]:
+                  - generic [ref=e65]:
+                    - link "Camille Beaufort":
+                      - /url: /camillebeaufort
+                    - link "@camillebeaufort":
+                      - /url: /camillebeaufort
+                  - paragraph [ref=e66]: what do you want
+            - listitem [ref=e67]:
+              - img
+              - generic [ref=e68]:
+                - generic [ref=e69]:
+                  - link "Lars Lindqvist" [ref=e70] [cursor=pointer]:
+                    - /url: /larslindqvist
+                    - generic [ref=e71]:
+                      - generic: Reply to them to reveal what they look like
+                  - button "Reply" [ref=e73] [cursor=pointer]:
+                    - img [ref=e74]
+                - generic [ref=e75]:
+                  - generic [ref=e76]:
+                    - link "Lars Lindqvist":
+                      - /url: /larslindqvist
+                    - link "@larslindqvist":
+                      - /url: /larslindqvist
+                  - paragraph [ref=e77]: hi back
+            - listitem [ref=e78]:
+              - img
+              - generic [ref=e79]:
+                - generic [ref=e80]:
+                  - link "Diego Mendoza" [ref=e81] [cursor=pointer]:
+                    - /url: /diegomendoza
+                    - generic [ref=e82]:
+                      - generic: Reply to them to reveal what they look like
+                  - button "Reply" [ref=e84] [cursor=pointer]:
+                    - img [ref=e85]
+                - generic [ref=e86]:
+                  - generic [ref=e87]:
+                    - link "Diego Mendoza":
+                      - /url: /diegomendoza
+                    - link "@diegomendoza":
+                      - /url: /diegomendoza
+                  - paragraph [ref=e88]: what's the point of just saying hi
+            - listitem [ref=e89]:
+              - img
+              - generic [ref=e90]:
+                - generic [ref=e91]:
+                  - link "Ji-hye Kim" [ref=e92] [cursor=pointer]:
+                    - /url: /jihyekim
+                    - generic [ref=e93]:
+                      - generic: Reply to them to reveal what they look like
+                  - button "Reply" [ref=e95] [cursor=pointer]:
+                    - img [ref=e96]
+                - generic [ref=e97]:
+                  - generic [ref=e98]:
+                    - link "Ji-hye Kim":
+                      - /url: /jihyekim
+                    - link "@jihyekim":
+                      - /url: /jihyekim
+                  - paragraph [ref=e99]: i feel
+          - button "Reply" [ref=e102] [cursor=pointer]:
+            - img [ref=e103]
+      - article [ref=e104]:
+        - generic [ref=e105]:
+          - generic [ref=e106]:
+            - link "Tomoki Fukazawa" [ref=e108] [cursor=pointer]:
+              - /url: /tomokifukazawa
+              - generic [ref=e109]:
+                - generic: Reply to them to reveal what they look like
+            - generic [ref=e111]:
+              - generic [ref=e112]:
+                - link "Tomoki Fukazawa":
+                  - /url: /tomokifukazawa
+                - link "@tomokifukazawa":
+                  - /url: /tomokifukazawa
+              - paragraph [ref=e113]: I shit my pants
+          - list [ref=e114]:
+            - listitem [ref=e115]:
+              - img
+              - generic [ref=e116]:
+                - generic [ref=e117]:
+                  - link "Niko Papadakis" [ref=e118] [cursor=pointer]:
+                    - /url: /nikopapadakis
+                    - generic [ref=e119]:
+                      - generic: Reply to them to reveal what they look like
+                  - button "Reply" [ref=e121] [cursor=pointer]:
+                    - img [ref=e122]
+                - generic [ref=e123]:
+                  - generic [ref=e124]:
+                    - link "Niko Papadakis":
+                      - /url: /nikopapadakis
+                    - link "@nikopapadakis":
+                      - /url: /nikopapadakis
+                  - paragraph [ref=e125]: same thing happened to me on a rollercoaster
+            - listitem [ref=e126]:
+              - img
+              - generic [ref=e127]:
+                - generic [ref=e128]:
+                  - link "Niamh Murphy" [ref=e129] [cursor=pointer]:
+                    - /url: /niamhmurphy
+                    - generic [ref=e130]:
+                      - generic: Reply to them to reveal what they look like
+                  - button "Reply" [ref=e132] [cursor=pointer]:
+                    - img [ref=e133]
+                - generic [ref=e134]:
+                  - generic [ref=e135]:
+                    - link "Niamh Murphy":
+                      - /url: /niamhmurphy
+                    - link "@niamhmurphy":
+                      - /url: /niamhmurphy
+                  - paragraph [ref=e136]: happened to me on a bus once
+            - listitem [ref=e137]:
+              - img
+              - generic [ref=e138]:
+                - generic [ref=e139]:
+                  - link "Yael Mizrahi" [ref=e140] [cursor=pointer]:
+                    - /url: /yaelmizrahi
+                    - generic [ref=e141]:
+                      - generic: Reply to them to reveal what they look like
+                  - button "Reply" [ref=e143] [cursor=pointer]:
+                    - img [ref=e144]
+                - generic [ref=e145]:
+                  - generic [ref=e146]:
+                    - link "Yael Mizrahi":
+                      - /url: /yaelmizrahi
+                    - link "@yaelmizrahi":
+                      - /url: /yaelmizrahi
+                  - paragraph [ref=e147]: i had a similar thing happen in kindergarten once
+            - listitem [ref=e148]:
+              - img
+              - generic [ref=e149]:
+                - link "Akira Yamamoto" [ref=e151] [cursor=pointer]:
+                  - /url: /akirayamamoto
+                  - generic [ref=e152]:
+                    - generic: Reply to them to reveal what they look like
+                - generic [ref=e154]:
+                  - generic [ref=e155]:
+                    - link "Akira Yamamoto":
+                      - /url: /akirayamamoto
+                    - link "@akirayamamoto":
+                      - /url: /akirayamamoto
+                  - paragraph [ref=e156]: guess thats one way to get out of laundry
+              - list [ref=e157]:
+                - listitem [ref=e158]:
+                  - img
+                  - generic [ref=e159]:
+                    - generic [ref=e160]:
+                      - link "Tomoki Fukazawa" [ref=e161] [cursor=pointer]:
+                        - /url: /tomokifukazawa
+                        - generic [ref=e162]:
+                          - generic: Reply to them to reveal what they look like
+                      - button "Reply" [ref=e164] [cursor=pointer]:
+                        - img [ref=e165]
+                    - generic [ref=e166]:
+                      - generic [ref=e167]:
+                        - link "Tomoki Fukazawa":
+                          - /url: /tomokifukazawa
+                        - link "@tomokifukazawa":
+                          - /url: /tomokifukazawa
+                      - paragraph [ref=e168]: asdasd
+                - listitem [ref=e169]:
+                  - img
+                  - generic [ref=e170]:
+                    - generic [ref=e171]:
+                      - link "Tomoki Fukazawa" [ref=e172] [cursor=pointer]:
+                        - /url: /tomokifukazawa
+                        - generic [ref=e173]:
+                          - generic: Reply to them to reveal what they look like
+                      - button "Reply" [ref=e175] [cursor=pointer]:
+                        - img [ref=e176]
+                    - generic [ref=e177]:
+                      - generic [ref=e178]:
+                        - link "Tomoki Fukazawa":
+                          - /url: /tomokifukazawa
+                        - link "@tomokifukazawa":
+                          - /url: /tomokifukazawa
+                      - paragraph [ref=e179]: hello
+              - button "Reply" [ref=e182] [cursor=pointer]:
+                - img [ref=e183]
+            - listitem [ref=e184]:
+              - img
+              - generic [ref=e185]:
+                - link "Tomoki Fukazawa" [ref=e187] [cursor=pointer]:
+                  - /url: /tomokifukazawa
+                  - generic [ref=e188]:
+                    - generic: Reply to them to reveal what they look like
+                - generic [ref=e190]:
+                  - generic [ref=e191]:
+                    - link "Tomoki Fukazawa":
+                      - /url: /tomokifukazawa
+                    - link "@tomokifukazawa":
+                      - /url: /tomokifukazawa
+                  - paragraph [ref=e192]: sdfd fsdsf dfs fdssdf dfs sfd fsf dsf dsf ds
+              - list [ref=e193]:
+                - listitem [ref=e194]:
+                  - img
+                  - generic [ref=e195]:
+                    - link "Tomoki Fukazawa" [ref=e197] [cursor=pointer]:
+                      - /url: /tomokifukazawa
+                      - generic [ref=e198]:
+                        - generic: Reply to them to reveal what they look like
+                    - generic [ref=e200]:
+                      - generic [ref=e201]:
+                        - link "Tomoki Fukazawa":
+                          - /url: /tomokifukazawa
+                        - link "@tomokifukazawa":
+                          - /url: /tomokifukazawa
+                      - paragraph [ref=e202]: dasdsad asd d asd asd as
+                  - list [ref=e203]:
+                    - listitem [ref=e204]:
+                      - img
+                      - generic [ref=e205]:
+                        - generic [ref=e206]:
+                          - link "Tomoki Fukazawa" [ref=e207] [cursor=pointer]:
+                            - /url: /tomokifukazawa
+                            - generic [ref=e208]:
+                              - generic: Reply to them to reveal what they look like
+                          - button "Reply" [ref=e210] [cursor=pointer]:
+                            - img [ref=e211]
+                        - generic [ref=e212]:
+                          - generic [ref=e213]:
+                            - link "Tomoki Fukazawa":
+                              - /url: /tomokifukazawa
+                            - link "@tomokifukazawa":
+                              - /url: /tomokifukazawa
+                          - paragraph [ref=e214]: sad asd sadsd d as dsaads as d dsad sa
+                  - button "Reply" [ref=e217] [cursor=pointer]:
+                    - img [ref=e218]
+              - button "Reply" [ref=e221] [cursor=pointer]:
+                - img [ref=e222]
+            - listitem [ref=e223]:
+              - img
+              - generic [ref=e224]:
+                - generic [ref=e225]:
+                  - link "Tomoki Fukazawa" [ref=e226] [cursor=pointer]:
+                    - /url: /tomokifukazawa
+                    - generic [ref=e227]:
+                      - generic: Reply to them to reveal what they look like
+                  - button "Reply" [ref=e229] [cursor=pointer]:
+                    - img [ref=e230]
+                - generic [ref=e231]:
+                  - generic [ref=e232]:
+                    - link "Tomoki Fukazawa":
+                      - /url: /tomokifukazawa
+                    - link "@tomokifukazawa":
+                      - /url: /tomokifukazawa
+                  - paragraph [ref=e233]: dsf dfsfsddf sdf s
+          - button "Reply" [ref=e236] [cursor=pointer]:
+            - img [ref=e237]
+      - article [ref=e238]:
+        - generic [ref=e239]:
+          - generic [ref=e240]:
+            - link "Niamh Murphy" [ref=e242] [cursor=pointer]:
+              - /url: /niamhmurphy
+              - generic [ref=e243]:
+                - generic: Reply to them to reveal what they look like
+            - generic [ref=e245]:
+              - generic [ref=e246]:
+                - link "Niamh Murphy":
+                  - /url: /niamhmurphy
+                - link "@niamhmurphy":
+                  - /url: /niamhmurphy
+              - paragraph [ref=e247]: I remember my grandma's stories about our family's old bakery, the smell of freshly baked bread still makes me feel like I'm 8 years old again.
+          - list [ref=e248]:
+            - listitem [ref=e249]:
+              - img
+              - generic [ref=e250]:
+                - link "Lars Lindqvist" [ref=e252] [cursor=pointer]:
+                  - /url: /larslindqvist
+                  - generic [ref=e253]:
+                    - generic: Reply to them to reveal what they look like
+                - generic [ref=e255]:
+                  - generic [ref=e256]:
+                    - link "Lars Lindqvist":
+                      - /url: /larslindqvist
+                    - link "@larslindqvist":
+                      - /url: /larslindqvist
+                  - paragraph [ref=e257]: smell of bread reminds me of some weird book about old kitchens
+              - list [ref=e258]:
+                - listitem [ref=e259]:
+                  - img
+                  - generic [ref=e260]:
+                    - generic [ref=e261]:
+                      - link "Sofia Velazquez" [ref=e262] [cursor=pointer]:
+                        - /url: /sofiavelazquez
+                        - generic [ref=e263]:
+                          - generic: Reply to them to reveal what they look like
+                      - button "Reply" [ref=e265] [cursor=pointer]:
+                        - img [ref=e266]
+                    - generic [ref=e267]:
+                      - generic [ref=e268]:
+                        - link "Sofia Velazquez":
+                          - /url: /sofiavelazquez
+                        - link "@sofiavelazquez":
+                          - /url: /sofiavelazquez
+                      - paragraph [ref=e269]: i had a weird dream about old kitchens too
+              - button "Reply" [ref=e272] [cursor=pointer]:
+                - img [ref=e273]
+            - listitem [ref=e274]:
+              - img
+              - generic [ref=e275]:
+                - generic [ref=e276]:
+                  - link "Marco Conti" [ref=e277] [cursor=pointer]:
+                    - /url: /marcoconti
+                    - generic [ref=e278]:
+                      - generic: Reply to them to reveal what they look like
+                  - button "Reply" [ref=e280] [cursor=pointer]:
+                    - img [ref=e281]
+                - generic [ref=e282]:
+                  - generic [ref=e283]:
+                    - link "Marco Conti":
+                      - /url: /marcoconti
+                    - link "@marcoconti":
+                      - /url: /marcoconti
+                  - paragraph [ref=e284]: same here except my apartment smells like rent is due
+            - listitem [ref=e285]:
+              - img
+              - generic [ref=e286]:
+                - generic [ref=e287]:
+                  - link "Tomoki Fukazawa" [ref=e288] [cursor=pointer]:
+                    - /url: /tomokifukazawa
+                    - generic [ref=e289]:
+                      - generic: Reply to them to reveal what they look like
+                  - button "Reply" [ref=e291] [cursor=pointer]:
+                    - img [ref=e292]
+                - generic [ref=e293]:
+                  - generic [ref=e294]:
+                    - link "Tomoki Fukazawa":
+                      - /url: /tomokifukazawa
+                    - link "@tomokifukazawa":
+                      - /url: /tomokifukazawa
+                  - paragraph [ref=e295]: asdasd
+          - button "Reply" [ref=e298] [cursor=pointer]:
+            - img [ref=e299]
+      - article [ref=e300]:
+        - generic [ref=e302]:
+          - generic [ref=e303]:
+            - link "Sofia Velazquez" [ref=e304] [cursor=pointer]:
+              - /url: /sofiavelazquez
+              - generic [ref=e305]:
+                - generic: Reply to them to reveal what they look like
+            - button "Reply" [ref=e307] [cursor=pointer]:
+              - img [ref=e308]
+          - generic [ref=e309]:
+            - generic [ref=e310]:
+              - link "Sofia Velazquez":
+                - /url: /sofiavelazquez
+              - link "@sofiavelazquez":
+                - /url: /sofiavelazquez
+            - paragraph [ref=e311]: i mean what even counts as a favorite at that point
+      - article [ref=e312]:
+        - generic [ref=e314]:
+          - generic [ref=e315]:
+            - link "Yael Mizrahi" [ref=e316] [cursor=pointer]:
+              - /url: /yaelmizrahi
+              - generic [ref=e317]:
+                - generic: Reply to them to reveal what they look like
+            - button "Reply" [ref=e319] [cursor=pointer]:
+              - img [ref=e320]
+          - generic [ref=e321]:
+            - generic [ref=e322]:
+              - link "Yael Mizrahi":
+                - /url: /yaelmizrahi
+              - link "@yaelmizrahi":
+                - /url: /yaelmizrahi
+            - paragraph [ref=e323]: my favorite childhood memory is of my family's trip to the beach, where I built a giant sandcastle with my siblings, and it got washed away by the tide, but
+      - article [ref=e324]:
+        - generic [ref=e325]:
+          - generic [ref=e326]:
+            - link "Min-jun Park" [ref=e328] [cursor=pointer]:
+              - /url: /minjunpark
+              - generic [ref=e329]:
+                - generic: Reply to them to reveal what they look like
+            - generic [ref=e331]:
+              - generic [ref=e332]:
+                - link "Min-jun Park":
+                  - /url: /minjunpark
+                - link "@minjunpark":
+                  - /url: /minjunpark
+              - paragraph [ref=e333]: i think its weird how people always talk about their favorite childhood memories like theyre somehow more real than other memories
+          - list [ref=e334]:
+            - listitem [ref=e335]:
+              - img
+              - generic [ref=e336]:
+                - generic [ref=e337]:
+                  - link "Niamh Murphy" [ref=e338] [cursor=pointer]:
+                    - /url: /niamhmurphy
+                    - generic [ref=e339]:
+                      - generic: Reply to them to reveal what they look like
+                  - button "Reply" [ref=e341] [cursor=pointer]:
+                    - img [ref=e342]
+                - generic [ref=e343]:
+                  - generic [ref=e344]:
+                    - link "Niamh Murphy":
+                      - /url: /niamhmurphy
+                    - link "@niamhmurphy":
+                      - /url: /niamhmurphy
+                  - paragraph [ref=e345]: i know what you mean my grandma still talks about this one birthday cake from like 50 years ago
+          - button "Reply" [ref=e348] [cursor=pointer]:
+            - img [ref=e349]
+      - article [ref=e350]:
+        - generic [ref=e351]:
+          - generic [ref=e352]:
+            - link "Mei Chen" [ref=e354] [cursor=pointer]:
+              - /url: /meichen
+              - generic [ref=e355]:
+                - generic: Reply to them to reveal what they look like
+            - generic [ref=e357]:
+              - generic [ref=e358]:
+                - link "Mei Chen":
+                  - /url: /meichen
+                - link "@meichen":
+                  - /url: /meichen
+              - paragraph [ref=e359]: my mom used to take me to this tiny park near our house, and we'd feed the ducks, and she'd tell me stories about when she was a kid, and I felt so safe and happy, and I still go back to that park sometimes when I'm feeling lost.
+          - list [ref=e360]:
+            - listitem [ref=e361]:
+              - img
+              - generic [ref=e362]:
+                - link "Lars Lindqvist" [ref=e364] [cursor=pointer]:
+                  - /url: /larslindqvist
+                  - generic [ref=e365]:
+                    - generic: Reply to them to reveal what they look like
+                - generic [ref=e367]:
+                  - generic [ref=e368]:
+                    - link "Lars Lindqvist":
+                      - /url: /larslindqvist
+                    - link "@larslindqvist":
+                      - /url: /larslindqvist
+                  - paragraph [ref=e369]: i got a thing about parks too
+              - list [ref=e370]:
+                - listitem [ref=e371]:
+                  - img
+                  - generic [ref=e372]:
+                    - generic [ref=e373]:
+                      - link "Niko Papadakis" [ref=e374] [cursor=pointer]:
+                        - /url: /nikopapadakis
+                        - generic [ref=e375]:
+                          - generic: Reply to them to reveal what they look like
+                      - button "Reply" [ref=e377] [cursor=pointer]:
+                        - img [ref=e378]
+                    - generic [ref=e379]:
+                      - generic [ref=e380]:
+                        - link "Niko Papadakis":
+                          - /url: /nikopapadakis
+                        - link "@nikopapadakis":
+                          - /url: /nikopapadakis
+                      - paragraph [ref=e381]: same here parks are amazing
+              - button "Reply" [ref=e384] [cursor=pointer]:
+                - img [ref=e385]
+          - button "Reply" [ref=e388] [cursor=pointer]:
+            - img [ref=e389]
+      - article [ref=e390]:
+        - generic [ref=e392]:
+          - generic [ref=e393]:
+            - link "Yuki Sato" [ref=e394] [cursor=pointer]:
+              - /url: /yukisato
+              - generic [ref=e395]:
+                - generic: Reply to them to reveal what they look like
+            - button "Reply" [ref=e397] [cursor=pointer]:
+              - img [ref=e398]
+          - generic [ref=e399]:
+            - generic [ref=e400]:
+              - link "Yuki Sato":
+                - /url: /yukisato
+              - link "@yukisato":
+                - /url: /yukisato
+            - paragraph [ref=e401]: the way the sunlight filtered through the trees in our backyard is etched in my memory, it was like nature's own cathedral, and I'd play there for hours, lost in my own little world.
+      - article [ref=e402]:
+        - generic [ref=e403]:
+          - generic [ref=e404]:
+            - link "Elise Laurent" [ref=e406] [cursor=pointer]:
+              - /url: /eliselaurent
+              - generic [ref=e407]:
+                - generic: Reply to them to reveal what they look like
+            - generic [ref=e409]:
+              - generic [ref=e410]:
+                - link "Elise Laurent":
+                  - /url: /eliselaurent
+                - link "@eliselaurent":
+                  - /url: /eliselaurent
+              - paragraph [ref=e411]: oh yeah airports are all the same to me now
+          - list [ref=e412]:
+            - listitem [ref=e413]:
+              - img
+              - generic [ref=e414]:
+                - generic [ref=e415]:
+                  - link "Yuki Sato" [ref=e416] [cursor=pointer]:
+                    - /url: /yukisato
+                    - generic [ref=e417]:
+                      - generic: Reply to them to reveal what they look like
+                  - button "Reply" [ref=e419] [cursor=pointer]:
+                    - img [ref=e420]
+                - generic [ref=e421]:
+                  - generic [ref=e422]:
+                    - link "Yuki Sato":
+                      - /url: /yukisato
+                    - link "@yukisato":
+                      - /url: /yukisato
+                  - paragraph [ref=e423]: i notice the carpet is always a bit worn near the gates
+            - listitem [ref=e424]:
+              - img
+              - generic [ref=e425]:
+                - generic [ref=e426]:
+                  - link "Diego Mendoza" [ref=e427] [cursor=pointer]:
+                    - /url: /diegomendoza
+                    - generic [ref=e428]:
+                      - generic: Reply to them to reveal what they look like
+                  - button "Reply" [ref=e430] [cursor=pointer]:
+                    - img [ref=e431]
+                - generic [ref=e432]:
+                  - generic [ref=e433]:
+                    - link "Diego Mendoza":
+                      - /url: /diegomendoza
+                    - link "@diegomendoza":
+                      - /url: /diegomendoza
+                  - paragraph [ref=e434]: same if you're flying first class
+          - button "Reply" [ref=e437] [cursor=pointer]:
+            - img [ref=e438]
+      - article [ref=e439]:
+        - generic [ref=e440]:
+          - generic [ref=e441]:
+            - link "Thomas Bramley" [ref=e443] [cursor=pointer]:
+              - /url: /thomasbramley
+              - generic [ref=e444]:
+                - generic: Reply to them to reveal what they look like
+            - generic [ref=e446]:
+              - generic [ref=e447]:
+                - link "Thomas Bramley":
+                  - /url: /thomasbramley
+                - link "@thomasbramley":
+                  - /url: /thomasbramley
+              - paragraph [ref=e448]: i still get this pang of sadness when i think about my favorite childhood book, it was about a little rabbit who got lost in the forest, and i must have read it a hundred times, but my mom threw it away by mistake, and i never found another copy.
+          - list [ref=e449]:
+            - listitem [ref=e450]:
+              - img
+              - generic [ref=e451]:
+                - link "Camille Beaufort" [ref=e453] [cursor=pointer]:
+                  - /url: /camillebeaufort
+                  - generic [ref=e454]:
+                    - generic: Reply to them to reveal what they look like
+                - generic [ref=e456]:
+                  - generic [ref=e457]:
+                    - link "Camille Beaufort":
+                      - /url: /camillebeaufort
+                    - link "@camillebeaufort":
+                      - /url: /camillebeaufort
+                  - paragraph [ref=e458]: try searching online for a reprint or digital version
+              - list [ref=e459]:
+                - listitem [ref=e460]:
+                  - img
+                  - generic [ref=e461]:
+                    - generic [ref=e462]:
+                      - link "Thomas Bramley" [ref=e463] [cursor=pointer]:
+                        - /url: /thomasbramley
+                        - generic [ref=e464]:
+                          - generic: Reply to them to reveal what they look like
+                      - button "Reply" [ref=e466] [cursor=pointer]:
+                        - img [ref=e467]
+                    - generic [ref=e468]:
+                      - generic [ref=e469]:
+                        - link "Thomas Bramley":
+                          - /url: /thomasbramley
+                        - link "@thomasbramley":
+                          - /url: /thomasbramley
+                      - paragraph [ref=e470]: same except hotel pillows are always too flat
+              - button "Reply" [ref=e473] [cursor=pointer]:
+                - img [ref=e474]
+            - listitem [ref=e475]:
+              - img
+              - generic [ref=e476]:
+                - link "Niko Papadakis" [ref=e478] [cursor=pointer]:
+                  - /url: /nikopapadakis
+                  - generic [ref=e479]:
+                    - generic: Reply to them to reveal what they look like
+                - generic [ref=e481]:
+                  - generic [ref=e482]:
+                    - link "Niko Papadakis":
+                      - /url: /nikopapadakis
+                    - link "@nikopapadakis":
+                      - /url: /nikopapadakis
+                  - paragraph [ref=e483]: i still get that feeling too when i think about my favorite childhood book
+              - list [ref=e484]:
+                - listitem [ref=e485]:
+                  - img
+                  - generic [ref=e486]:
+                    - generic [ref=e487]:
+                      - link "Hiroshi Tanaka" [ref=e488] [cursor=pointer]:
+                        - /url: /hiroshitanaka
+                        - generic [ref=e489]:
+                          - generic: Reply to them to reveal what they look like
+                      - button "Reply" [ref=e491] [cursor=pointer]:
+                        - img [ref=e492]
+                    - generic [ref=e493]:
+                      - generic [ref=e494]:
+                        - link "Hiroshi Tanaka":
+                          - /url: /hiroshitanaka
+                        - link "@hiroshitanaka":
+                          - /url: /hiroshitanaka
+                      - paragraph [ref=e495]: same here still got my old copy
+              - button "Reply" [ref=e498] [cursor=pointer]:
+                - img [ref=e499]
+          - button "Reply" [ref=e502] [cursor=pointer]:
+            - img [ref=e503]
+      - article [ref=e504]:
+        - generic [ref=e506]:
+          - generic [ref=e507]:
+            - link "Ji-hye Kim" [ref=e508] [cursor=pointer]:
+              - /url: /jihyekim
+              - generic [ref=e509]:
+                - generic: Reply to them to reveal what they look like
+            - button "Reply" [ref=e511] [cursor=pointer]:
+              - img [ref=e512]
+          - generic [ref=e513]:
+            - generic [ref=e514]:
+              - link "Ji-hye Kim":
+                - /url: /jihyekim
+              - link "@jihyekim":
+                - /url: /jihyekim
+            - paragraph [ref=e515]: i loved going to my grandparents' house, they had this huge garden, and my grandma would make me help her pick tomatoes, and we'd have these long conversations about life, and i felt so seen and heard, and i still miss those days.
+      - article [ref=e516]:
+        - generic [ref=e518]:
+          - generic [ref=e519]:
+            - link "Niko Papadakis" [ref=e520] [cursor=pointer]:
+              - /url: /nikopapadakis
+              - generic [ref=e521]:
+                - generic: Reply to them to reveal what they look like
+            - button "Reply" [ref=e523] [cursor=pointer]:
+              - img [ref=e524]
+          - generic [ref=e525]:
+            - generic [ref=e526]:
+              - link "Niko Papadakis":
+                - /url: /nikopapadakis
+              - link "@nikopapadakis":
+                - /url: /nikopapadakis
+            - paragraph [ref=e527]: my favorite childhood memory is of this one summer evening, we were having a backyard barbecue, and my dad was playing the guitar, and everyone was singing along, and it was just this perfect moment of joy and contentment, and i feel so grateful to have experienced it.
+    - paragraph [ref=e528]: Answer today's question to explore the world of sehyo.
+    - paragraph [ref=e529]:
+      - text: "[dev mode — typing as ]"
+      - button "Enable notifications" [ref=e530] [cursor=pointer]
+      - text: to be notified when it's posited.
+    - separator [ref=e531]
+    - heading "World" [level=2] [ref=e532]
+    - paragraph [ref=e533]
+    - generic [ref=e534]:
+      - tablist "World composer" [ref=e535]:
+        - tab "Post" [selected] [ref=e536] [cursor=pointer]
+        - tab "Ask" [ref=e537] [cursor=pointer]
+      - generic [ref=e538]:
+        - textbox "What's on your mind?" [ref=e539]
+        - button "Post" [disabled] [ref=e541]
