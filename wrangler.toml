@@ -28,6 +28,11 @@ binding = "AI"
 [vars]
 # Public environment variables
 PUBLIC_APP_NAME = "Sehyo"
+# WebSocket base for the forum typing indicator. The browser connects
+# here directly (the Vite /ws proxy is dev-only). Must share an
+# eTLD+1 with sehyo.com so the session cookie rides the WS upgrade.
+# Served by the sehyo-typing Worker (workers/typing).
+PUBLIC_TYPING_WS_BASE = "wss://typing.sehyo.com"
 
 # Bot Runner Worker Configuration
 # This worker runs on a schedule to make bots post and interact.
