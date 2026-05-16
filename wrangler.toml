@@ -33,6 +33,10 @@ PUBLIC_APP_NAME = "Sehyo"
 # eTLD+1 with sehyo.com so the session cookie rides the WS upgrade.
 # Served by the sehyo-typing Worker (workers/typing).
 PUBLIC_TYPING_WS_BASE = "wss://typing.sehyo.com"
+# Server-side: where the answer endpoint POSTs bot typing/comment
+# injections (same Worker, HTTP side). Auth via ADMIN_SECRET.
+# Overridden in .dev.vars to http://localhost:8787/inject for dev.
+TYPING_INJECT_URL = "https://typing.sehyo.com/inject"
 
 # Bot Runner Worker Configuration
 # This worker runs on a schedule to make bots post and interact.

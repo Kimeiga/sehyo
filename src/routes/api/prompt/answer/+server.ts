@@ -1,6 +1,6 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { generateBotRepliesOnUserAnswer } from '$lib/server/ai-bots';
+import { orchestrateBotRepliesWithTyping } from '$lib/server/ai-bots';
 
 const MAX_LEN = 2000;
 
@@ -45,28 +45,27 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 		.bind(postId, locals.user.id, prompt.id, content)
 		.run();
 
-	// Generate ~4 bot replies on the user's answer in a single batched
-	// LLM call. Powers the "X people responded — sign in to read"
-	// engagement loop. Adds a few seconds of latency; acceptable. If
-	// the AI binding is missing or generation fails, we still return
-	// success — the post itself has already been saved.
+	// Bots reply AFTER the post is saved, conversationally: the
+	// response returns immediately, then in waitUntil() each bot
+	// shows a typing indicator in this post's thread, pauses, and
+	// its reply is inserted + pushed live over the WS. Best-effort —
+	// the post itself is already committed above.
 	const ai = platform?.env?.AI;
-	let bot_replies = 0;
-	if (ai) {
-		try {
-			bot_replies = await generateBotRepliesOnUserAnswer(
-				db,
-				ai,
-				postId,
-				content,
-				locals.user.name ?? 'Anonymous'
-			);
-		} catch (err) {
-			console.error('Bot reply generation failed:', err);
-		}
+	const injectUrl = platform?.env?.TYPING_INJECT_URL;
+	const injectSecret = platform?.env?.ADMIN_SECRET;
+	if (ai && injectUrl && injectSecret) {
+		const work = orchestrateBotRepliesWithTyping(db, ai, {
+			postId,
+			postContent: content,
+			postAuthorName: locals.user.name ?? 'Anonymous',
+			injectUrl,
+			injectSecret
+		}).catch((err) => console.error('bot choreography failed:', err));
+		// Keep the worker alive past the response without blocking it.
+		if (platform?.context?.waitUntil) platform.context.waitUntil(work);
 	}
 
-	return json({ id: postId, prompt_id: prompt.id, bot_replies }, { status: 201 });
+	return json({ id: postId, prompt_id: prompt.id }, { status: 201 });
 };
 
 function todayUTC(): string {
