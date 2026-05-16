@@ -876,7 +876,7 @@ void main() {
 		font-family: var(--font-sans);
 		font-weight: 100;
 		letter-spacing: -0.025em;
-		font-size: clamp(48px, 12vw, 144px);
+		font-size: clamp(42px, 10.5vw, 124px);
 		line-height: 1.02;
 		text-align: center;
 		color: var(--foreground);
