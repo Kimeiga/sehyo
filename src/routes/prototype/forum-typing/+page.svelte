@@ -10,16 +10,24 @@
 
 	type TypingUser = { userId: string; displayName: string };
 
-	// Verbatim copy of formatTyping() from +page.svelte. Keep in sync.
-	function formatTyping(users: TypingUser[]): string {
+	// CSS rows render via {#snippet typingLabel} (masked name spans,
+	// mirrors src/routes/+page.svelte). The PromptRipple variant
+	// needs a plain string for its WebGL `text` prop, so keep a
+	// string formatter just for that.
+	function formatTypingStr(users: TypingUser[]): string {
 		if (users.length === 0) return '';
-		const names = users.map((u) => u.displayName);
-		if (names.length === 1) return `${names[0]} is typing…`;
-		if (names.length === 2) return `${names[0]} and ${names[1]} are typing…`;
-		return `${names[0]}, ${names[1]}, and ${names.length - 2} other${
-			names.length - 2 === 1 ? '' : 's'
+		const n = users.map((u) => u.displayName);
+		if (n.length === 1) return `${n[0]} is typing…`;
+		if (n.length === 2) return `${n[0]} and ${n[1]} are typing…`;
+		return `${n[0]}, ${n[1]}, and ${n.length - 2} other${
+			n.length - 2 === 1 ? '' : 's'
 		} are typing…`;
 	}
+
+	// Simulates the layout's .names-blurred engagement gate so the
+	// .author-mask blur is inspectable here regardless of whether
+	// the viewing session has answered today's prompt.
+	let simBlurred = $state(true);
 
 	const mk = (n: number): TypingUser[] =>
 		['Tab lxva', 'Mira K.', 'dashiell', 'Aoife', 'Theron', 'Yael']
@@ -64,19 +72,39 @@
 
 <svelte:head><title>Prototype — forum typing indicators</title></svelte:head>
 
-<div class="wrap">
+{#snippet typingLabel(users: TypingUser[])}
+	{#if users.length === 1}
+		<span class="author-mask">{users[0].displayName}</span> is typing…
+	{:else if users.length === 2}
+		<span class="author-mask">{users[0].displayName}</span> and
+		<span class="author-mask">{users[1].displayName}</span> are typing…
+	{:else if users.length >= 3}
+		<span class="author-mask">{users[0].displayName}</span>,
+		<span class="author-mask">{users[1].displayName}</span>, and
+		{users.length - 2} other{users.length - 2 === 1 ? '' : 's'} are typing…
+	{/if}
+{/snippet}
+
+<div class="wrap" class:sim-blurred={simBlurred}>
 	<h1>Forum typing indicators</h1>
 	<p class="sub">
-		Static preview of <code>.world-typing</code> / <code>.thread-typing</code> +
-		<code>formatTyping()</code>. No sockets. Mirrors <code>src/routes/+page.svelte</code>.
+		Static preview of <code>.world-typing</code> / <code>.thread-typing</code>. Names sit
+		in <code>.author-mask</code> spans — blurred until you answer the day's prompt
+		(same gate as the feed). No sockets. Mirrors <code>src/routes/+page.svelte</code>.
 	</p>
+
+	<div class="controls" style="margin:0 0 24px">
+		<button onclick={() => (simBlurred = !simBlurred)}>
+			names: {simBlurred ? 'BLURRED (not answered)' : 'clear (answered)'} — toggle
+		</button>
+	</div>
 
 	<section>
 		<h2>World composer — <code>.world-typing</code> (centered, 13px)</h2>
 		{#each cases as n (n)}
 			<div class="demo-row">
 				<span class="tag">{n} typer{n === 1 ? '' : 's'}</span>
-				<p class="world-typing" class:visible={n > 0}>{formatTyping(mk(n))}</p>
+				<p class="world-typing" class:visible={n > 0}>{@render typingLabel(mk(n))}</p>
 			</div>
 		{/each}
 	</section>
@@ -86,7 +114,7 @@
 		{#each cases as n (n)}
 			<div class="demo-row">
 				<span class="tag">{n} typer{n === 1 ? '' : 's'}</span>
-				<p class="thread-typing" class:visible={n > 0}>{formatTyping(mk(n))}</p>
+				<p class="thread-typing" class:visible={n > 0}>{@render typingLabel(mk(n))}</p>
 			</div>
 		{/each}
 	</section>
@@ -104,7 +132,7 @@
 				toggle sending halo ({sending ? 'on' : 'off'})
 			</button>
 		</div>
-		<p class="world-typing" class:visible={liveVisible}>{formatTyping(mk(liveCount))}</p>
+		<p class="world-typing" class:visible={liveVisible}>{@render typingLabel(mk(liveCount))}</p>
 		<textarea
 			class:typing-sending={sending}
 			rows="3"
@@ -124,7 +152,7 @@
 			<span class="tag">1 typer</span>
 			<div class="ripple-slot">
 				<PromptRipple
-					text={formatTyping(mk(1))}
+					text={formatTypingStr(mk(1))}
 					interactive={false}
 					headingStyle="font-family: var(--font-sans); font-size: 13px; font-weight: 400; line-height: 1; max-width: none; text-align: left;"
 					autoRipple={SUBTLE_RIPPLE}
@@ -136,7 +164,7 @@
 			<span class="tag">3 typers</span>
 			<div class="ripple-slot wide">
 				<PromptRipple
-					text={formatTyping(mk(3))}
+					text={formatTypingStr(mk(3))}
 					interactive={false}
 					headingStyle="font-family: var(--font-sans); font-size: 13px; font-weight: 400; line-height: 1; max-width: none; text-align: left;"
 					autoRipple={SUBTLE_RIPPLE}
@@ -155,7 +183,7 @@
 		{#if rippleVisible}
 			<div class="ripple-slot wide">
 				<PromptRipple
-					text={formatTyping(mk(rippleCount))}
+					text={formatTypingStr(mk(rippleCount))}
 					interactive={false}
 					headingStyle="font-family: var(--font-sans); font-size: 13px; font-weight: 400; line-height: 1; max-width: none; text-align: left;"
 					autoRipple={SUBTLE_RIPPLE}
@@ -313,5 +341,21 @@
 	}
 	.ripple-slot :global(.ripple-canvas) {
 		opacity: 0.72;
+	}
+
+	/* Mirror the real engagement gate. The app layout already
+	   blurs .author-mask when the viewer hasn't answered
+	   (.app.names-blurred); here the local toggle is made
+	   authoritative so the effect is inspectable either way —
+	   !important beats the layout rule when toggled clear. */
+	.wrap :global(.author-mask) {
+		transition: filter 140ms ease;
+	}
+	.wrap.sim-blurred :global(.author-mask) {
+		filter: blur(5px);
+		user-select: none;
+	}
+	.wrap:not(.sim-blurred) :global(.author-mask) {
+		filter: none !important;
 	}
 </style>
