@@ -1,11 +1,17 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
 	import { invalidateAll } from '$app/navigation';
-	import { tick } from 'svelte';
+	import { tick, type Snippet } from 'svelte';
 	import { authClient } from '$lib/auth-client';
 	import { promptSignIn } from '$lib/stores/sign-in-modal';
-	import { Pencil, MoreHorizontal, Check, ArrowUp } from 'lucide-svelte';
+	import { Pencil, MoreHorizontal, Check, ArrowUp, Plus } from 'lucide-svelte';
 	import PromptRipple from '$lib/components/PromptRipple.svelte';
+	import { writable } from 'svelte/store';
+	import {
+		connectForumTyping,
+		type ForumTypingHandle,
+		type TypingUser
+	} from '$lib/stores/forum-typing';
 
 	let { data }: PageProps = $props();
 
@@ -113,21 +119,170 @@
 		}
 	}
 
-	let commentingOnPost = $state<string | null>(null);
-	let commentValue = $state('');
-	let submittingComment = $state(false);
+	/* Unified reply state — covers both top-level "add a comment" on a
+	   post AND nested replies to a comment. Exactly ONE composer is
+	   ever open at a time: switching targets clears the previous
+	   composer's text, so the user can't get into a state where a
+	   forgotten composer is dangling open somewhere above. */
+	type ReplyTarget = { postId: string; parentCommentId: string | null };
+	let activeReplyTarget = $state<ReplyTarget | null>(null);
 
 	const commentsByPost = $derived<Record<string, CommentRow[]>>({
 		...((data as { todayCommentsByPost?: Record<string, CommentRow[]> }).todayCommentsByPost ?? {}),
 		...((data as { commentsByPost?: Record<string, CommentRow[]> }).commentsByPost ?? {})
 	});
 
-	let replyingTo = $state<string | null>(null);
-	let replyValue = $state('');
+	let replyContent = $state('');
 	let submittingReply = $state(false);
+
+	function isActiveReply(postId: string, parentCommentId: string | null): boolean {
+		return (
+			!!activeReplyTarget &&
+			activeReplyTarget.postId === postId &&
+			activeReplyTarget.parentCommentId === parentCommentId
+		);
+	}
+
+	function closeReply() {
+		activeReplyTarget = null;
+		replyContent = '';
+	}
+
+	async function openReply(target: ReplyTarget) {
+		activeReplyTarget = target;
+		replyContent = '';
+		// Focus the textarea on next tick so typing can start
+		// immediately. No scrollIntoView — the composer just appears
+		// where the user clicked.
+		await tick();
+		if (typeof document === 'undefined') return;
+		const selector = target.parentCommentId
+			? `form.reply-composer[data-reply-target="reply-${target.parentCommentId}"]`
+			: `form.reply-composer[data-reply-target="post-${target.postId}"]`;
+		const ta = document.querySelector<HTMLTextAreaElement>(`${selector} textarea`);
+		ta?.focus({ preventScroll: true });
+	}
+
+	function toggleReplyTarget(target: ReplyTarget) {
+		if (isActiveReply(target.postId, target.parentCommentId)) {
+			closeReply();
+		} else {
+			openReply(target);
+		}
+	}
 
 	const isAnon = $derived(!!data.user && !!data.user.isAnonymous);
 	const isFullySignedIn = $derived(!!data.user && !data.user.isAnonymous);
+
+	/* Forum typing indicator.
+
+	   Production gate: user is fully signed in AND has answered today's
+	   prompt (so they can actually see the World composer).
+
+	   Dev gate: Vite dev only (import.meta.env.DEV). Skips both checks
+	   and gives each browser tab its own pseudo-identity so a single
+	   developer can test the typing flow across tabs without a second
+	   real sign-in. The Worker mirrors this — when it sees a localhost
+	   host it skips cookie validation and trusts the URL params.
+
+	   The empty `writable` is a placeholder so the template can use
+	   $worldTypingUsers unconditionally. */
+	const TYPING_TAG = '[typing/page]';
+	const tdbg = (...args: unknown[]) => console.debug(TYPING_TAG, ...args);
+
+	const isDevTyping = import.meta.env.DEV;
+
+	const devTabIdentity = (() => {
+		if (!isDevTyping || typeof window === 'undefined') return null;
+		let id = sessionStorage.getItem('dev-typing-tab-id');
+		const wasExisting = !!id;
+		if (!id) {
+			id = 'dev-' + Math.random().toString(36).slice(2, 10);
+			sessionStorage.setItem('dev-typing-tab-id', id);
+		}
+		tdbg('devTabIdentity resolved', { id, wasExisting });
+		return { userId: id, displayName: `Tab ${id.slice(-4)}` };
+	})();
+
+	let worldTypingHandle: ForumTypingHandle | null = null;
+	const worldTypingUsers = writable<TypingUser[]>([]);
+
+	$effect(() => {
+		const gatePassed = isDevTyping || (isFullySignedIn && !!data.myAnswer);
+		tdbg('$effect fire', {
+			isDev: isDevTyping,
+			isFullySignedIn,
+			hasMyAnswer: !!data.myAnswer,
+			userId: data.user?.id ?? null,
+			devTab: devTabIdentity,
+			gatePassed
+		});
+		if (!gatePassed) {
+			tdbg('$effect gate BLOCKED — bailing');
+			return;
+		}
+		tdbg('$effect gate PASSED — calling connectForumTyping');
+		const handle = connectForumTyping('forum', devTabIdentity);
+		worldTypingHandle = handle;
+		const unsub = handle.typingUsers.subscribe((v) => {
+			tdbg('typingUsers subscriber fired', { len: v.length, users: v });
+			worldTypingUsers.set(v);
+		});
+		return () => {
+			tdbg('$effect cleanup — unsubscribing + disconnecting');
+			unsub();
+			handle.disconnect();
+			worldTypingHandle = null;
+			worldTypingUsers.set([]);
+		};
+	});
+
+	/* Sender-side highlight: which threadId most-recently fired a real
+	   send. The composer matching that id gets the green halo. Cleared
+	   after 5s (matches receiver TTL). Single string is fine because
+	   the user can only physically type in one composer at a time. */
+	let sendingActiveThreadId = $state<string | null>(null);
+	let sendingTimer: ReturnType<typeof setTimeout> | null = null;
+	const SENDING_VISIBLE_MS = 5000;
+
+	function notifyForThread(threadId: string) {
+		tdbg('notifyForThread fired', { threadId });
+		const sent = worldTypingHandle?.notifyTyping(threadId) ?? false;
+		tdbg('notifyForThread result', { threadId, sent });
+		if (sent) {
+			sendingActiveThreadId = threadId;
+			if (sendingTimer) clearTimeout(sendingTimer);
+			sendingTimer = setTimeout(() => {
+				tdbg('sendingActive cleared (timer expired)', { threadId });
+				sendingActiveThreadId = null;
+				sendingTimer = null;
+			}, SENDING_VISIBLE_MS);
+		}
+	}
+
+	function onWorldInput() {
+		notifyForThread('world');
+	}
+	function onCommentInput(postId: string) {
+		notifyForThread('post-' + postId);
+	}
+	function onReplyInput(commentId: string) {
+		notifyForThread('reply-' + commentId);
+	}
+
+	const typingSelfId = $derived(devTabIdentity?.userId ?? data.user?.id);
+
+	function typingForThread(all: TypingUser[], threadId: string, selfId: string | undefined) {
+		return all.filter((u) => u.threadId === threadId && u.userId !== selfId);
+	}
+
+	function formatTyping(users: TypingUser[]): string {
+		if (users.length === 0) return '';
+		const names = users.map((u) => u.displayName);
+		if (names.length === 1) return `${names[0]} is typing…`;
+		if (names.length === 2) return `${names[0]} and ${names[1]} are typing…`;
+		return `${names[0]}, ${names[1]}, and ${names.length - 2} other${names.length - 2 === 1 ? '' : 's'} are typing…`;
+	}
 
 	const unlockedSet = $derived(new Set(data.unlockedAvatars ?? []));
 	function isAvatarRevealed(userId: string | undefined | null): boolean {
@@ -276,81 +431,31 @@
 		}
 	}
 
-	async function focusComposer(postId: string) {
-		commentingOnPost = postId;
-		commentValue = '';
-		// Wait for the composer to render, then scroll it into view +
-		// focus the textarea so a long thread doesn't bury the
-		// "Add a comment" field.
-		await tick();
-		if (typeof document === 'undefined') return;
-		const form = document.querySelector<HTMLFormElement>(
-			`form.comment-composer[data-for-post="${postId}"]`
-		);
-		if (form) {
-			form.scrollIntoView({ behavior: 'smooth', block: 'center' });
-			const ta = form.querySelector('textarea');
-			ta?.focus({ preventScroll: true });
-		}
-	}
-
-	async function submitComment(postId: string, e: SubmitEvent) {
+	async function submitActiveReply(e: SubmitEvent) {
 		e.preventDefault();
-		const content = commentValue.trim();
-		if (!content || submittingComment) return;
-		submittingComment = true;
-		try {
-			if (!(await ensureSession())) return;
-			const res = await fetch(`/api/posts/${postId}/comments`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				credentials: 'include',
-				body: JSON.stringify({ content })
-			});
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			commentValue = '';
-			commentingOnPost = null;
-			await invalidateAll();
-		} catch (err) {
-			console.error('Comment failed:', err);
-			alert('Could not post comment. Try again.');
-		} finally {
-			submittingComment = false;
-		}
-	}
-
-	async function submitReply(postId: string, parentCommentId: string, e: SubmitEvent) {
-		e.preventDefault();
-		const content = replyValue.trim();
-		if (!content || submittingReply) return;
+		if (!activeReplyTarget || submittingReply) return;
+		const content = replyContent.trim();
+		if (!content) return;
+		const target = activeReplyTarget;
 		submittingReply = true;
 		try {
 			if (!(await ensureSession())) return;
-			const res = await fetch(`/api/posts/${postId}/comments`, {
+			const body: { content: string; parent_comment_id?: string } = { content };
+			if (target.parentCommentId) body.parent_comment_id = target.parentCommentId;
+			const res = await fetch(`/api/posts/${target.postId}/comments`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				credentials: 'include',
-				body: JSON.stringify({ content, parent_comment_id: parentCommentId })
+				body: JSON.stringify(body)
 			});
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			replyValue = '';
-			replyingTo = null;
+			closeReply();
 			await invalidateAll();
 		} catch (err) {
 			console.error('Reply failed:', err);
 			alert('Could not post reply. Try again.');
 		} finally {
 			submittingReply = false;
-		}
-	}
-
-	function toggleReply(commentId: string) {
-		if (replyingTo === commentId) {
-			replyingTo = null;
-			replyValue = '';
-		} else {
-			replyingTo = commentId;
-			replyValue = '';
 		}
 	}
 
@@ -423,9 +528,13 @@
 			<p class="locked-cta">Answer today's question to explore the world of sehyo.</p>
 		{/if}
 
-		{#if data.myAnswer}
+		{#if data.myAnswer || isDevTyping}
 			<p class="nudge">
-				A new question will be posited tomorrow.
+				{#if isDevTyping && !data.myAnswer}
+					<span style="color:#f78166;font-family:monospace;">[dev mode — typing as {devTabIdentity?.displayName}]</span>
+				{:else}
+					A new question will be posited tomorrow.
+				{/if}
 				{#if notificationPermission === 'granted'}
 					<span class="nudge-state">Notifications on.</span>
 				{:else if notificationPermission === 'ios-pwa-required'}
@@ -440,6 +549,11 @@
 
 			<hr class="world-divider" />
 			<h2 class="world-label">World</h2>
+
+			{@const worldTypers = typingForThread($worldTypingUsers, 'world', typingSelfId)}
+			<p class="world-typing" aria-live="polite" class:visible={worldTypers.length > 0}>
+				{formatTyping(worldTypers)}
+			</p>
 
 			<section class="free-section">
 				<div class="world-tabs" role="tablist" aria-label="World composer">
@@ -464,6 +578,8 @@
 				<form class="composer" onsubmit={submitWorld}>
 					<textarea
 						bind:value={worldValue}
+						oninput={onWorldInput}
+						class:typing-sending={sendingActiveThreadId === 'world'}
 						placeholder={worldTab === 'ask' ? 'Ask a question…' : "What's on your mind?"}
 						rows={worldTab === 'ask' ? 2 : 3}
 						maxlength={worldTab === 'ask' ? 280 : 2000}
@@ -580,11 +696,176 @@
 	</header>
 {/snippet}
 
+<!-- Shared shell for any thread node — top-level post, user question,
+     or nested comment. Renders the .tw-row (avatar + main column with
+     body + optional inline composer), the children list, and the
+     trailing "+" reply affordance.
+
+     The variant-specific chrome (wrapping <li>/<article>, threading
+     SVG segments for nested replies, post-level edit mode, top-level
+     comment composer) lives at the call sites. Anything visual that
+     appears in BOTH a top-level post and a nested reply belongs in
+     here, so styling/behavior tweaks apply uniformly. -->
+{#snippet treeShell(args: {
+	userId: string;
+	username?: string | null;
+	displayName?: string | null;
+	image?: string | null;
+	isOwn: boolean;
+	/* When set, this avatar replaces the normal user's avatar (used
+	   by post edit mode to show the current viewer's pic). */
+	avatarOverride?: { id: string; image?: string | null } | null;
+	body: Snippet;
+	composer?: Snippet | null;
+	hasKids: boolean;
+	children?: Snippet | null;
+	onPlus: () => void;
+	plusActive?: boolean;
+	showPlus?: boolean;
+})}
+	{@const plusVisible = args.showPlus !== false && !args.plusActive}
+	{@const trunkExtendsForComposer = !!args.composer}
+	<div class="tw-row">
+		<div class="tw-left">
+			{#if args.avatarOverride}
+				{@render avatar(args.avatarOverride.id, args.avatarOverride.image)}
+			{:else if args.username}
+				<a class="tw-avatar-link" href="/{args.username}" aria-label={args.displayName ?? 'Profile'}>
+					{@render avatar(args.userId, args.image)}
+				</a>
+			{:else}
+				{@render avatar(args.userId, args.image)}
+			{/if}
+			{#if args.hasKids || trunkExtendsForComposer}
+				<!-- Trunk descends from avatar — needed when there are
+				     children below OR when an open composer below acts
+				     like a fresh child to attach to. -->
+				<div class="tw-line"></div>
+			{:else if plusVisible}
+				<!-- Leaf with no open composer: the trunk has no
+				     children to descend through, so the "+" hangs
+				     straight off the avatar. -->
+				<span class="tw-add-stem" aria-hidden="true"></span>
+				<button
+					class="tw-add-plus"
+					type="button"
+					onclick={args.onPlus}
+					aria-label="Reply"
+					title="Reply"
+				>
+					<Plus size="12" strokeWidth="2.4" />
+				</button>
+			{/if}
+		</div>
+		<div class="tw-main">
+			{@render authorMeta(args.displayName, args.username, args.isOwn)}
+			{@render args.body()}
+		</div>
+	</div>
+
+	{#if args.children}{@render args.children()}{/if}
+
+	{#if args.composer}{@render args.composer()}{/if}
+
+	{#if args.hasKids && plusVisible}
+		<!-- Has-kids node, composer closed: render the trailing "+"
+		     to terminate the trunk past the last L-junction. -->
+		<div class="tw-add">
+			<span class="tw-add-stem" aria-hidden="true"></span>
+			<button
+				class="tw-add-plus"
+				type="button"
+				onclick={args.onPlus}
+				aria-label="Reply"
+				title="Reply"
+			>
+				<Plus size="12" strokeWidth="2.4" />
+			</button>
+		</div>
+	{/if}
+{/snippet}
+
+<!-- Active reply composer, shaped like a tree node (avatar + name +
+     body) but with a textarea in place of the body. Renders at the
+     end of the target's subtree, mirroring the geometry of a real
+     reply so the threading line appears to extend down into it.
+
+     `data-reply-target` is how openReply() finds this form to
+     scroll-into-view + auto-focus the textarea. -->
+{#snippet replyComposer(postId: string, parentCommentId: string | null)}
+	{@const threadKey = parentCommentId ? 'reply-' + parentCommentId : 'post-' + postId}
+	{@const typers = typingForThread($worldTypingUsers, threadKey, typingSelfId)}
+	{@const meUserId = data.user?.id ?? 'guest'}
+	{@const meImage = (data.user as { image?: string | null } | null)?.image ?? null}
+	{@const meDisplayName = (data.user as { name?: string | null } | null)?.name ?? 'You'}
+	{@const meUsername = (data.user as { username?: string | null } | null)?.username ?? null}
+	<div class="tw-item is-composer">
+		<!-- No .tw-trunk-out: the composer is the bottom of the
+		     subtree, so there's nothing below for a leaving-vertical
+		     segment to connect to. Just the L-hook curving from the
+		     parent's trunk into the composer's avatar. -->
+		<svg class="tw-hook" viewBox="0 0 22 32" aria-hidden="true" focusable="false">
+			<!-- The path is 50 user-units long (vertical 30 + horizontal 20),
+			     so stroke-dasharray:50 + dashoffset → 0 draws the L on mount
+			     in the CSS animation below. -->
+			<path d="M 1 0 V 30 H 21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter" />
+		</svg>
+		<div class="tw-row">
+			<div class="tw-left">
+				{@render avatar(meUserId, meImage)}
+			</div>
+			<div class="tw-main">
+				<header class="tw-meta">
+					<span class="tw-name">{meDisplayName}</span>
+					{#if meUsername}<span class="tw-handle">@{meUsername}</span>{/if}
+				</header>
+				<p class="thread-typing" aria-live="polite" class:visible={typers.length > 0}>
+					{formatTyping(typers)}
+				</p>
+				<form class="reply-composer" data-reply-target={threadKey} onsubmit={submitActiveReply}>
+					<textarea
+						bind:value={replyContent}
+						oninput={() => notifyForThread(threadKey)}
+						class:typing-sending={sendingActiveThreadId === threadKey}
+						placeholder={parentCommentId ? 'Reply…' : 'Add a comment…'}
+						rows="2"
+						maxlength="1000"
+						disabled={submittingReply}
+					></textarea>
+					<button
+						type="submit"
+						class="post-button small"
+						disabled={submittingReply || replyContent.trim().length === 0}
+					>{submittingReply ? '…' : (parentCommentId ? 'Reply' : 'Post')}</button>
+				</form>
+			</div>
+		</div>
+	</div>
+{/snippet}
+
 {#snippet commentNode(c: CommentRow, postId: string, depth: number)}
 	{@const all = commentsByPost[postId] ?? []}
 	{@const kids = childrenOf(all, c.id)}
 	{@const hasKids = kids.length > 0}
 	{@const ownComment = !!data.user && c.user_id === data.user.id}
+	{@const isActive = isActiveReply(postId, c.id)}
+	{#snippet commentBody()}
+		<p class="tw-body">{c.content}</p>
+	{/snippet}
+	{#snippet commentComposerSlot()}
+		{@render replyComposer(postId, c.id)}
+	{/snippet}
+	{#snippet commentChildren()}
+		<ul class="tw-children" class:capped={depth + 1 >= MAX_NEST_DEPTH}>
+			{#each kids as child (child.id)}
+				{#if depth + 1 < MAX_NEST_DEPTH}
+					{@render commentNode(child, postId, depth + 1)}
+				{:else}
+					{@render commentNode(child, postId, depth)}
+				{/if}
+			{/each}
+		</ul>
+	{/snippet}
 	<li class="tw-item is-reply">
 		<!-- Leaving-trunk segment bridging this reply's T-junction down
 		     to the next sibling's top. CSS hides this for last-child
@@ -608,56 +889,19 @@
 				stroke-linejoin="miter"
 			/>
 		</svg>
-		<div class="tw-row">
-			<div class="tw-left">
-				{#if c.user?.username}
-					<a class="tw-avatar-link" href="/{c.user.username}" aria-label={c.user.display_name ?? 'Profile'}>
-						{@render avatar(c.user_id, c.user?.profile_picture_url)}
-					</a>
-				{:else}
-					{@render avatar(c.user_id, c.user?.profile_picture_url)}
-				{/if}
-				{#if hasKids}<div class="tw-line"></div>{/if}
-			</div>
-			<div class="tw-main">
-				{@render authorMeta(c.user?.display_name, c.user?.username, ownComment)}
-				<p class="tw-body">{c.content} <button
-					type="button"
-					class="reply-label"
-					onclick={() => toggleReply(c.id)}
-					aria-label={replyingTo === c.id ? 'Cancel reply' : 'Reply'}
-				>REPLY{#if hasKids}&nbsp;·&nbsp;{kids.length}{/if}</button></p>
-
-				{#if replyingTo === c.id}
-					<form class="reply-composer" onsubmit={(e) => submitReply(postId, c.id, e)}>
-						<textarea
-							bind:value={replyValue}
-							placeholder="Reply…"
-							rows="2"
-							maxlength="1000"
-							disabled={submittingReply}
-						></textarea>
-						<button
-							type="submit"
-							class="post-button small"
-							disabled={submittingReply || replyValue.trim().length === 0}
-						>{submittingReply ? '…' : 'Reply'}</button>
-					</form>
-				{/if}
-			</div>
-		</div>
-
-		{#if hasKids}
-			<ul class="tw-children" class:capped={depth + 1 >= MAX_NEST_DEPTH}>
-				{#each kids as child (child.id)}
-					{#if depth + 1 < MAX_NEST_DEPTH}
-						{@render commentNode(child, postId, depth + 1)}
-					{:else}
-						{@render commentNode(child, postId, depth)}
-					{/if}
-				{/each}
-			</ul>
-		{/if}
+		{@render treeShell({
+			userId: c.user_id,
+			username: c.user?.username,
+			displayName: c.user?.display_name,
+			image: c.user?.profile_picture_url,
+			isOwn: ownComment,
+			body: commentBody,
+			composer: isActive ? commentComposerSlot : null,
+			hasKids,
+			children: hasKids ? commentChildren : null,
+			onPlus: () => toggleReplyTarget({ postId, parentCommentId: c.id }),
+			plusActive: isActive
+		})}
 	</li>
 {/snippet}
 
@@ -670,95 +914,94 @@
 	{@const tops = topLevelOf(all)}
 	{@const hasTops = tops.length > 0}
 	{@const guestLocked = isMine && hasTops && !isFullySignedIn}
-	<article class="tw-post">
-		<div class="tw-item is-post">
-			<div class="tw-row">
-				<div class="tw-left">
-					{#if isMine && editing}
-						{#if data.user}
-							{@render avatar(data.user.id, (data.user as { image?: string | null }).image)}
-						{/if}
-					{:else if a.username}
-						<a class="tw-avatar-link" href="/{a.username}" aria-label={a.display_name ?? 'Profile'}>
-							{@render avatar(a.user_id, a.image)}
-						</a>
-					{:else}
-						{@render avatar(a.user_id, a.image)}
-					{/if}
-					{#if hasTops}<div class="tw-line"></div>{/if}
-				</div>
-				<div class="tw-main">
-					{@render authorMeta(a.display_name, a.username, isMine)}
-					{#if isMine && editing}
-						<textarea
-							bind:value={editValue}
-							rows="3"
-							maxlength="2000"
-							disabled={savingEdit || deleting}
-							class="edit-textarea"
-						></textarea>
-						<div class="edit-bar">
+	{@const inEditMode = isMine && editing}
+	{@const isActive = isActiveReply(a.id, null)}
+	{#snippet postComposerSlot()}
+		{@render replyComposer(a.id, null)}
+	{/snippet}
+	{#snippet postBody()}
+		{#if inEditMode}
+			<textarea
+				bind:value={editValue}
+				rows="3"
+				maxlength="2000"
+				disabled={savingEdit || deleting}
+				class="edit-textarea"
+			></textarea>
+			<div class="edit-bar">
+				<button
+					type="button"
+					class="post-button small"
+					onclick={saveEdit}
+					disabled={savingEdit || deleting || editValue.trim().length === 0}
+				>
+					<Check size="16" strokeWidth="2.2" />
+					{savingEdit ? 'Saving…' : 'Save'}
+				</button>
+				<div class="popover-container">
+					<button
+						type="button"
+						class="kebab"
+						aria-label="More actions"
+						aria-expanded={kebabOpen}
+						onclick={toggleKebab}
+						disabled={savingEdit || deleting}
+					>
+						<MoreHorizontal size="18" strokeWidth="2" />
+					</button>
+					{#if kebabOpen}
+						<div class="popover" role="menu">
+							<button type="button" class="popover-item" onclick={cancelEdit} role="menuitem">
+								Cancel
+							</button>
 							<button
 								type="button"
-								class="post-button small"
-								onclick={saveEdit}
-								disabled={savingEdit || deleting || editValue.trim().length === 0}
+								class="popover-item destructive"
+								onclick={deleteAnswer}
+								role="menuitem"
+								disabled={deleting}
 							>
-								<Check size="16" strokeWidth="2.2" />
-								{savingEdit ? 'Saving…' : 'Save'}
+								{deleting ? 'Deleting…' : 'Delete'}
 							</button>
-							<div class="popover-container">
-								<button
-									type="button"
-									class="kebab"
-									aria-label="More actions"
-									aria-expanded={kebabOpen}
-									onclick={toggleKebab}
-									disabled={savingEdit || deleting}
-								>
-									<MoreHorizontal size="18" strokeWidth="2" />
-								</button>
-								{#if kebabOpen}
-									<div class="popover" role="menu">
-										<button type="button" class="popover-item" onclick={cancelEdit} role="menuitem">
-											Cancel
-										</button>
-										<button
-											type="button"
-											class="popover-item destructive"
-											onclick={deleteAnswer}
-											role="menuitem"
-											disabled={deleting}
-										>
-											{deleting ? 'Deleting…' : 'Delete'}
-										</button>
-									</div>
-								{/if}
-							</div>
 						</div>
-					{:else}
-						<p class="tw-body">{a.content} <button
-							type="button"
-							class="reply-label"
-							onclick={() => focusComposer(a.id)}
-							aria-label="Reply"
-						>REPLY{#if a.comment_count > 0}&nbsp;·&nbsp;{a.comment_count}{/if}</button>{#if isMine}<button
-							type="button"
-							class="reply-label edit-label"
-							onclick={startEdit}
-							aria-label="Edit answer"
-						>EDIT</button>{/if}</p>
 					{/if}
 				</div>
 			</div>
-
-			{#if hasTops}
-				<ul class="tw-children" class:guest-locked={guestLocked}>
-					{#each tops as c (c.id)}
-						{@render commentNode(c, a.id, 0)}
-					{/each}
-				</ul>
-			{/if}
+		{:else}
+			<p class="tw-body">{a.content}{#if isMine} <button
+				type="button"
+				class="reply-label edit-label"
+				onclick={startEdit}
+				aria-label="Edit answer"
+			>EDIT</button>{/if}</p>
+		{/if}
+	{/snippet}
+	{#snippet postChildren()}
+		<ul class="tw-children" class:guest-locked={guestLocked}>
+			{#each tops as c (c.id)}
+				{@render commentNode(c, a.id, 0)}
+			{/each}
+		</ul>
+	{/snippet}
+	<article class="tw-post">
+		<div class="tw-item is-post">
+			{@render treeShell({
+				userId: a.user_id,
+				username: a.username,
+				displayName: a.display_name,
+				image: a.image,
+				isOwn: isMine,
+				avatarOverride: inEditMode && data.user
+					? { id: data.user.id, image: (data.user as { image?: string | null }).image }
+					: null,
+				body: postBody,
+				composer: isActive && !guestLocked ? postComposerSlot : null,
+				hasKids: hasTops,
+				children: hasTops ? postChildren : null,
+				onPlus: () => toggleReplyTarget({ postId: a.id, parentCommentId: null }),
+				plusActive: isActive,
+				showPlus: !guestLocked
+			})}
 		</div>
 
 		{#if hasTops && guestLocked}
@@ -769,23 +1012,6 @@
 				</span>
 			</div>
 		{/if}
-
-		{#if commentingOnPost === a.id && !guestLocked}
-			<form class="comment-composer" data-for-post={a.id} onsubmit={(e) => submitComment(a.id, e)}>
-				<textarea
-					bind:value={commentValue}
-					placeholder="Add a comment…"
-					rows="2"
-					maxlength="1000"
-					disabled={submittingComment}
-				></textarea>
-				<button
-					type="submit"
-					class="post-button small"
-					disabled={submittingComment || commentValue.trim().length === 0}
-				>{submittingComment ? '…' : 'Post'}</button>
-			</form>
-		{/if}
 	</article>
 {/snippet}
 
@@ -793,55 +1019,36 @@
 	{@const all = commentsByPost[q.id] ?? []}
 	{@const tops = topLevelOf(all)}
 	{@const hasTops = tops.length > 0}
+	{@const isActive = isActiveReply(q.id, null)}
+	{#snippet questionBody()}
+		<h3 class="user-question-text">{q.content}</h3>
+	{/snippet}
+	{#snippet questionChildren()}
+		<ul class="tw-children">
+			{#each tops as c (c.id)}
+				{@render commentNode(c, q.id, 0)}
+			{/each}
+		</ul>
+	{/snippet}
+	{#snippet questionComposerSlot()}
+		{@render replyComposer(q.id, null)}
+	{/snippet}
 	<article class="tw-post user-question">
 		<div class="tw-item is-post">
-			<div class="tw-row">
-				<div class="tw-left">
-					{#if q.username}
-						<a class="tw-avatar-link" href="/{q.username}" aria-label={q.display_name ?? 'Profile'}>
-							{@render avatar(q.user_id, q.image)}
-						</a>
-					{:else}
-						{@render avatar(q.user_id, q.image)}
-					{/if}
-					{#if hasTops}<div class="tw-line"></div>{/if}
-				</div>
-				<div class="tw-main">
-					{@render authorMeta(q.display_name, q.username, false)}
-					<h3 class="user-question-text">{q.content} <button
-						type="button"
-						class="reply-label"
-						onclick={() => focusComposer(q.id)}
-						aria-label="Reply"
-					>REPLY{#if q.comment_count > 0}&nbsp;·&nbsp;{q.comment_count}{/if}</button></h3>
-				</div>
-			</div>
-
-			{#if hasTops}
-				<ul class="tw-children">
-					{#each tops as c (c.id)}
-						{@render commentNode(c, q.id, 0)}
-					{/each}
-				</ul>
-			{/if}
+			{@render treeShell({
+				userId: q.user_id,
+				username: q.username,
+				displayName: q.display_name,
+				image: q.image,
+				isOwn: false,
+				body: questionBody,
+				composer: isActive ? questionComposerSlot : null,
+				hasKids: hasTops,
+				children: hasTops ? questionChildren : null,
+				onPlus: () => toggleReplyTarget({ postId: q.id, parentCommentId: null }),
+				plusActive: isActive
+			})}
 		</div>
-
-		{#if commentingOnPost === q.id}
-			<form class="comment-composer" onsubmit={(e) => submitComment(q.id, e)}>
-				<textarea
-					bind:value={commentValue}
-					placeholder="Add a comment…"
-					rows="2"
-					maxlength="1000"
-					disabled={submittingComment}
-				></textarea>
-				<button
-					type="submit"
-					class="post-button small"
-					disabled={submittingComment || commentValue.trim().length === 0}
-				>{submittingComment ? '…' : 'Post'}</button>
-			</form>
-		{/if}
 	</article>
 {/snippet}
 
@@ -1076,11 +1283,11 @@
 		font-size: 13px;
 		letter-spacing: 0;
 	}
-	.composer textarea, .edit-textarea, .comment-composer textarea, .reply-composer textarea {
+	.composer textarea, .edit-textarea, .reply-composer textarea {
 		width: 100%;
 		font-family: var(--font-sans);
 		font-size: 16px;
-		line-height: 1.5;
+		line-height: 1.55;
 		padding: 12px 14px;
 		/* Perfect rectangle — no rounding. */
 		border-radius: 0;
@@ -1091,7 +1298,17 @@
 		min-height: 88px;
 	}
 	.composer textarea { min-height: 96px; font-size: 17px; padding: 14px 16px; }
-	.composer textarea:focus, .edit-textarea:focus, .comment-composer textarea:focus, .reply-composer textarea:focus {
+	/* Reply composer sits inline within the comment tree, so it
+	   should read like a comment body, not a heavy form. Same font
+	   size + line-height as .tw-body, with tight padding and no
+	   forced min-height so it doesn't dominate the row. */
+	.reply-composer textarea {
+		font-size: 14px;
+		line-height: 1.5;
+		padding: 6px 10px;
+		min-height: 32px;
+	}
+	.composer textarea:focus, .edit-textarea:focus, .reply-composer textarea:focus {
 		outline: 2px solid var(--ring);
 		outline-offset: -1px;
 	}
@@ -1176,11 +1393,22 @@
 		align-items: stretch;
 		width: 100%;
 	}
-	.tw-item.is-reply {
+	.tw-item.is-reply,
+	.tw-item.is-composer {
 		list-style: none;
 		position: relative;
 		padding-top: 18px;
 	}
+	/* The active reply composer is rendered as a sibling of
+	   .tw-children, not inside it, so we manually apply the same
+	   32px indent that .tw-children's padding-left would otherwise
+	   provide. With this indent in place the .tw-hook + .tw-trunk-out
+	   children (positioned at left:-21px in their own coord space)
+	   land on the parent's trunk centerline just like a real reply. */
+	.tw-item.is-composer {
+		margin-left: 32px;
+	}
+
 
 	.tw-left {
 		flex-shrink: 0;
@@ -1417,8 +1645,59 @@
 		);
 		pointer-events: none;
 	}
-	.tw-children > .tw-item.is-reply:last-child > .tw-trunk-out {
-		display: none;
+	/* The last child's trunk-out used to be hidden here. We now keep
+	   it visible so the threading line extends past the L-corner all
+	   the way to the trailing "+" affordance below the children. The
+	   stem on .tw-add picks up where the trunk-out leaves off. */
+
+	/* "Add reply" affordance: a small plus that terminates the trunk
+	   column for a comment/post subtree.
+	     – For a leaf (no children) the plus + a tiny stub render
+	       directly INSIDE .tw-left, immediately below the avatar.
+	       That keeps it visually tethered to the profile pic instead
+	       of dangling at the bottom of a long body.
+	     – For a parent with children the plus renders BELOW the
+	       children in its own flex column matching .tw-left's 24px,
+	       so the plus center lands on the same x as the trunk line.
+
+	   Both variants share the same .tw-add-stem + .tw-add-plus
+	   primitives — only the placement in the template differs. */
+	.tw-add {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		width: 24px;
+		padding: 0;
+		margin: 0;
+	}
+	.tw-add-stem {
+		width: 2px;
+		height: 4px;
+		background: var(--line-strong);
+	}
+	.tw-add-plus {
+		appearance: none;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 16px;
+		height: 16px;
+		padding: 0;
+		border-radius: 999px;
+		border: 1.5px solid var(--line-strong);
+		background: var(--background);
+		color: var(--muted-foreground);
+		cursor: pointer;
+		transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+	}
+	.tw-add-plus:hover {
+		color: var(--foreground);
+		background: var(--muted);
+		border-color: var(--muted-foreground);
+	}
+	.tw-add-plus:focus-visible {
+		outline: 2px solid var(--ring, var(--brand, currentColor));
+		outline-offset: 2px;
 	}
 
 	.tw-children.capped {
@@ -1426,22 +1705,17 @@
 		   visual indent change. */
 	}
 
-	.reply-composer,
-	.comment-composer {
+	/* Reply composer form — sits inside .tw-main of the active
+	   .tw-item.is-composer (which provides the avatar column +
+	   threading line decoration), so it just needs the inline flex
+	   layout for the textarea + submit button. */
+	.reply-composer {
 		display: flex;
 		gap: 8px;
 		align-items: flex-end;
-		margin: 12px 0 0;
+		margin: 4px 0 0;
 	}
-	.reply-composer { margin-top: 8px; }
-	/* The post-level "Add a comment" composer sits at the article
-	   level (outside .tw-item), so left-indent it by avatar+gap
-	   (24 + 8 = 32px) to align with where comments will appear
-	   inside .tw-children. */
-	.comment-composer {
-		margin-left: 32px;
-	}
-	.reply-composer textarea, .comment-composer textarea {
+	.reply-composer textarea {
 		flex: 1;
 		min-height: 54px;
 	}
@@ -1577,6 +1851,43 @@
 		max-width: 640px;
 	}
 	.free-section { margin-top: 0; }
+
+	/* Typing indicator under the World heading. Reserve vertical space
+	   with min-height so the layout doesn't jump when entries appear or
+	   disappear; fade opacity for the show/hide transition. */
+	.world-typing {
+		font-family: var(--font-sans);
+		font-size: 13px;
+		color: var(--muted-foreground);
+		text-align: center;
+		margin: -8px 0 16px;
+		min-height: 1.2em;
+		opacity: 0;
+		transition: opacity 180ms ease;
+	}
+	.world-typing.visible { opacity: 1; }
+
+	/* Per-thread typing indicator: smaller, left-aligned, sits inside
+	   the composer's .tw-main column (no extra left margin needed). */
+	.thread-typing {
+		font-family: var(--font-sans);
+		font-size: 12px;
+		color: var(--muted-foreground);
+		margin: 4px 0 0;
+		min-height: 1.2em;
+		opacity: 0;
+		transition: opacity 180ms ease;
+	}
+	.thread-typing.visible { opacity: 1; }
+
+	/* Sender-side debug: green halo on any composer textarea for ~5s
+	   after each successful typing send. While this is on, other tabs
+	   should show the matching typing indicator for the same thread. */
+	textarea.typing-sending {
+		border-color: #7ee787 !important;
+		box-shadow: 0 0 0 2px rgba(126,231,135,0.35);
+		transition: border-color 120ms ease, box-shadow 120ms ease;
+	}
 
 	.world-tabs {
 		display: flex;
