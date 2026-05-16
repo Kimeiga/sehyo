@@ -21,7 +21,10 @@ interface AnswerRow {
    /api keeps working for the composer submit + auth endpoints; /auth
    keeps the sign-in flow reachable; /about stays as an info page. */
 const GATE_ALLOWLIST_EXACT = new Set(['/', '/about']);
-const GATE_ALLOWLIST_PREFIXES = ['/api/', '/auth/'] as const;
+// /prototype/* are dev-only visual inspection pages (not linked from
+// the app, not indexed) — they must bypass the answer-gate so they
+// can actually be opened to look at.
+const GATE_ALLOWLIST_PREFIXES = ['/api/', '/auth/', '/prototype/'] as const;
 function isAllowlistedPath(pathname: string): boolean {
 	if (GATE_ALLOWLIST_EXACT.has(pathname)) return true;
 	for (const p of GATE_ALLOWLIST_PREFIXES) {
