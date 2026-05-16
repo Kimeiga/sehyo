@@ -14,6 +14,7 @@ HTTP via the admin endpoints under `/api/admin/*`.
 | Path | Trigger | What it does |
 |------|---------|--------------|
 | `prompt-rotator/` | Cron `0 11 * * *` (11:00 UTC = 6 AM EST) | POSTs `/api/admin/rotate-prompt` to generate the day's prompt + seed bot answers |
+| `typing/` | HTTP / WebSocket | Hosts the `ForumRoom` Durable Object; browsers connect to `wss://.../ws/<roomId>` for the forum typing indicator |
 
 ## Secrets
 
@@ -153,6 +154,59 @@ secret/binding wiring): Cloudflare dashboard → **Workers & Pages → the
 worker → Triggers → Cron Triggers → Send/Test**. There is currently no
 CLI for forcing a production cron invocation; the dashboard button is the
 supported path.
+
+## Typing Worker (`typing/`) — HTTP / WebSocket
+
+Unlike the scheduled workers above, this one isn't cron-driven — browsers
+open a WebSocket to it directly for the forum typing indicator. It owns a
+`ForumRoom` Durable Object: one DO instance per room (keyed by name),
+broadcasting `{type: "typing"}` messages between connected sockets.
+
+### Local dev
+
+Two terminals:
+
+```bash
+# Terminal 1 — typing worker
+cd workers/typing
+npx wrangler dev          # binds to http://localhost:8787
+
+# Terminal 2 — SvelteKit app
+npm run dev               # Vite, usually http://localhost:5173
+```
+
+The Vite config has a `/ws` → `localhost:8787` proxy (`ws: true`), so the
+browser connects to `ws://localhost:5173/ws/<roomId>`. Same origin →
+session cookie rides along → typing Worker calls back to the Pages dev
+server's `/api/auth/get-session` to validate.
+
+For the auth callback to hit your local SvelteKit, override `API_BASE_URL`
+in the root `.dev.vars`:
+
+```
+API_BASE_URL=http://localhost:5173
+```
+
+Without that override, the Worker calls production `https://sehyo.com` to
+validate the cookie, which will fail (different cookie domain).
+
+### Deploy
+
+```bash
+cd workers/typing
+npx wrangler deploy
+```
+
+Before the first deploy, uncomment the `routes` block in `wrangler.toml`
+(or set up a Custom Domain in the dashboard) so the Worker is reachable
+at `typing.sehyo.com`. The hostname must share an eTLD+1 with the Pages
+app (`sehyo.com`) so the browser sends the session cookie on the
+WebSocket upgrade — `*.workers.dev` will not work.
+
+There are no secrets to upload for this Worker; auth is delegated to the
+Pages app via HTTP. The DO migration in `wrangler.toml` runs
+automatically on first deploy (look for `Created class ForumRoom` in the
+output).
 
 ## Adding a new scheduled worker
 

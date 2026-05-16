@@ -1,0 +1,6 @@
+[    1668ms] [LOG] PWA: SW registered ServiceWorkerRegistration @ http://localhost:5174/src/routes/+layout.svelte?t=1778740273947:82
+[  308693ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5174/:0
+[  308800ms] [LOG] PWA: SW registered ServiceWorkerRegistration @ http://localhost:5174/src/routes/+layout.svelte?t=1778740585013:82
+[  342501ms] [LOG] PWA: SW registered ServiceWorkerRegistration @ http://localhost:5174/src/routes/+layout.svelte?t=1778740620095:82
+[  356702ms] [LOG] PWA: SW registered ServiceWorkerRegistration @ http://localhost:5174/src/routes/+layout.svelte?t=1778740620095:82
+[  393075ms] [LOG] PWA: SW registered ServiceWorkerRegistration @ http://localhost:5174/src/routes/+layout.svelte?t=1778740658815:82
