@@ -46,8 +46,12 @@
 			const { registerSW } = await import('virtual:pwa-register');
 			registerSW({
 				immediate: true,
-				onRegistered(reg) { console.log('PWA: SW registered', reg); },
-				onRegisterError(err) { console.error('PWA: SW failed', err); }
+				onRegistered(reg) {
+					console.log('PWA: SW registered', reg);
+				},
+				onRegisterError(err) {
+					console.error('PWA: SW failed', err);
+				}
 			});
 		}
 	});
@@ -105,8 +109,8 @@
 	/* Author names are masked until the viewer commits to engaging.
 	   Applied at the layout level so every page picks it up. */
 	.app.names-blurred :global(.author-mask) {
-		filter: blur(5px);
-		user-select: none;
-		pointer-events: none;
+		filter: none;
+		user-select: auto;
+		pointer-events: auto;
 	}
 </style>

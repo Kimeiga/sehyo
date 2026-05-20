@@ -39,18 +39,37 @@
 		aria-expanded={$menuOpen}
 	>
 		{#if $menuOpen}
-			<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+			<svg
+				viewBox="0 0 24 24"
+				width="22"
+				height="22"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2.2"
+				stroke-linecap="round"
+			>
 				<line x1="6" y1="6" x2="18" y2="18" />
 				<line x1="18" y1="6" x2="6" y2="18" />
 			</svg>
 		{:else}
-			<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+			<svg
+				viewBox="0 0 24 24"
+				width="22"
+				height="22"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2.2"
+				stroke-linecap="round"
+			>
 				<line x1="4" y1="7" x2="20" y2="7" />
 				<line x1="4" y1="12" x2="20" y2="12" />
 				<line x1="4" y1="17" x2="20" y2="17" />
 			</svg>
 			{#if unreadCount > 0}
-				<span class="unread-dot mobile-toggle-dot" aria-label={`${unreadCount} unread message${unreadCount === 1 ? '' : 's'}`}></span>
+				<span
+					class="unread-dot mobile-toggle-dot"
+					aria-label={`${unreadCount} unread message${unreadCount === 1 ? '' : 's'}`}
+				></span>
 			{/if}
 		{/if}
 	</button>
@@ -67,12 +86,16 @@
 		z-index: 100;
 		display: flex;
 		align-items: center;
-		gap: 24px;
-		padding: 12px 24px;
+		gap: 16px;
+		width: 100%;
+		max-width: 640px;
+		margin: 0 auto;
+		padding: 12px 16px;
 		background: color-mix(in oklab, var(--background) 92%, transparent);
 		backdrop-filter: blur(8px);
 		-webkit-backdrop-filter: blur(8px);
 		border-bottom: 1px solid var(--border);
+		font-size: 16px;
 	}
 
 	.brand {
@@ -114,6 +137,7 @@
 		padding: 8px;
 		/* Square corners as requested. */
 		border-radius: 0;
+		font-size: 16px;
 		cursor: pointer;
 		position: relative;
 		align-items: center;
