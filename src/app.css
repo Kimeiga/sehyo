@@ -250,22 +250,80 @@
   border-radius: 0 !important;
 }
 
-/* 3. Threading lines. The .tw-line / .tw-trunk-out vertical
-      strokes used to be soft→strong gradients; reduce them to a
-      flat 1px light-gray rule. The .tw-hook SVG inherits
-      currentColor for its stroke. 1px is the hairline weight
-      requested for the brutalist pass. */
+/* 3. Threading lines — redrawn.
+      Old design hung three pieces off a 24px avatar gutter:
+      .tw-line (in-column trunk), .tw-trunk-out (between
+      siblings), .tw-hook (L-shape bridging trunk → row). All
+      three are hidden, plus the .tw-left avatar column itself.
+      Spacing & connectors are rebuilt from pseudo-elements:
+        • 10px indent per reply level (not the old 24px gutter)
+        • each NESTED comment gets a 1px horizontal arm running
+          from its parent's trunk-column out to the midpoint of
+          its own author name
+        • each NESTED comment gets a 1px vertical descender
+          covering the 10px margin above its row and connecting
+          down to its arm — these stack between siblings so the
+          column visually continues from the parent's bottom
+          through all the children
+        • TOP-LEVEL comments (direct under .tw-post) have NO
+          arm and NO descender — they're roots; the line
+          emerging from the bottom of a top-level is just its
+          first child's descender. */
+.tw-left,
 .tw-line,
-.tw-trunk-out {
-  background: var(--line-strong) !important;
-  width: 1px !important;
-}
+.tw-trunk-out,
 .tw-hook {
-  color: var(--line-strong) !important;
+  display: none !important;
 }
-.tw-hook path {
-  stroke: var(--line-strong) !important;
-  stroke-width: 1 !important;
+.tw-post > .tw-children {
+  padding-left: 0 !important;
+  margin-left: 0 !important;
+}
+.tw-item > .tw-children {
+  padding-left: 10px !important;
+  margin-left: 0 !important;
+  position: relative;
+}
+.tw-item,
+.tw-item.is-reply {
+  position: relative;
+  padding-left: 0 !important;
+  margin-left: 0 !important;
+  margin-top: 10px !important;
+}
+/* Nested-only: horizontal arm to name midpoint. Fixed 50px
+   length (10 indent + ~40 into the name) — approximates the
+   midpoint of a typical "First Last" name at 14/600 Inter
+   without measuring every name's actual width. */
+.tw-item > .tw-children > .tw-item.is-reply::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 8px;
+  width: 50px;
+  height: 1px;
+  background: #888;
+}
+/* Nested-only: vertical descender. top:-10px puts the top edge
+   at the previous row's bottom (or parent's bottom for the
+   first child); bottom:calc(100% - 8px) anchors the lower edge
+   exactly at the arm's y so the descender meets the arm without
+   a gap. */
+.tw-item > .tw-children > .tw-item.is-reply::after {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: -10px;
+  bottom: calc(100% - 8px);
+  width: 1px;
+  background: #888;
+}
+/* Top-level comments under the answer: roots — no arm, no
+   descender from above. (The line under a top-level comment is
+   contributed by its own first child's ::after.) */
+.tw-post > .tw-children > .tw-item.is-reply::before,
+.tw-post > .tw-children > .tw-item.is-reply::after {
+  display: none !important;
 }
 
 /* 4. Generic flush: any element using a CSS gradient as its
@@ -390,6 +448,34 @@
 /* 12. Cursor cue for the click-to-reply body. */
 .tw-body {
   cursor: pointer;
+}
+
+/* 12b. Reply composer layout — textarea + submit button as a
+        single seamless bar. Button stretches to match whatever
+        height the textarea is (rows / scrolling content),
+        with zero gap between them. The old design had a small
+        flex gap + a fixed-padding pill button. */
+.reply-composer {
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 0 !important;
+  align-items: stretch !important;
+}
+.reply-composer textarea {
+  flex: 1 1 auto !important;
+  min-height: 32px !important;
+  margin: 0 !important;
+  border-right-width: 0 !important;
+}
+.reply-composer .post-button,
+.reply-composer .post-button.small {
+  align-self: stretch !important;
+  height: auto !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  margin: 0 !important;
+  border-left-width: 0 !important;
+  flex-shrink: 0;
 }
 
 /* 13. Tighten vertical rhythm. The old design had generous

@@ -31,6 +31,23 @@
 
 	const MAX_NEST_DEPTH = 3;
 
+	/* Deterministic random hue per author. Uses oklch so the
+	   lightness/chroma stay roughly constant across hues —
+	   every author lands at L=85% / C=0.18 / H=random, giving
+	   strong-hue colors with comfortable contrast against the
+	   pure black brutalist background. Seed by username so the
+	   same user always gets the same colour, including the
+	   viewer's own anonymous handle (the anonymous-plugin
+	   assigns a real username, which propagates). */
+	function colorForUser(seed: string | null | undefined): string {
+		const s = seed || 'anon';
+		let h = 0;
+		for (let i = 0; i < s.length; i++) {
+			h = ((h * 31 + s.charCodeAt(i)) >>> 0) & 0xffff;
+		}
+		return `oklch(85% 0.18 ${h % 360})`;
+	}
+
 	function childrenOf(commentsForPost: CommentRow[], commentId: string): CommentRow[] {
 		return commentsForPost
 			.filter((c) => c.parent_comment_id === commentId)
@@ -720,12 +737,13 @@
 {/snippet}
 
 {#snippet authorMeta(displayName: string | null | undefined, username: string | null | undefined, isOwn: boolean)}
+	{@const authorColor = colorForUser(username ?? displayName)}
 	<header class="tw-meta">
 		{#if username}
-			<a class="tw-name" class:author-mask={!isOwn} href="/{username}">{displayName ?? 'Anonymous'}</a>
+			<a class="tw-name" class:author-mask={!isOwn} href="/{username}" style="color:{authorColor}">{displayName ?? 'Anonymous'}</a>
 			<a class="tw-handle" class:author-mask={!isOwn} href="/{username}">@{username}</a>
 		{:else}
-			<span class="tw-name" class:author-mask={!isOwn}>{displayName ?? 'Anonymous'}</span>
+			<span class="tw-name" class:author-mask={!isOwn} style="color:{authorColor}">{displayName ?? 'Anonymous'}</span>
 		{/if}
 		{#if isOwn && isAnon}
 			<button
@@ -865,12 +883,9 @@
 			</div>
 			<div class="tw-main">
 				<header class="tw-meta">
-					<span class="tw-name">{meDisplayName}</span>
+					<span class="tw-name" style="color:{colorForUser(meUsername ?? meDisplayName)}">{meDisplayName}</span>
 					{#if meUsername}<span class="tw-handle">@{meUsername}</span>{/if}
 				</header>
-				<p class="thread-typing" aria-live="polite" class:visible={typers.length > 0}>
-					{@render typingLabel(typers)}
-				</p>
 				<form class="reply-composer" data-reply-target={threadKey} onsubmit={submitActiveReply}>
 					<textarea
 						bind:value={replyContent}
