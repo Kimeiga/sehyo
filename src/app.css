@@ -177,16 +177,30 @@
       "sinf" 1,   /* scientific inferior */
       "dnom" 1,   /* denominator */
       "zero" 1,   /* slashed zero (digit/letter disambiguation) */
-      "ss02" 1,   /* Inter: disambiguation set */
-      "ss05" 1,   /* Inter: square punctuation */
-      "ss06" 1,   /* Inter: square quotes */
-      "ss07" 1,   /* Inter: rounded quotes (overrides ss06 contextually) */
-      "ss08" 1,   /* Inter: comma punctuation alternate */
-      "cv06" 1,   /* serbian cyrillic ‹ italic б › alt */
-      "cv10" 1,   /* alt 6/9 figures */
-      "cv11" 1,   /* single-storey a */
-      "cv12" 1,   /* flat-top 3 */
-      "cv13" 1;   /* alt g */
+      /* Stylistic sets per the Inter v4 spec (rsms.me/inter):
+           ss02 — Disambiguation (with zero)
+           ss03 — Round quotes & commas
+           ss07 — Square punctuation
+           ss08 — Square quotes
+         ss03 (rounded) and ss08 (square) both rewrite quote
+         glyphs; the later-declared rule wins per spec. Listing
+         ss08 last so quotes render square — flip the order if
+         you prefer rounded. */
+      "ss02" 1,
+      "ss03" 1,
+      "ss07" 1,
+      "ss08" 1,
+      /* Character variants per the Inter v4 spec:
+           cv06 — Simplified u
+           cv10 — Capital G with spur
+           cv11 — Single-story a
+           cv12 — Compact f
+           cv13 — Compact t */
+      "cv06" 1,
+      "cv10" 1,
+      "cv11" 1,
+      "cv12" 1,
+      "cv13" 1;
   }
 
   /* Opt-in fractions: drop tnum so frac's diagonal fraction can
@@ -317,7 +331,31 @@
   filter: none !important;
 }
 
-/* 8. Readable prose exception. The 14/600 brutalist baseline is
+/* 8. Hero question heading. The old design's PromptRipple h1 was
+      a 1000px-wide centered hero clamping up to 124px — it broke
+      out of the ~608px comment column. Brutalist version: shrink
+      it, left-align it, and constrain it to the same column the
+      comments live in so the page reads as one stack instead of
+      a centered banner followed by left-anchored content.
+      max-width matches .tw-body's measured width; margin: 0 auto
+      centers the BLOCK, while text-align: left keeps the text
+      left-edged within it. */
+.ripple-host,
+.ripple-host > .ripple-content {
+  max-width: 608px !important;
+  margin: 0 auto !important;
+  width: 100% !important;
+}
+.ripple-h1 {
+  font-size: clamp(24px, 3.2vw, 36px) !important;
+  text-align: left !important;
+  max-width: 100% !important;
+  line-height: 1.18 !important;
+  letter-spacing: -0.01em !important;
+  font-weight: 600 !important;
+}
+
+/* 9. Readable prose exception. The 14/600 brutalist baseline is
       right for chrome (buttons, labels, meta) but too tight for
       multi-line comment + answer paragraphs. `.tw-body` is the
       <p> for both top-level answers and threaded comment text,
