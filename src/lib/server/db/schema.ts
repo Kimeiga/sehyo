@@ -119,6 +119,20 @@ export const comments = sqliteTable('comments', {
 		.default(sql`(unixepoch())`)
 });
 
+export const commentEdits = sqliteTable('comment_edits', {
+	id: text('id').primaryKey(),
+	comment_id: text('comment_id')
+		.notNull()
+		.references(() => comments.id, { onDelete: 'cascade' }),
+	user_id: text('user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	content: text('content').notNull(),
+	edited_at: integer('edited_at')
+		.notNull()
+		.default(sql`(unixepoch())`)
+});
+
 // Bot personalities. One row per bot user. `personality` is LLM-only
 // guidance; not exposed to humans (the public-facing bio lives on `user`).
 export const botProfiles = sqliteTable('bot_profiles', {
@@ -135,4 +149,3 @@ export const botProfiles = sqliteTable('bot_profiles', {
 	created_at: text('created_at'),
 	updated_at: text('updated_at')
 });
-

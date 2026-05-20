@@ -18,6 +18,7 @@
 		id: string;
 		content: string;
 		created_at: number;
+		updated_at?: number | null;
 		user_id: string;
 		parent_comment_id: string | null;
 		user: {
@@ -25,20 +26,36 @@
 			display_name: string | null;
 			username: string | null;
 		};
+		sort_order?: number | null;
 	}
 
+	interface CommentEditRow {
+		id: string;
+		comment_id: string;
+		content: string;
+		edited_at: number;
+	}
+
+	type CommentHistoryState = {
+		loading: boolean;
+		error: string | null;
+		edits: CommentEditRow[];
+	};
+
 	const MAX_NEST_DEPTH = 3;
+
+	function newestCommentFirst(a: CommentRow, b: CommentRow): number {
+		return b.created_at - a.created_at || (b.sort_order ?? 0) - (a.sort_order ?? 0);
+	}
 
 	function childrenOf(commentsForPost: CommentRow[], commentId: string): CommentRow[] {
 		return commentsForPost
 			.filter((c) => c.parent_comment_id === commentId)
-			.sort((a, b) => a.created_at - b.created_at);
+			.sort(newestCommentFirst);
 	}
 
 	function topLevelOf(commentsForPost: CommentRow[]): CommentRow[] {
-		return commentsForPost
-			.filter((c) => c.parent_comment_id === null)
-			.sort((a, b) => a.created_at - b.created_at);
+		return commentsForPost.filter((c) => c.parent_comment_id === null).sort(newestCommentFirst);
 	}
 
 	let composerValue = $state('');
@@ -140,15 +157,20 @@
 		};
 		for (const [postId, extra] of Object.entries(liveComments)) {
 			const existing = base[postId] ?? [];
-			const seen = new Set(existing.map((c) => c.id));
-			const merged = existing.concat(extra.filter((c) => !seen.has(c.id)));
-			base[postId] = merged;
+			const byId = new Map(existing.map((c) => [c.id, c]));
+			for (const comment of extra) byId.set(comment.id, comment);
+			base[postId] = Array.from(byId.values());
 		}
 		return base;
 	});
 
 	let replyContent = $state('');
 	let submittingReply = $state(false);
+	let editingCommentId = $state<string | null>(null);
+	let commentEditValue = $state('');
+	let savingCommentEdit = $state(false);
+	let historyOpenCommentId = $state<string | null>(null);
+	let commentHistories = $state<Record<string, CommentHistoryState>>({});
 
 	function isActiveReply(postId: string, parentCommentId: string | null): boolean {
 		return (
@@ -253,9 +275,7 @@
 			const c = lc.comment as CommentRow;
 			if (!c || typeof c.id !== 'string') return;
 			tdbg('liveComment received', { postId: lc.postId, commentId: c.id });
-			const cur = liveComments[lc.postId] ?? [];
-			if (cur.some((x) => x.id === c.id)) return;
-			liveComments = { ...liveComments, [lc.postId]: [...cur, c] };
+			upsertLiveComment(lc.postId, c);
 		});
 		return () => {
 			tdbg('$effect cleanup — unsubscribing + disconnecting');
@@ -298,6 +318,14 @@
 	}
 	function onReplyInput(commentId: string) {
 		notifyForThread('reply-' + commentId);
+	}
+
+	function upsertLiveComment(postId: string, comment: CommentRow) {
+		const cur = liveComments[postId] ?? [];
+		liveComments = {
+			...liveComments,
+			[postId]: [comment, ...cur.filter((c) => c.id !== comment.id)]
+		};
 	}
 
 	const typingSelfId = $derived(devTabIdentity?.userId ?? data.user?.id);
@@ -500,14 +528,104 @@
 				body: JSON.stringify(body)
 			});
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			const payload = (await res.json().catch(() => null)) as { comment?: CommentRow } | null;
+			if (payload?.comment) upsertLiveComment(target.postId, payload.comment);
 			closeReply();
-			await invalidateAll();
+			void invalidateAll().catch((err) => console.error('Reply sync failed:', err));
 		} catch (err) {
 			console.error('Reply failed:', err);
 			alert('Could not post reply. Try again.');
 		} finally {
 			submittingReply = false;
 		}
+	}
+
+	function isCommentEdited(comment: CommentRow): boolean {
+		return (comment.updated_at ?? comment.created_at) > comment.created_at;
+	}
+
+	function startCommentEdit(comment: CommentRow) {
+		closeReply();
+		historyOpenCommentId = null;
+		editingCommentId = comment.id;
+		commentEditValue = comment.content;
+	}
+
+	function cancelCommentEdit() {
+		editingCommentId = null;
+		commentEditValue = '';
+	}
+
+	function clearCommentHistory(commentId: string) {
+		const { [commentId]: _removed, ...rest } = commentHistories;
+		commentHistories = rest;
+	}
+
+	async function saveCommentEdit(e: SubmitEvent, postId: string, comment: CommentRow) {
+		e.preventDefault();
+		const content = commentEditValue.trim();
+		if (!content || savingCommentEdit) return;
+		if (content === comment.content.trim()) {
+			cancelCommentEdit();
+			return;
+		}
+		savingCommentEdit = true;
+		try {
+			const res = await fetch(`/api/comments/${comment.id}`, {
+				method: 'PATCH',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({ content })
+			});
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			const payload = (await res.json().catch(() => null)) as { comment?: CommentRow } | null;
+			if (payload?.comment) upsertLiveComment(postId, payload.comment);
+			clearCommentHistory(comment.id);
+			cancelCommentEdit();
+			void invalidateAll().catch((err) => console.error('Comment edit sync failed:', err));
+		} catch (err) {
+			console.error('Comment edit failed:', err);
+			alert('Could not edit comment. Try again.');
+		} finally {
+			savingCommentEdit = false;
+		}
+	}
+
+	async function toggleCommentHistory(commentId: string) {
+		if (historyOpenCommentId === commentId) {
+			historyOpenCommentId = null;
+			return;
+		}
+		historyOpenCommentId = commentId;
+		if (commentHistories[commentId]?.edits.length || commentHistories[commentId]?.loading) return;
+		commentHistories = {
+			...commentHistories,
+			[commentId]: { loading: true, error: null, edits: [] }
+		};
+		try {
+			const res = await fetch(`/api/comments/${commentId}?history=1`, { credentials: 'include' });
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			const payload = (await res.json()) as { edits?: CommentEditRow[] };
+			commentHistories = {
+				...commentHistories,
+				[commentId]: { loading: false, error: null, edits: payload.edits ?? [] }
+			};
+		} catch (err) {
+			console.error('Comment history failed:', err);
+			commentHistories = {
+				...commentHistories,
+				[commentId]: { loading: false, error: 'Could not load edit history.', edits: [] }
+			};
+		}
+	}
+
+	function formatCommentEditTime(seconds: number): string {
+		return new Date(seconds * 1000).toLocaleString(undefined, {
+			month: 'short',
+			day: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit'
+		});
 	}
 
 	function formatDate(iso: string) {
@@ -606,9 +724,11 @@
 			<h2 class="world-label">World</h2>
 
 			{@const worldTypers = typingForThread($worldTypingUsers, 'world', typingSelfId)}
-			<p class="world-typing" aria-live="polite" class:visible={worldTypers.length > 0}>
-				{@render typingLabel(worldTypers)}
-			</p>
+			{#if worldTypers.length > 0}
+				<p class="world-typing" aria-live="polite">
+					{@render typingLabel(worldTypers)}
+				</p>
+			{/if}
 
 			<section class="free-section">
 				<div class="world-tabs" role="tablist" aria-label="World composer">
@@ -739,6 +859,15 @@
 	{/if}
 {/snippet}
 
+{#snippet threadTyping(threadId: string)}
+	{@const typers = typingForThread($worldTypingUsers, threadId, typingSelfId)}
+	{#if typers.length > 0}
+		<p class="thread-typing" aria-live="polite">
+			{@render typingLabel(typers)}
+		</p>
+	{/if}
+{/snippet}
+
 {#snippet authorMeta(
 	userId: string | null | undefined,
 	displayName: string | null | undefined,
@@ -778,6 +907,7 @@
 	onPlus: () => void;
 	plusActive?: boolean;
 	showPlus?: boolean;
+	typingThreadId?: string | null;
 })}
 	{@const replyVisible = args.showPlus !== false}
 	<div class="tw-row">
@@ -793,6 +923,9 @@
 						onclick={args.onPlus}>{args.plusActive ? 'Cancel' : 'Reply'}</button
 					>
 				</div>
+			{/if}
+			{#if args.typingThreadId}
+				{@render threadTyping(args.typingThreadId)}
 			{/if}
 		</div>
 	</div>
@@ -851,7 +984,68 @@
 	{@const ownComment = !!data.user && c.user_id === data.user.id}
 	{@const isActive = isActiveReply(postId, c.id)}
 	{#snippet commentBody()}
-		<p class="tw-body">{c.content}</p>
+		{#if editingCommentId === c.id}
+			<form class="comment-edit-form" onsubmit={(e) => saveCommentEdit(e, postId, c)}>
+				<textarea
+					bind:value={commentEditValue}
+					rows="2"
+					maxlength="2000"
+					disabled={savingCommentEdit}
+				></textarea>
+				<div class="edit-bar">
+					<button
+						type="submit"
+						class="post-button small"
+						disabled={savingCommentEdit || commentEditValue.trim().length === 0}
+						>{savingCommentEdit ? 'Saving…' : 'Save'}</button
+					>
+					<button type="button" class="inline-action" onclick={cancelCommentEdit}>Cancel</button>
+				</div>
+			</form>
+		{:else}
+			<p class="tw-body">
+				{c.content}
+				{#if isCommentEdited(c)}
+					<button
+						type="button"
+						class="edited-label"
+						aria-expanded={historyOpenCommentId === c.id}
+						onclick={() => toggleCommentHistory(c.id)}>(edited)</button
+					>
+				{/if}
+				{#if ownComment}
+					<button
+						type="button"
+						class="reply-label edit-label"
+						onclick={() => startCommentEdit(c)}
+						aria-label="Edit comment">EDIT</button
+					>
+				{/if}
+			</p>
+			{#if historyOpenCommentId === c.id}
+				{@const history = commentHistories[c.id]}
+				<div class="edit-history">
+					{#if history?.loading}
+						<p>Loading previous versions…</p>
+					{:else if history?.error}
+						<p>{history.error}</p>
+					{:else if history?.edits.length}
+						<ol>
+							{#each history.edits as edit (edit.id)}
+								<li>
+									<p>{edit.content}</p>
+									<time datetime={new Date(edit.edited_at * 1000).toISOString()}
+										>{formatCommentEditTime(edit.edited_at)}</time
+									>
+								</li>
+							{/each}
+						</ol>
+					{:else}
+						<p>No previous versions.</p>
+					{/if}
+				</div>
+			{/if}
+		{/if}
 	{/snippet}
 	{#snippet commentComposerSlot()}
 		{@render replyComposer(postId, c.id)}
@@ -878,7 +1072,8 @@
 			hasKids,
 			children: hasKids ? commentChildren : null,
 			onPlus: () => toggleReplyTarget({ postId, parentCommentId: c.id }),
-			plusActive: isActive
+			plusActive: isActive,
+			typingThreadId: 'reply-' + c.id
 		})}
 	</li>
 {/snippet}
@@ -985,7 +1180,8 @@
 				children: hasTops ? postChildren : null,
 				onPlus: () => toggleReplyTarget({ postId: a.id, parentCommentId: null }),
 				plusActive: isActive,
-				showPlus: !guestLocked
+				showPlus: !guestLocked,
+				typingThreadId: 'post-' + a.id
 			})}
 		</div>
 
@@ -1043,7 +1239,8 @@
 				hasKids: hasTops,
 				children: hasTops ? questionChildren : null,
 				onPlus: () => toggleReplyTarget({ postId: q.id, parentCommentId: null }),
-				plusActive: isActive
+				plusActive: isActive,
+				typingThreadId: 'post-' + q.id
 			})}
 		</div>
 	</article>
@@ -1100,7 +1297,8 @@
 	}
 	.composer textarea,
 	.edit-textarea,
-	.reply-composer textarea {
+	.reply-composer textarea,
+	.comment-edit-form textarea {
 		display: block;
 		width: 100%;
 		font-family: var(--font-sans);
@@ -1120,7 +1318,8 @@
 	}
 	.composer textarea:focus,
 	.edit-textarea:focus,
-	.reply-composer textarea:focus {
+	.reply-composer textarea:focus,
+	.comment-edit-form textarea:focus {
 		outline: 1px solid var(--foreground);
 		outline-offset: 0;
 	}
@@ -1292,6 +1491,8 @@
 	}
 	.tw-reply-button,
 	.reply-label,
+	.edited-label,
+	.inline-action,
 	.edit-name,
 	.nudge-cta,
 	.guest-locked-link,
@@ -1320,6 +1521,8 @@
 	}
 	.tw-reply-button:hover,
 	.reply-label:hover,
+	.edited-label:hover,
+	.inline-action:hover,
 	.nudge-cta:hover,
 	.guest-locked-link:hover,
 	.toast-link:hover {
@@ -1328,6 +1531,10 @@
 		text-underline-offset: 3px;
 	}
 	.edit-label {
+		margin-left: 6px;
+		vertical-align: baseline;
+	}
+	.edited-label {
 		margin-left: 6px;
 		vertical-align: baseline;
 	}
@@ -1367,6 +1574,38 @@
 		border-left: 0;
 		padding-left: 14px;
 		padding-right: 14px;
+	}
+	.comment-edit-form {
+		margin-top: 3px;
+	}
+	.comment-edit-form textarea {
+		min-height: 76px;
+	}
+	.edit-history {
+		margin-top: 8px;
+		padding-left: 10px;
+		border-left: 1px solid var(--line-strong);
+		color: var(--muted-foreground);
+	}
+	.edit-history p {
+		margin: 0;
+		font-size: 16px;
+		line-height: 1.4;
+		white-space: pre-wrap;
+	}
+	.edit-history ol {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 8px;
+	}
+	.edit-history time {
+		display: block;
+		margin-top: 2px;
+		color: var(--muted-foreground);
+		font-size: 16px;
+		line-height: 1.4;
 	}
 
 	.popover-container {
@@ -1445,19 +1684,19 @@
 	.world-label {
 		margin: 14px 0 10px;
 	}
-	.world-typing {
+	.world-typing,
+	.thread-typing {
 		font-family: var(--font-sans);
 		font-size: 16px;
 		line-height: 1.4;
 		color: var(--muted-foreground);
 		text-align: left;
-		margin: 0 0 8px;
-		min-height: 1.4em;
-		opacity: 0;
-		transition: opacity 180ms ease;
 	}
-	.world-typing.visible {
-		opacity: 1;
+	.world-typing {
+		margin: 0 0 8px;
+	}
+	.thread-typing {
+		margin: 5px 0 0;
 	}
 	.world-tabs {
 		display: flex;

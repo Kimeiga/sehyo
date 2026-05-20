@@ -5,8 +5,10 @@ export interface CommentRow {
 	post_id: string;
 	content: string;
 	created_at: number;
+	updated_at: number;
 	user_id: string;
 	parent_comment_id: string | null;
+	sort_order?: number | null;
 	user: {
 		id: string;
 		display_name: string | null;
@@ -39,15 +41,17 @@ export async function loadCommentsForPosts(
 					c.post_id,
 					c.content,
 					c.created_at,
+					c.updated_at,
 					c.user_id,
 					c.parent_comment_id,
+					c.rowid as sort_order,
 					u.name as display_name,
 					u.username,
 					u.image as profile_picture_url
 				FROM comments c
 				LEFT JOIN user u ON u.id = c.user_id
 				WHERE c.post_id IN (${placeholders})
-				ORDER BY c.created_at ASC`
+				ORDER BY c.created_at DESC, c.rowid DESC`
 			)
 			.bind(...chunk)
 			.all<{
@@ -55,8 +59,10 @@ export async function loadCommentsForPosts(
 				post_id: string;
 				content: string;
 				created_at: number;
+				updated_at: number;
 				user_id: string;
 				parent_comment_id: string | null;
+				sort_order: number | null;
 				display_name: string | null;
 				username: string | null;
 				profile_picture_url: string | null;
@@ -68,8 +74,10 @@ export async function loadCommentsForPosts(
 				post_id: row.post_id,
 				content: row.content,
 				created_at: row.created_at,
+				updated_at: row.updated_at,
 				user_id: row.user_id,
 				parent_comment_id: row.parent_comment_id,
+				sort_order: row.sort_order,
 				user: {
 					id: row.user_id,
 					display_name: row.display_name,

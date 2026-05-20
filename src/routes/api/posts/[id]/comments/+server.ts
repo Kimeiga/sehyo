@@ -70,11 +70,29 @@ export const POST: RequestHandler = async ({ request, params, platform, locals }
 			content: content.trim(),
 			parent_comment_id: parent_comment_id || null
 		});
+		const row = await platform.env.DB.prepare(
+			'SELECT rowid as sort_order FROM comments WHERE id = ?'
+		)
+			.bind(comment.id)
+			.first<{ sort_order: number | null }>();
 
-		return json({ comment }, { status: 201 });
+		return json(
+			{
+				comment: {
+					...comment,
+					sort_order: row?.sort_order ?? null,
+					user: {
+						id: locals.user.id,
+						display_name: locals.user.name ?? null,
+						username: locals.user.username ?? null,
+						profile_picture_url: locals.user.image ?? null
+					}
+				}
+			},
+			{ status: 201 }
+		);
 	} catch (err) {
 		console.error('Error creating comment:', err);
 		throw error(500, 'Failed to create comment');
 	}
 };
-
