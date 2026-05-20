@@ -5,15 +5,21 @@
 @plugin '@tailwindcss/typography';
 
 @theme {
-  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-jp: "M PLUS 2", "Geist", ui-sans-serif, system-ui, sans-serif;
+  /* Brutalist redesign: Inter for everything. Variable-weight axis
+     supports the 600 baseline; opsz axis gets Inter to render its
+     small-size optical tuning. */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-jp: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* Squared corners site-wide. The radius vars still exist (so any
+     calc() built on them resolves) but they all evaluate to 0 —
+     hard edges everywhere. */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -48,89 +54,103 @@
 }
 
 :root {
-  --radius: 0.625rem;
+  --radius: 0;
 
-  /* Sehyo accent: #00A5D8 */
-  --brand: #00A5D8;
+  /* Sehyo accent kept around for any code reading it, but the
+     brutalist palette below uses pure black / white only. */
+  --brand: #ffffff;
 
-  /* Dark theme */
-  --background: oklch(0.12 0 0);
-  --foreground: oklch(0.95 0 0);
+  /* Brutalist dark theme (default): pure black bg, pure white fg,
+     light-gray hairlines. No gradients anywhere — see the
+     "Brutalist overrides" block at the bottom which neutralises
+     scoped component gradients. */
+  --background: #000000;
+  --foreground: #ffffff;
 
-  --card: oklch(0.18 0 0);
-  --card-foreground: oklch(0.95 0 0);
+  --card: #000000;
+  --card-foreground: #ffffff;
 
-  --popover: oklch(0.18 0 0);
-  --popover-foreground: oklch(0.95 0 0);
+  --popover: #000000;
+  --popover-foreground: #ffffff;
 
-  --primary: #00A5D8;
-  --primary-foreground: #ffffff;
+  --primary: #ffffff;
+  --primary-foreground: #000000;
 
-  --secondary: oklch(0.25 0 0);
-  --secondary-foreground: oklch(0.95 0 0);
+  --secondary: #000000;
+  --secondary-foreground: #ffffff;
 
-  --muted: oklch(0.25 0 0);
-  --muted-foreground: oklch(0.65 0 0);
+  --muted: #1a1a1a;
+  --muted-foreground: #888888;
 
-  --accent: #00A5D8;
-  --accent-foreground: #ffffff;
+  --accent: #ffffff;
+  --accent-foreground: #000000;
 
-  --destructive: oklch(0.65 0.25 25);
-  --destructive-foreground: oklch(0.95 0 0);
+  --destructive: #ffffff;
+  --destructive-foreground: #000000;
 
-  --border: oklch(0.3 0 0);
-  --input: oklch(0.25 0 0);
-  --ring: #00A5D8;
+  --border: #888888;
+  --input: #000000;
+  --ring: #ffffff;
 
-  --chart-1: #00A5D8;
-  --chart-2: oklch(0.70 0.13 200);
-  --chart-3: oklch(0.65 0.13 260);
-  --chart-4: oklch(0.75 0.13 220);
-  --chart-5: oklch(0.60 0.13 180);
+  --chart-1: #ffffff;
+  --chart-2: #aaaaaa;
+  --chart-3: #777777;
+  --chart-4: #444444;
+  --chart-5: #ffffff;
 
-  --sidebar: oklch(0.15 0 0);
-  --sidebar-foreground: oklch(0.95 0 0);
-  --sidebar-primary: #00A5D8;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: oklch(0.25 0 0);
-  --sidebar-accent-foreground: oklch(0.95 0 0);
-  --sidebar-border: oklch(0.3 0 0);
-  --sidebar-ring: #00A5D8;
+  --sidebar: #000000;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #ffffff;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: #000000;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #888888;
+  --sidebar-ring: #ffffff;
+
+  /* Threading-line colours used by .tw-line / .tw-trunk-out /
+     .tw-hook in +page.svelte. Old design had soft→strong
+     gradients; the brutalist override below collapses both to a
+     single light-gray so the lines read as plain 2px rules. */
+  --line-soft: #888888;
+  --line-strong: #888888;
 }
 
-/* Light theme */
+/* Light theme — kept around so the .light class still toggles
+   something sensible. Same brutalist constraints inverted. */
 .light {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: #00A5D8;
+  --background: #ffffff;
+  --foreground: #000000;
+  --card: #ffffff;
+  --card-foreground: #000000;
+  --popover: #ffffff;
+  --popover-foreground: #000000;
+  --primary: #000000;
   --primary-foreground: #ffffff;
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: #00A5D8;
+  --secondary: #ffffff;
+  --secondary-foreground: #000000;
+  --muted: #f0f0f0;
+  --muted-foreground: #555555;
+  --accent: #000000;
   --accent-foreground: #ffffff;
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: #00A5D8;
-  --chart-1: #00A5D8;
-  --chart-2: oklch(0.70 0.13 200);
-  --chart-3: oklch(0.65 0.13 260);
-  --chart-4: oklch(0.75 0.13 220);
-  --chart-5: oklch(0.60 0.13 180);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: #00A5D8;
+  --destructive: #000000;
+  --border: #888888;
+  --input: #ffffff;
+  --ring: #000000;
+  --chart-1: #000000;
+  --chart-2: #444444;
+  --chart-3: #777777;
+  --chart-4: #aaaaaa;
+  --chart-5: #000000;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #000000;
+  --sidebar-primary: #000000;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: #00A5D8;
+  --sidebar-accent: #ffffff;
+  --sidebar-accent-foreground: #000000;
+  --sidebar-border: #888888;
+  --sidebar-ring: #000000;
+  --line-soft: #888888;
+  --line-strong: #888888;
 }
 
 @layer base {
@@ -139,5 +159,160 @@
   }
   body {
     @apply bg-background text-foreground font-sans;
+    /* Brutalist baseline: 14px, semibold, Inter with the full
+       OpenType menu the design calls for. tnum is enabled
+       globally for tabular columns; frac is exposed as a
+       per-element opt-in via the .frac utility below, since
+       frac and tnum conflict when applied to the same digits. */
+    font-size: 14px;
+    font-weight: 600;
+    font-feature-settings:
+      "calt" 1,   /* contextual alternates */
+      "dlig" 1,   /* discretionary ligatures */
+      "tnum" 1,   /* tabular numbers (frac off — see .frac) */
+      "case" 1,   /* case-sensitive forms */
+      "ccmp" 1,   /* glyph composition/decomposition */
+      "sups" 1,   /* superscript (with ccmp) */
+      "subs" 1,   /* subscript (with ccmp) */
+      "sinf" 1,   /* scientific inferior */
+      "dnom" 1,   /* denominator */
+      "zero" 1,   /* slashed zero (digit/letter disambiguation) */
+      "ss02" 1,   /* Inter: disambiguation set */
+      "ss05" 1,   /* Inter: square punctuation */
+      "ss06" 1,   /* Inter: square quotes */
+      "ss07" 1,   /* Inter: rounded quotes (overrides ss06 contextually) */
+      "ss08" 1,   /* Inter: comma punctuation alternate */
+      "cv06" 1,   /* serbian cyrillic ‹ italic б › alt */
+      "cv10" 1,   /* alt 6/9 figures */
+      "cv11" 1,   /* single-storey a */
+      "cv12" 1,   /* flat-top 3 */
+      "cv13" 1;   /* alt g */
   }
+
+  /* Opt-in fractions: drop tnum so frac's diagonal fraction can
+     actually engage. Use as <span class="frac">3/4</span>. */
+  .frac {
+    font-feature-settings: "frac" 1, "tnum" 0 !important;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   Brutalist overrides
+   ────────────────────────────────────────────────────────────────
+   One global block that neutralises animations, circles, and
+   gradients across every scoped component without touching their
+   source. Keeps the redesign PR diff focused and lets us roll
+   back by deleting this block alone. */
+
+/* 1. No motion. Transitions + animations silenced everywhere; the
+      authoring code stays put (per the redesign brief: "don't
+      delete animation code yet"). Includes Tailwind's animate-*
+      utilities and Svelte transition fallbacks. */
+*,
+*::before,
+*::after {
+  transition: none !important;
+  animation: none !important;
+  scroll-behavior: auto !important;
+}
+
+/* 2. Hard edges. Every circle / pill / rounded element becomes a
+      square. Catches the codebase's mix of border-radius: 999px,
+      9999px, 50%, and Tailwind's .rounded-full utility. */
+[class*="rounded"],
+.rounded-full,
+.tw-avatar,
+.tw-avatar-img,
+.avatar,
+[class*="avatar"] {
+  border-radius: 0 !important;
+}
+*,
+*::before,
+*::after {
+  /* Belt-and-suspenders: any scoped rule that hard-codes 50%,
+     999px, 9999px, etc., gets flattened. Specific shapes
+     (toolbars, buttons, badges) all square up. */
+  border-radius: 0 !important;
+}
+
+/* 3. Threading lines. The .tw-line / .tw-trunk-out vertical
+      strokes used to be soft→strong gradients; reduce them to a
+      flat 2px light-gray rule. The .tw-hook SVG inherits
+      currentColor for its stroke, so colour wins via the parent. */
+.tw-line,
+.tw-trunk-out {
+  background: var(--line-strong) !important;
+  width: 2px !important;
+}
+.tw-hook {
+  color: var(--line-strong) !important;
+}
+.tw-hook path {
+  stroke: var(--line-strong) !important;
+  stroke-width: 2 !important;
+}
+
+/* 4. Generic flush: any element using a CSS gradient as its
+      background (the line variables above, hero backdrops,
+      pill fills) gets a flat black surface instead. This is
+      blunt — the brutalist brief is "no gradients" — and any
+      element that needs to stand out should do it with a 2px
+      border, not a gradient. The threading-line override above
+      runs AFTER this so the lines stay light-gray. */
+[style*="gradient"],
+[class*="gradient"] {
+  background-image: none !important;
+}
+
+/* 5. Kill the hero PromptRipple's WebGL animation. The shader
+      can't be stopped via CSS `animation: none`; instead hide the
+      canvas and counter the .is-faded class so the underlying
+      <h1> stays visible as static type. Animation code untouched
+      per the brief — just not rendered. */
+.ripple-canvas {
+  display: none !important;
+}
+.ripple-h1.is-faded {
+  opacity: 1 !important;
+}
+
+/* 6. No glows. Strip every decorative drop-shadow, text-shadow,
+      and backdrop-blur on the page (the old design used a cyan
+      box-shadow halo on the composer, soft text-shadows on the
+      hero, and backdrop-filter on overlays — all anti-brutalist).
+      .author-mask's filter:blur(5px) is explicitly preserved
+      because it's a feature gate, not decoration. */
+*,
+*::before,
+*::after {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+/* Re-assert the name-blur ONLY while the engagement gate is
+   active (.app.names-blurred). Without this scope it would blur
+   names even after the viewer has answered. */
+.app.names-blurred .author-mask {
+  filter: blur(5px) !important;
+}
+
+/* 7. Composer rainbow halo. .composer-stack's ::before/::after
+      pseudos layer radial-gradients (blue/cyan/teal) and
+      filter:blur(28px) into a continuous glow around the prompt
+      composer — pure decoration, pure anti-brutalist. Pseudos
+      hidden via `content: none` (display:none on a pseudo is
+      ignored by some engines; clearing `content` is reliable). */
+.composer-stack::before,
+.composer-stack::after,
+[class*="halo"]::before,
+[class*="halo"]::after,
+.tw-halo,
+.composer-halo {
+  content: none !important;
+  display: none !important;
+  background: transparent !important;
+  background-image: none !important;
+  filter: none !important;
 }
