@@ -316,3 +316,21 @@
   background-image: none !important;
   filter: none !important;
 }
+
+/* 8. Readable prose exception. The 14/600 brutalist baseline is
+      right for chrome (buttons, labels, meta) but too tight for
+      multi-line comment + answer paragraphs. `.tw-body` is the
+      <p> for both top-level answers and threaded comment text,
+      so this rule covers both: 16/24 line-height, weight 400,
+      off-white #fafafa, just `calt` + `liga` features so the
+      content reads as plain Inter prose (no stylistic-set noise
+      in body copy). */
+.tw-body {
+  font-family: "Inter", "InterVariable", ui-sans-serif, sans-serif !important;
+  font-size: 16px !important;
+  font-weight: 400 !important;
+  line-height: 24px !important;
+  color: rgb(250, 250, 250) !important;
+  font-feature-settings: "calt", "liga" !important;
+  margin-bottom: 24px !important;
+}
