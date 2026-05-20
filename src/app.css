@@ -250,102 +250,18 @@
   border-radius: 0 !important;
 }
 
-/* 3. Threading lines — redrawn.
-      Old design hung three pieces off a 24px avatar gutter:
-      .tw-line, .tw-trunk-out, .tw-hook (all hidden). Avatar
-      column .tw-left hidden too. New geometry:
-        • 10px indent per nesting level + 5px buffer to the LEFT
-          of the trunk → .tw-children padding-left:15px, trunk
-          at left:5 (so it's not flush against the previous
-          column's edge).
-        • Trunk lives on .tw-children::before as a SINGLE full-
-          height line covering all siblings on that level — one
-          continuous vertical connecting child 1 → child 2 → …
-          → child N, matching the old design's continuity.
-        • Each child (.tw-item) gets a 30px horizontal arm —
-          short enough to terminate BEFORE the midpoint of any
-          typical name at 16/600 Inter (no overshoot). top:11px
-          centers it on a 16/24 name row.
-        • Selector targets .tw-item not .tw-item.is-reply so the
-          draft .tw-item.is-composer (when active) also gets the
-          arm — drafting position matches the eventual posted
-          position, no content shift.
-        • Top-level .tw-children (under .tw-post) gets NO trunk
-          (top-levels are roots); their children's trunks live
-          on .tw-item > .tw-children one level down. */
-.tw-left,
-.tw-line,
-.tw-trunk-out,
-.tw-hook {
-  display: none !important;
-}
-/* Top-level container (answer's .tw-item.is-post > .tw-children):
-   no indent, no trunk. Top-level comments live flush with the
-   answer column. */
-.tw-item.is-post > .tw-children {
-  padding-left: 0 !important;
-  margin-left: 0 !important;
-}
-/* Nested-reply container — only scoped to .is-reply parents so
-   .is-post never picks up the indent. */
-.tw-item.is-reply > .tw-children {
-  /* Layout breakdown (padding-left = 34):
-       0…20px  → empty buffer to the LEFT of the trunk
-       20…21px → the vertical trunk itself (1px wide)
-       21…28px → 8px horizontal arm
-       28…34px → 6px gap between arm end and the author name
-     padding-top:4 pushes the trunk-top 4px down from the
-     parent body's bottom — a small stand-off so the descender
-     doesn't kiss the parent's name. */
-  padding-left: 34px !important;
-  padding-top: 4px !important;
-  margin-left: 0 !important;
-  position: relative;
-}
-/* Selector scoped to .tw-item.is-reply so top-level comments
-   (whose parent is .tw-item.is-post) DON'T get an arm or
-   descender — they're roots. Composer / nested .is-reply /
-   nested .is-composer children of a real comment all match. */
-.tw-item.is-reply > .tw-children > .tw-item::before {
-  /* Arm: 8px wide, sits 6px BEFORE the author name (right gap).
-     left:-14 lines its start to x=20 of .tw-children (children's
-     content edge is at padding-left=34, so x=20 translates to
-     -14 in child-frame). top:11 centers it on the 22px name
-     line. */
-  content: "";
-  position: absolute;
-  left: -14px;
-  top: 11px;
-  width: 8px;
-  height: 1px;
-  background: #888;
-}
-.tw-item.is-reply > .tw-children > .tw-item::after {
-  /* Short vertical descender that lives ONLY in the gap
-     between consecutive siblings (and the gap below the parent
-     before the first child). Spans from -8px above the row
-     (margin-top:4 + the 4px padding-top on .tw-children, summed
-     for the first child) down to the arm's y. Crucially, this
-     descender does NOT extend through the comment's body —
-     siblings are connected through the gaps, but no full-height
-     left line ever appears alongside a comment's text. */
-  content: "";
-  position: absolute;
-  left: -14px;
-  top: -8px;
-  bottom: calc(100% - 11px);
-  width: 1px;
-  background: #888;
-}
-.tw-item,
-.tw-item.is-reply,
-.tw-item.is-composer {
-  position: relative;
-  padding-left: 0 !important;
-  margin-left: 0 !important;
-  /* Was 10px; tightened to 6px for the brutalist density pass. */
-  margin-top: 6px !important;
-}
+/* 3. Threading — keep the original.
+      The component (+page.svelte) already implements the trunk
+      via .tw-line (in the avatar column) + .tw-trunk-out
+      (between siblings) + .tw-hook (L-shape into each row).
+      That system worked; the avatar gutter just made it
+      visible. Brutalist keeps the gutter for layout (so the
+      lines land where they always did) but hides the avatar
+      glyph itself so the column reads as empty space the
+      line can terminate into.
+      Color / width recolored to brutalist (1px solid #888,
+      no gradient). The CSS vars declared in :root above
+      handle the colour. */
 
 /* 4. Generic flush: any element using a CSS gradient as its
       background (the line variables above, hero backdrops,
@@ -444,12 +360,11 @@
       gone; the prototype pages still use PromptRipple and their
       own scoped CSS handles their layout. */
 
-/* 9. Strip the avatar column and @username handles. Click-to-
-      reply replaces the "+" affordance, so all three of those
-      visual elements disappear — but the layout column where
-      avatars used to sit is kept (visibility: hidden, not
-      display: none) so the threading lines still anchor at
-      their original x-coordinate. Names stay; @-handles go. */
+/* 9. Hide the avatar glyph but KEEP the 24px .tw-left column —
+      the threading lines (.tw-line, .tw-trunk-out, .tw-hook)
+      anchor inside that column. With the avatar invisible, the
+      column reads as empty space the lines terminate into.
+      @-handles also gone (names only). */
 .tw-avatar,
 .tw-avatar-link,
 .tw-avatar-img,
@@ -458,6 +373,24 @@
 }
 .tw-handle {
   display: none !important;
+}
+
+/* Recolor the original threading: 1px solid #888 (was 2px
+   gradient). Vars --line-soft and --line-strong are both #888
+   in :root so this is mostly a width override. */
+.tw-line,
+.tw-trunk-out {
+  width: 1px !important;
+  background: #888 !important;
+}
+.tw-hook path {
+  stroke-width: 1 !important;
+}
+/* Small stand-off above the trunk: 4px gap between the parent's
+   body bottom and where the first child's threading starts.
+   Without this the L-hook's top edge kisses the parent body. */
+.tw-children {
+  padding-top: 4px !important;
 }
 
 /* 10. The "+ reply" affordance (inline leaf + trailing has-kids
