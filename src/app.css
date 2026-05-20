@@ -279,35 +279,62 @@
 .tw-hook {
   display: none !important;
 }
-.tw-post > .tw-children {
+/* Top-level container (answer's .tw-item.is-post > .tw-children):
+   no indent, no trunk. Top-level comments live flush with the
+   answer column. */
+.tw-item.is-post > .tw-children {
   padding-left: 0 !important;
   margin-left: 0 !important;
 }
-.tw-item > .tw-children {
-  padding-left: 15px !important;
+/* Nested-reply container — only scoped to .is-reply parents so
+   .is-post never picks up the indent. */
+.tw-item.is-reply > .tw-children {
+  /* Layout breakdown (padding-left = 34):
+       0…20px  → empty buffer to the LEFT of the trunk
+       20…21px → the vertical trunk itself (1px wide)
+       21…28px → 8px horizontal arm
+       28…34px → 6px gap between arm end and the author name
+     padding-top:4 pushes the trunk-top 4px down from the
+     parent body's bottom — a small stand-off so the descender
+     doesn't kiss the parent's name. */
+  padding-left: 34px !important;
+  padding-top: 4px !important;
   margin-left: 0 !important;
   position: relative;
 }
-.tw-item > .tw-children::before {
+/* Selector scoped to .tw-item.is-reply so top-level comments
+   (whose parent is .tw-item.is-post) DON'T get an arm or
+   descender — they're roots. Composer / nested .is-reply /
+   nested .is-composer children of a real comment all match. */
+.tw-item.is-reply > .tw-children > .tw-item::before {
+  /* Arm: 8px wide, sits 6px BEFORE the author name (right gap).
+     left:-14 lines its start to x=20 of .tw-children (children's
+     content edge is at padding-left=34, so x=20 translates to
+     -14 in child-frame). top:11 centers it on the 22px name
+     line. */
   content: "";
   position: absolute;
-  left: 5px;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: #888;
-}
-.tw-item > .tw-children > .tw-item::before {
-  /* Arm length 8px — slightly less than the 10px right-padding
-     of the trunk so the line lands BEFORE the text and never
-     intersects the author name. top:11 centers it on the 22px
-     name line. */
-  content: "";
-  position: absolute;
-  left: -10px;
+  left: -14px;
   top: 11px;
   width: 8px;
   height: 1px;
+  background: #888;
+}
+.tw-item.is-reply > .tw-children > .tw-item::after {
+  /* Short vertical descender that lives ONLY in the gap
+     between consecutive siblings (and the gap below the parent
+     before the first child). Spans from -8px above the row
+     (margin-top:4 + the 4px padding-top on .tw-children, summed
+     for the first child) down to the arm's y. Crucially, this
+     descender does NOT extend through the comment's body —
+     siblings are connected through the gaps, but no full-height
+     left line ever appears alongside a comment's text. */
+  content: "";
+  position: absolute;
+  left: -14px;
+  top: -8px;
+  bottom: calc(100% - 11px);
+  width: 1px;
   background: #888;
 }
 .tw-item,
@@ -316,7 +343,8 @@
   position: relative;
   padding-left: 0 !important;
   margin-left: 0 !important;
-  margin-top: 10px !important;
+  /* Was 10px; tightened to 6px for the brutalist density pass. */
+  margin-top: 6px !important;
 }
 
 /* 4. Generic flush: any element using a CSS gradient as its
@@ -408,29 +436,13 @@
   filter: none !important;
 }
 
-/* 8. Hero question heading. The old design's PromptRipple h1 was
-      a 1000px-wide centered hero clamping up to 124px — it broke
-      out of the ~608px comment column. Brutalist version: shrink
-      it, left-align it, and constrain it to the same column the
-      comments live in so the page reads as one stack instead of
-      a centered banner followed by left-anchored content.
-      max-width matches .tw-body's measured width; margin: 0 auto
-      centers the BLOCK, while text-align: left keeps the text
-      left-edged within it. */
-.ripple-host,
-.ripple-host > .ripple-content {
-  max-width: 608px !important;
-  margin: 0 auto !important;
-  width: 100% !important;
-}
-.ripple-h1 {
-  font-size: clamp(24px, 3.2vw, 36px) !important;
-  text-align: left !important;
-  max-width: 100% !important;
-  line-height: 1.18 !important;
-  letter-spacing: -0.01em !important;
-  font-weight: 600 !important;
-}
+/* 8. Hero heading.
+      Home page no longer uses PromptRipple — it renders a plain
+      <h1 class="prompt-h1"> directly inside .page. Styling lives
+      in +page.svelte's scoped CSS. The .ripple-host /
+      .ripple-content / .ripple-h1 overrides previously here are
+      gone; the prototype pages still use PromptRipple and their
+      own scoped CSS handles their layout. */
 
 /* 9. Strip the avatar column and @username handles. Click-to-
       reply replaces the "+" affordance, so all three of those

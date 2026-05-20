@@ -5,7 +5,9 @@
 	import { authClient } from '$lib/auth-client';
 	import { promptSignIn } from '$lib/stores/sign-in-modal';
 	import { Pencil, MoreHorizontal, Check, ArrowUp, Plus } from 'lucide-svelte';
-	import PromptRipple from '$lib/components/PromptRipple.svelte';
+	// PromptRipple no longer used on the home page; brutalist
+	// renders the question as a plain <h1>. Component still
+	// available for the prototype pages.
 	import { writable } from 'svelte/store';
 	import {
 		connectForumTyping,
@@ -531,10 +533,12 @@
 	{#if !data.prompt}
 		<p class="empty">No prompt today yet. Check back shortly.</p>
 	{:else}
+		<!-- Brutalist: no WebGL hero. Plain <h1> + composer in the
+		     single page column. -->
 		<section class="hero">
-			<PromptRipple text={data.prompt.text}>
-				{#if !data.myAnswer}
-					<form class="composer" onsubmit={onComposerSubmit}>
+			<h1 class="prompt-h1">{data.prompt.text}</h1>
+			{#if !data.myAnswer}
+				<form class="composer" onsubmit={onComposerSubmit}>
 						<div class="composer-stack">
 							<div class="composer-wrap">
 								<textarea
@@ -560,8 +564,7 @@
 							</div>
 						</div>
 					</form>
-				{/if}
-			</PromptRipple>
+			{/if}
 		</section>
 
 		<section class="answers">
@@ -1184,17 +1187,28 @@
 {/snippet}
 
 <style>
+	/* Brutalist: one single max-width container for the whole
+	   page. Everything inside flows in one column. 40px top
+	   margin so the content doesn't kiss the viewport edge. */
 	.page {
-		max-width: none;
-		margin: 0 auto;
-		padding: 0 12px 96px;
-		/* The composer's glow halo (.composer-wrap::before/::after,
-		   inset: -22px plus a 28px blur) extends past the composer
-		   box. Without clipping, that pushes the page wider than the
-		   viewport on mobile and you get horizontal scroll. Using
-		   `clip` (not `hidden`) so we don't create a new scroll
-		   container — keeps the navbar's sticky behavior intact. */
+		max-width: 640px;
+		margin: 40px auto 0;
+		padding: 0 20px 96px;
 		overflow-x: clip;
+	}
+
+	/* Plain-text question heading — replaces the WebGL hero.
+	   20px bottom margin to the composer (was 40-ish before
+	   via PromptRipple's flex spacing). */
+	.prompt-h1 {
+		font-family: var(--font-sans);
+		font-size: clamp(24px, 3.2vw, 36px);
+		font-weight: 600;
+		line-height: 1.18;
+		letter-spacing: -0.01em;
+		text-align: left;
+		margin: 0 0 20px;
+		color: var(--foreground);
 	}
 
 	.composer,
@@ -1431,7 +1445,9 @@
 		resize: vertical;
 		min-height: 88px;
 	}
-	.composer textarea { min-height: 96px; font-size: 17px; padding: 14px 16px; }
+	/* Brutalist: was min-height 96 / 17px / 14×16 padding —
+	   shrunk to match the column's 16px body type. */
+	.composer textarea { min-height: 48px; font-size: 16px; padding: 8px 12px; }
 	/* Reply composer sits inline within the comment tree, so it
 	   should read like a comment body, not a heavy form. Same font
 	   size + line-height as .tw-body, with tight padding and no
