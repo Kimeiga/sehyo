@@ -280,6 +280,22 @@
 	padding-top: 4px !important;
 }
 
+/* L1 (top-level comments — direct children of an answer post)
+   have NO threading: no hook, no trunk-out, no in-column line.
+   Lines only appear one layer down (L2 and deeper). */
+.tw-item.is-post > .tw-children > .tw-item.is-reply > .tw-hook,
+.tw-item.is-post > .tw-children > .tw-item.is-reply > .tw-trunk-out,
+.tw-item.is-post > .tw-children > .tw-item.is-reply > .tw-row > .tw-left > .tw-line {
+	display: none !important;
+}
+
+/* Last child anywhere in the tree: no leaving trunk — there's
+   no next sibling below for it to connect to, so the dangling
+   line is visual noise. */
+.tw-item.is-reply:last-child > .tw-trunk-out {
+	display: none !important;
+}
+
 /* ── 7. Component overrides ──────────────────────────────────────
    One block per component / region. Each rule has a comment
    explaining why it needs to override the scoped CSS. */
