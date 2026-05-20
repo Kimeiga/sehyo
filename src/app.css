@@ -1,505 +1,381 @@
+/* ─────────────────────────────────────────────────────────────────
+   app.css — global theme + brutalist overrides for Sehyo
+   ─────────────────────────────────────────────────────────────────
+   Sections:
+     1. Tailwind imports + plugins
+     2. Theme tokens (fonts, radii)
+     3. Color variables — dark (default) + light
+     4. Base layer — body type, OpenType feature set, .frac utility
+     5. Site-wide resets — no motion, no glow, hard edges, no gradients
+     6. Threading overrides — recolor the comment-tree lines
+     7. Component overrides — author meta, body copy, composer, menu
+
+   The override sections use !important deliberately: each rule
+   targets a SCOPED Svelte component CSS rule that already won the
+   cascade. Without the modifier, the component's local rule would
+   beat the global stylesheet. !important is the cheapest way to
+   keep the redesign as one global file instead of patching ~10
+   component files individually. */
+
+/* ── 1. Tailwind ──────────────────────────────────────────────── */
 @import 'tailwindcss';
-@import "tw-animate-css";
+@import 'tw-animate-css';
 
 @custom-variant dark (&:is(.dark *));
 @plugin '@tailwindcss/typography';
 
+/* ── 2. Theme tokens ──────────────────────────────────────────── */
 @theme {
-  /* Brutalist redesign: Inter for everything. Variable-weight axis
-     supports the 600 baseline; opsz axis gets Inter to render its
-     small-size optical tuning. */
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-jp: "Inter", ui-sans-serif, system-ui, sans-serif;
+	/* Inter for everything. Variable-weight + opsz axes drive the
+	   600 baseline and Inter's small-size optical tuning. */
+	--font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	--font-jp: 'Inter', ui-sans-serif, system-ui, sans-serif;
 }
 
 @theme inline {
-  /* Squared corners site-wide. The radius vars still exist (so any
-     calc() built on them resolves) but they all evaluate to 0 —
-     hard edges everywhere. */
-  --radius-sm: 0px;
-  --radius-md: 0px;
-  --radius-lg: 0px;
-  --radius-xl: 0px;
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
+	/* Squared corners site-wide. Radii still resolve (calc() built
+	   on them works) but every level evaluates to 0. */
+	--radius-sm: 0px;
+	--radius-md: 0px;
+	--radius-lg: 0px;
+	--radius-xl: 0px;
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--color-chart-1: var(--chart-1);
+	--color-chart-2: var(--chart-2);
+	--color-chart-3: var(--chart-3);
+	--color-chart-4: var(--chart-4);
+	--color-chart-5: var(--chart-5);
+	--color-sidebar: var(--sidebar);
+	--color-sidebar-foreground: var(--sidebar-foreground);
+	--color-sidebar-primary: var(--sidebar-primary);
+	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+	--color-sidebar-accent: var(--sidebar-accent);
+	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+	--color-sidebar-border: var(--sidebar-border);
+	--color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* ── 3. Color variables ───────────────────────────────────────── */
 :root {
-  --radius: 0;
+	--radius: 0;
 
-  /* Sehyo accent kept around for any code reading it, but the
-     brutalist palette below uses pure black / white only. */
-  --brand: #ffffff;
+	/* Pure-black palette. Anything that calls itself an accent
+	   resolves to white so the only colour on the page comes from
+	   per-author hues (assigned inline at render time). */
+	--background: #000000;
+	--foreground: #ffffff;
+	--card: #000000;
+	--card-foreground: #ffffff;
+	--popover: #000000;
+	--popover-foreground: #ffffff;
+	--primary: #ffffff;
+	--primary-foreground: #000000;
+	--secondary: #000000;
+	--secondary-foreground: #ffffff;
+	--muted: #1a1a1a;
+	--muted-foreground: #888888;
+	--accent: #ffffff;
+	--accent-foreground: #000000;
+	--destructive: #ffffff;
+	--destructive-foreground: #000000;
+	--border: #888888;
+	--input: #000000;
+	--ring: #ffffff;
+	--brand: #ffffff;
 
-  /* Brutalist dark theme (default): pure black bg, pure white fg,
-     light-gray hairlines. No gradients anywhere — see the
-     "Brutalist overrides" block at the bottom which neutralises
-     scoped component gradients. */
-  --background: #000000;
-  --foreground: #ffffff;
+	--chart-1: #ffffff;
+	--chart-2: #aaaaaa;
+	--chart-3: #777777;
+	--chart-4: #444444;
+	--chart-5: #ffffff;
 
-  --card: #000000;
-  --card-foreground: #ffffff;
+	--sidebar: #000000;
+	--sidebar-foreground: #ffffff;
+	--sidebar-primary: #ffffff;
+	--sidebar-primary-foreground: #000000;
+	--sidebar-accent: #000000;
+	--sidebar-accent-foreground: #ffffff;
+	--sidebar-border: #888888;
+	--sidebar-ring: #ffffff;
 
-  --popover: #000000;
-  --popover-foreground: #ffffff;
-
-  --primary: #ffffff;
-  --primary-foreground: #000000;
-
-  --secondary: #000000;
-  --secondary-foreground: #ffffff;
-
-  --muted: #1a1a1a;
-  --muted-foreground: #888888;
-
-  --accent: #ffffff;
-  --accent-foreground: #000000;
-
-  --destructive: #ffffff;
-  --destructive-foreground: #000000;
-
-  --border: #888888;
-  --input: #000000;
-  --ring: #ffffff;
-
-  --chart-1: #ffffff;
-  --chart-2: #aaaaaa;
-  --chart-3: #777777;
-  --chart-4: #444444;
-  --chart-5: #ffffff;
-
-  --sidebar: #000000;
-  --sidebar-foreground: #ffffff;
-  --sidebar-primary: #ffffff;
-  --sidebar-primary-foreground: #000000;
-  --sidebar-accent: #000000;
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #888888;
-  --sidebar-ring: #ffffff;
-
-  /* Threading-line colours used by .tw-line / .tw-trunk-out /
-     .tw-hook in +page.svelte. Old design had soft→strong
-     gradients; the brutalist override below collapses both to a
-     single light-gray so the lines read as plain 2px rules. */
-  --line-soft: #888888;
-  --line-strong: #888888;
+	/* Threading-line colour (used by .tw-line / .tw-trunk-out /
+	   .tw-hook in +page.svelte). Single hairline gray — old design
+	   gradient from --line-soft → --line-strong collapses to one
+	   value. */
+	--line-soft: #888888;
+	--line-strong: #888888;
 }
 
-/* Light theme — kept around so the .light class still toggles
-   something sensible. Same brutalist constraints inverted. */
 .light {
-  --background: #ffffff;
-  --foreground: #000000;
-  --card: #ffffff;
-  --card-foreground: #000000;
-  --popover: #ffffff;
-  --popover-foreground: #000000;
-  --primary: #000000;
-  --primary-foreground: #ffffff;
-  --secondary: #ffffff;
-  --secondary-foreground: #000000;
-  --muted: #f0f0f0;
-  --muted-foreground: #555555;
-  --accent: #000000;
-  --accent-foreground: #ffffff;
-  --destructive: #000000;
-  --border: #888888;
-  --input: #ffffff;
-  --ring: #000000;
-  --chart-1: #000000;
-  --chart-2: #444444;
-  --chart-3: #777777;
-  --chart-4: #aaaaaa;
-  --chart-5: #000000;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #000000;
-  --sidebar-primary: #000000;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #ffffff;
-  --sidebar-accent-foreground: #000000;
-  --sidebar-border: #888888;
-  --sidebar-ring: #000000;
-  --line-soft: #888888;
-  --line-strong: #888888;
+	--background: #ffffff;
+	--foreground: #000000;
+	--card: #ffffff;
+	--card-foreground: #000000;
+	--popover: #ffffff;
+	--popover-foreground: #000000;
+	--primary: #000000;
+	--primary-foreground: #ffffff;
+	--secondary: #ffffff;
+	--secondary-foreground: #000000;
+	--muted: #f0f0f0;
+	--muted-foreground: #555555;
+	--accent: #000000;
+	--accent-foreground: #ffffff;
+	--destructive: #000000;
+	--border: #888888;
+	--input: #ffffff;
+	--ring: #000000;
+	--chart-1: #000000;
+	--chart-2: #444444;
+	--chart-3: #777777;
+	--chart-4: #aaaaaa;
+	--chart-5: #000000;
+	--sidebar: #ffffff;
+	--sidebar-foreground: #000000;
+	--sidebar-primary: #000000;
+	--sidebar-primary-foreground: #ffffff;
+	--sidebar-accent: #ffffff;
+	--sidebar-accent-foreground: #000000;
+	--sidebar-border: #888888;
+	--sidebar-ring: #000000;
+	--line-soft: #888888;
+	--line-strong: #888888;
 }
 
+/* ── 4. Base layer ────────────────────────────────────────────── */
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground font-sans;
-    /* Brutalist baseline: 14px, semibold, Inter with the full
-       OpenType menu the design calls for. tnum is enabled
-       globally for tabular columns; frac is exposed as a
-       per-element opt-in via the .frac utility below, since
-       frac and tnum conflict when applied to the same digits. */
-    font-size: 14px;
-    font-weight: 600;
-    font-feature-settings:
-      "calt" 1,   /* contextual alternates */
-      "dlig" 1,   /* discretionary ligatures */
-      "tnum" 1,   /* tabular numbers (frac off — see .frac) */
-      "case" 1,   /* case-sensitive forms */
-      "ccmp" 1,   /* glyph composition/decomposition */
-      "sups" 1,   /* superscript (with ccmp) */
-      "subs" 1,   /* subscript (with ccmp) */
-      "sinf" 1,   /* scientific inferior */
-      "dnom" 1,   /* denominator */
-      "zero" 1,   /* slashed zero (digit/letter disambiguation) */
-      /* Stylistic sets per the Inter v4 spec (rsms.me/inter):
-           ss02 — Disambiguation (with zero)
-           ss03 — Round quotes & commas
-           ss07 — Square punctuation
-           ss08 — Square quotes
-         ss03 (rounded) and ss08 (square) both rewrite quote
-         glyphs; the later-declared rule wins per spec. Listing
-         ss08 last so quotes render square — flip the order if
-         you prefer rounded. */
-      "ss02" 1,
-      "ss03" 1,
-      "ss07" 1,
-      "ss08" 1,
-      /* Character variants per the Inter v4 spec:
-           cv06 — Simplified u
-           cv10 — Capital G with spur
-           cv11 — Single-story a
-           cv12 — Compact f
-           cv13 — Compact t */
-      "cv06" 1,
-      "cv10" 1,
-      "cv11" 1,
-      "cv12" 1,
-      "cv13" 1;
-  }
+	* {
+		@apply border-border outline-ring/50;
+	}
 
-  /* Opt-in fractions: drop tnum so frac's diagonal fraction can
-     actually engage. Use as <span class="frac">3/4</span>. */
-  .frac {
-    font-feature-settings: "frac" 1, "tnum" 0 !important;
-  }
+	body {
+		@apply bg-background text-foreground font-sans;
+		font-size: 14px;
+		font-weight: 600;
+		/* Inter OpenType menu — see rsms.me/inter for the canonical
+		   feature reference. tnum is global (tabular columns);
+		   .frac below opts in to fractions per-element since frac
+		   and tnum conflict on the same digits.
+		   ss03 (round) vs ss08 (square) both rewrite quote glyphs;
+		   ss08 declared last so quotes render square. */
+		font-feature-settings:
+			'calt' 1, 'dlig' 1, 'tnum' 1, 'case' 1, 'ccmp' 1,
+			'sups' 1, 'subs' 1, 'sinf' 1, 'dnom' 1, 'zero' 1,
+			'ss02' 1, 'ss03' 1, 'ss07' 1, 'ss08' 1,
+			'cv06' 1, 'cv10' 1, 'cv11' 1, 'cv12' 1, 'cv13' 1;
+	}
+
+	/* <span class="frac">3/4</span> — flips tnum off so frac engages. */
+	.frac {
+		font-feature-settings: 'frac' 1, 'tnum' 0;
+	}
 }
 
-/* ────────────────────────────────────────────────────────────────
-   Brutalist overrides
-   ────────────────────────────────────────────────────────────────
-   One global block that neutralises animations, circles, and
-   gradients across every scoped component without touching their
-   source. Keeps the redesign PR diff focused and lets us roll
-   back by deleting this block alone. */
+/* ── 5. Site-wide resets ─────────────────────────────────────────
+   These run AFTER component CSS by ordering — they need !important
+   only when fighting a scoped rule that hard-codes the property. */
 
-/* 1. No motion. Transitions + animations silenced everywhere; the
-      authoring code stays put (per the redesign brief: "don't
-      delete animation code yet"). Includes Tailwind's animate-*
-      utilities and Svelte transition fallbacks. */
+/* No motion. Transitions + animations off everywhere; source CSS
+   is kept (per the redesign brief: don't delete animation code,
+   just don't render it). */
 *,
 *::before,
 *::after {
-  transition: none !important;
-  animation: none !important;
-  scroll-behavior: auto !important;
+	transition: none !important;
+	animation: none !important;
+	scroll-behavior: auto !important;
 }
 
-/* 2. Hard edges. Every circle / pill / rounded element becomes a
-      square. Catches the codebase's mix of border-radius: 999px,
-      9999px, 50%, and Tailwind's .rounded-full utility. */
-[class*="rounded"],
-.rounded-full,
-.tw-avatar,
-.tw-avatar-img,
-.avatar,
-[class*="avatar"] {
-  border-radius: 0 !important;
-}
+/* Hard edges. Universal selector flattens any hard-coded
+   border-radius (50%, 999px, 9999px) and Tailwind's .rounded-*. */
 *,
 *::before,
 *::after {
-  /* Belt-and-suspenders: any scoped rule that hard-codes 50%,
-     999px, 9999px, etc., gets flattened. Specific shapes
-     (toolbars, buttons, badges) all square up. */
-  border-radius: 0 !important;
+	border-radius: 0 !important;
 }
 
-/* 3. Threading — keep the original.
-      The component (+page.svelte) already implements the trunk
-      via .tw-line (in the avatar column) + .tw-trunk-out
-      (between siblings) + .tw-hook (L-shape into each row).
-      That system worked; the avatar gutter just made it
-      visible. Brutalist keeps the gutter for layout (so the
-      lines land where they always did) but hides the avatar
-      glyph itself so the column reads as empty space the
-      line can terminate into.
-      Color / width recolored to brutalist (1px solid #888,
-      no gradient). The CSS vars declared in :root above
-      handle the colour. */
-
-/* 4. Generic flush: any element using a CSS gradient as its
-      background (the line variables above, hero backdrops,
-      pill fills) gets a flat black surface instead. This is
-      blunt — the brutalist brief is "no gradients" — and any
-      element that needs to stand out should do it with a 2px
-      border, not a gradient. The threading-line override above
-      runs AFTER this so the lines stay light-gray. */
-[style*="gradient"],
-[class*="gradient"] {
-  background-image: none !important;
+/* No glows. Box/text shadows + backdrop blurs (composer halo,
+   hero text-shadows, frosted overlays) all off. */
+*,
+*::before,
+*::after {
+	box-shadow: none !important;
+	text-shadow: none !important;
+	backdrop-filter: none !important;
+	-webkit-backdrop-filter: none !important;
 }
 
-/* 5. Kill the hero PromptRipple's WebGL animation. The shader
-      can't be stopped via CSS `animation: none`; instead hide the
-      canvas and counter the .is-faded class so the underlying
-      <h1> stays visible as static type. Animation code untouched
-      per the brief — just not rendered. */
+/* No gradients on inline-style and class-based gradient elements.
+   Scoped gradient backgrounds in component CSS that don't match
+   either selector are handled per-component below (#7). */
+[style*='gradient'],
+[class*='gradient'] {
+	background-image: none !important;
+}
+
+/* Hero PromptRipple (used by prototype pages only; home replaced
+   it with a plain h1). Hide the WebGL canvas + keep the underlying
+   h1 visible by countering the .is-faded opacity flip. */
 .ripple-canvas {
-  display: none !important;
+	display: none !important;
 }
 .ripple-h1.is-faded {
-  opacity: 1 !important;
+	opacity: 1 !important;
 }
 
-/* Menu — same treatment as the hero ripple. The shader-driven
-   reveal+wave animation lived on .menu-canvas; that's hidden
-   so the menu becomes a plain black backdrop with the nav-item
-   buttons floating on it. The whole panel cross-fades in/out
-   via a simple opacity transition (carved out from the global
-   `transition: none` via class specificity). nav-items are
-   forced visible (the shader normally drove their opacity).
-   Font forced to Inter so the menu matches the rest of the
-   site. */
-.menu-canvas {
-  display: none !important;
-}
-.menu {
-  background: #000 !important;
-  transition: opacity 200ms ease !important;
-  font-family: var(--font-sans) !important;
-}
-.menu .nav-item,
-.menu .nav-item-label,
-.menu .nav-list {
-  opacity: 1 !important;
-  visibility: visible !important;
-  font-family: var(--font-sans) !important;
-}
-
-/* 6. No glows. Strip every decorative drop-shadow, text-shadow,
-      and backdrop-blur on the page (the old design used a cyan
-      box-shadow halo on the composer, soft text-shadows on the
-      hero, and backdrop-filter on overlays — all anti-brutalist).
-      .author-mask's filter:blur(5px) is explicitly preserved
-      because it's a feature gate, not decoration. */
-*,
-*::before,
-*::after {
-  box-shadow: none !important;
-  text-shadow: none !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-/* Re-assert the name-blur ONLY while the engagement gate is
-   active (.app.names-blurred). Without this scope it would blur
-   names even after the viewer has answered. */
-.app.names-blurred .author-mask {
-  filter: blur(5px) !important;
-}
-
-/* 7. Composer rainbow halo. .composer-stack's ::before/::after
-      pseudos layer radial-gradients (blue/cyan/teal) and
-      filter:blur(28px) into a continuous glow around the prompt
-      composer — pure decoration, pure anti-brutalist. Pseudos
-      hidden via `content: none` (display:none on a pseudo is
-      ignored by some engines; clearing `content` is reliable). */
+/* Composer rainbow halo. .composer-stack's ::before/::after layer
+   radial-gradients + filter:blur(28px). Pure decoration. */
 .composer-stack::before,
 .composer-stack::after,
-[class*="halo"]::before,
-[class*="halo"]::after,
-.tw-halo,
-.composer-halo {
-  content: none !important;
-  display: none !important;
-  background: transparent !important;
-  background-image: none !important;
-  filter: none !important;
+[class*='halo']::before,
+[class*='halo']::after {
+	content: none !important;
+	display: none !important;
 }
 
-/* 8. Hero heading.
-      Home page no longer uses PromptRipple — it renders a plain
-      <h1 class="prompt-h1"> directly inside .page. Styling lives
-      in +page.svelte's scoped CSS. The .ripple-host /
-      .ripple-content / .ripple-h1 overrides previously here are
-      gone; the prototype pages still use PromptRipple and their
-      own scoped CSS handles their layout. */
+/* ── 6. Threading overrides ──────────────────────────────────────
+   Keep the original .tw-line / .tw-trunk-out / .tw-hook system
+   from +page.svelte; just recolor and hide the avatar so the
+   lines sit in an empty column. */
 
-/* 9. Hide the avatar glyph but KEEP the 24px .tw-left column —
-      the threading lines (.tw-line, .tw-trunk-out, .tw-hook)
-      anchor inside that column. With the avatar invisible, the
-      column reads as empty space the lines terminate into.
-      @-handles also gone (names only). */
+/* Avatar invisible, column reserved — the original threading
+   geometry depends on .tw-left being 24px wide. */
 .tw-avatar,
 .tw-avatar-link,
 .tw-avatar-img,
 .tw-avatar-tooltip {
-  visibility: hidden !important;
-}
-.tw-handle {
-  display: none !important;
+	visibility: hidden !important;
 }
 
-/* Recolor the original threading: 1px solid #888 (was 2px
-   gradient). Vars --line-soft and --line-strong are both #888
-   in :root so this is mostly a width override. */
+/* Hairlines: 1px solid #888 (was 2px + soft→strong gradient). */
 .tw-line,
 .tw-trunk-out {
-  width: 1px !important;
-  background: #888 !important;
+	width: 1px !important;
+	background: #888 !important;
 }
 .tw-hook path {
-  stroke-width: 1 !important;
-}
-/* Small stand-off above the trunk: 4px gap between the parent's
-   body bottom and where the first child's threading starts.
-   Without this the L-hook's top edge kisses the parent body. */
-.tw-children {
-  padding-top: 4px !important;
+	stroke-width: 1 !important;
 }
 
-/* 10. The "+ reply" affordance (inline leaf + trailing has-kids
-       variants) is replaced by click-on-comment. Hide both. */
+/* Small stand-off above the trunk: 4px gap between the parent
+   body bottom and where the first child's threading starts. */
+.tw-children {
+	padding-top: 4px !important;
+}
+
+/* ── 7. Component overrides ──────────────────────────────────────
+   One block per component / region. Each rule has a comment
+   explaining why it needs to override the scoped CSS. */
+
+/* @-handles gone — names only. The "+" affordance is replaced by
+   click-on-comment, so its three pieces (inline plus, plus stem,
+   trailing add row) are hidden. */
+.tw-handle,
 .tw-add,
 .tw-add-plus,
 .tw-add-stem {
-  display: none !important;
+	display: none !important;
 }
 
-/* 11. Disable the engagement-gate name blur. The brutalist pass
-       shows real names by default — no .author-mask filter. */
+/* Author name: 16/22, name colour assigned inline at render time
+   by colorForUser(). The font-size override beats the scoped
+   .tw-name rule that ran 12-14px previously. */
+.tw-name {
+	font-size: 16px !important;
+	line-height: 22px !important;
+}
+.tw-meta {
+	margin-bottom: 2px !important;
+}
+
+/* Click-to-reply body: cursor cue. Margin zero so the trunk
+   under the row sits flush against the text. */
+.tw-body {
+	cursor: pointer;
+	margin-bottom: 0 !important;
+}
+
+/* Engagement-gate name blur — disabled. The brutalist pass shows
+   real names always. */
 .app.names-blurred .author-mask,
 .author-mask {
-  filter: none !important;
+	filter: none !important;
 }
 
-/* 12. Cursor cue for the click-to-reply body. */
-.tw-body {
-  cursor: pointer;
-}
-
-/* 12b. Reply composer layout — textarea + submit button as a
-        single seamless bar. Button stretches to match whatever
-        height the textarea is (rows / scrolling content),
-        with zero gap between them. Font sizing 16/600 matches
-        the author name + body so the composer reads as a single
-        typographic system. */
+/* Reply composer: textarea + submit as a seamless bar. */
 .reply-composer {
-  display: flex !important;
-  flex-direction: row !important;
-  gap: 0 !important;
-  align-items: stretch !important;
-  /* Tight vertical seat against the .tw-meta above it: no extra
-     margin between the author handle and the textarea. */
-  margin-top: 2px !important;
+	display: flex !important;
+	flex-direction: row !important;
+	gap: 0 !important;
+	align-items: stretch !important;
+	margin-top: 2px !important;
 }
 .reply-composer textarea {
-  flex: 1 1 auto !important;
-  min-height: 32px !important;
-  margin: 0 !important;
-  border-right-width: 0 !important;
-  font-size: 16px !important;
-  font-weight: 600 !important;
+	flex: 1 1 auto !important;
+	min-height: 32px !important;
+	margin: 0 !important;
+	border-right-width: 0 !important;
+	font-size: 16px !important;
+	font-weight: 600 !important;
 }
 .reply-composer .post-button,
 .reply-composer .post-button.small {
-  align-self: stretch !important;
-  height: auto !important;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-  margin: 0 !important;
-  border-left-width: 0 !important;
-  font-size: 16px !important;
-  font-weight: 600 !important;
-  flex-shrink: 0;
+	align-self: stretch !important;
+	height: auto !important;
+	padding-top: 0 !important;
+	padding-bottom: 0 !important;
+	margin: 0 !important;
+	border-left-width: 0 !important;
+	font-size: 16px !important;
+	font-weight: 600 !important;
+	flex-shrink: 0;
 }
 
-/* 12c. Author name to 16px (matches body). Sized here instead
-        of on .tw-name in the component so the brutalist
-        baseline owns the whole typographic scale. The colour
-        inline-style assignment from colorForUser still wins
-        over any defaults. */
-.tw-name {
-  font-size: 16px !important;
-  line-height: 22px !important;
-}
-.tw-meta {
-  /* Tight gap between the name row and the body/composer below. */
-  margin-bottom: 2px !important;
-}
-
-/* 13. Tighten vertical rhythm. .tw-body margin-bottom set to 0
-       (was 8px in two places — both removed) so the row's trunk
-       under it sits right against the bottom of the text. */
-.tw-body { margin-bottom: 0 !important; }
-.tw-item.is-reply { padding-top: 0 !important; }
-.tw-children { margin-top: 0 !important; padding-top: 0 !important; gap: 0 !important; }
-.tw-row { padding-top: 0 !important; padding-bottom: 0 !important; }
-.tw-post { padding-top: 8px !important; padding-bottom: 8px !important; margin-top: 0 !important; margin-bottom: 8px !important; }
-/* Hero/composer block: kill the deep vertical padding the old
-   design used to push the centered banner away from the rest of
-   the page. The new column needs the prompt sitting right next
-   to the composer above and the timeline below. */
-.ripple-host {
-  margin-top: 12px !important;
-  margin-bottom: 12px !important;
-}
-.composer-stack {
-  margin-top: 8px !important;
-  margin-bottom: 8px !important;
-}
-
-/* 14. Readable prose exception. The 14/600 brutalist baseline is
-      right for chrome (buttons, labels, meta) but too tight for
-      multi-line comment + answer paragraphs. `.tw-body` is the
-      <p> for both top-level answers and threaded comment text,
-      so this rule covers both: 16/24 line-height, weight 400,
-      off-white #fafafa, just `calt` + `liga` features so the
-      content reads as plain Inter prose (no stylistic-set noise
-      in body copy). */
+/* Readable prose for comment + answer bodies. Different scale
+   from the chrome — 16/24 weight 400 — so the content reads as
+   plain Inter prose without the stylistic-set noise. */
 .tw-body {
-  font-family: "Inter", "InterVariable", ui-sans-serif, sans-serif !important;
-  font-size: 16px !important;
-  font-weight: 400 !important;
-  line-height: 24px !important;
-  color: rgb(250, 250, 250) !important;
-  font-feature-settings: "calt", "liga" !important;
-  /* Zero bottom margin — trunk under the row sits right against
-     the text. Was 8px / 24px; both removed. */
-  margin-bottom: 0 !important;
+	font-family: 'Inter', 'InterVariable', ui-sans-serif, sans-serif !important;
+	font-size: 16px !important;
+	font-weight: 400 !important;
+	line-height: 24px !important;
+	color: rgb(250, 250, 250) !important;
+	font-feature-settings: 'calt', 'liga' !important;
+}
+
+/* Menu: hide the WebGL shader, plain black backdrop, simple
+   opacity cross-fade on open/close. Nav items forced visible
+   (the shader normally drove their opacity). Font forced to
+   Inter so the menu matches the rest of the site. */
+.menu-canvas {
+	display: none !important;
+}
+.menu {
+	background: #000 !important;
+	transition: opacity 200ms ease !important;
+	font-family: var(--font-sans) !important;
+}
+.menu .nav-item,
+.menu .nav-item-label,
+.menu .nav-list {
+	opacity: 1 !important;
+	visibility: visible !important;
+	font-family: var(--font-sans) !important;
 }
