@@ -252,23 +252,27 @@
 
 /* 3. Threading lines — redrawn.
       Old design hung three pieces off a 24px avatar gutter:
-      .tw-line (in-column trunk), .tw-trunk-out (between
-      siblings), .tw-hook (L-shape bridging trunk → row). All
-      three are hidden, plus the .tw-left avatar column itself.
-      Spacing & connectors are rebuilt from pseudo-elements:
-        • 10px indent per reply level (not the old 24px gutter)
-        • each NESTED comment gets a 1px horizontal arm running
-          from its parent's trunk-column out to the midpoint of
-          its own author name
-        • each NESTED comment gets a 1px vertical descender
-          covering the 10px margin above its row and connecting
-          down to its arm — these stack between siblings so the
-          column visually continues from the parent's bottom
-          through all the children
-        • TOP-LEVEL comments (direct under .tw-post) have NO
-          arm and NO descender — they're roots; the line
-          emerging from the bottom of a top-level is just its
-          first child's descender. */
+      .tw-line, .tw-trunk-out, .tw-hook (all hidden). Avatar
+      column .tw-left hidden too. New geometry:
+        • 10px indent per nesting level + 5px buffer to the LEFT
+          of the trunk → .tw-children padding-left:15px, trunk
+          at left:5 (so it's not flush against the previous
+          column's edge).
+        • Trunk lives on .tw-children::before as a SINGLE full-
+          height line covering all siblings on that level — one
+          continuous vertical connecting child 1 → child 2 → …
+          → child N, matching the old design's continuity.
+        • Each child (.tw-item) gets a 30px horizontal arm —
+          short enough to terminate BEFORE the midpoint of any
+          typical name at 16/600 Inter (no overshoot). top:11px
+          centers it on a 16/24 name row.
+        • Selector targets .tw-item not .tw-item.is-reply so the
+          draft .tw-item.is-composer (when active) also gets the
+          arm — drafting position matches the eventual posted
+          position, no content shift.
+        • Top-level .tw-children (under .tw-post) gets NO trunk
+          (top-levels are roots); their children's trunks live
+          on .tw-item > .tw-children one level down. */
 .tw-left,
 .tw-line,
 .tw-trunk-out,
@@ -280,50 +284,35 @@
   margin-left: 0 !important;
 }
 .tw-item > .tw-children {
-  padding-left: 10px !important;
+  padding-left: 15px !important;
   margin-left: 0 !important;
   position: relative;
 }
+.tw-item > .tw-children::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #888;
+}
+.tw-item > .tw-children > .tw-item::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 11px;
+  width: 30px;
+  height: 1px;
+  background: #888;
+}
 .tw-item,
-.tw-item.is-reply {
+.tw-item.is-reply,
+.tw-item.is-composer {
   position: relative;
   padding-left: 0 !important;
   margin-left: 0 !important;
   margin-top: 10px !important;
-}
-/* Nested-only: horizontal arm to name midpoint. Fixed 50px
-   length (10 indent + ~40 into the name) — approximates the
-   midpoint of a typical "First Last" name at 14/600 Inter
-   without measuring every name's actual width. */
-.tw-item > .tw-children > .tw-item.is-reply::before {
-  content: "";
-  position: absolute;
-  left: -10px;
-  top: 8px;
-  width: 50px;
-  height: 1px;
-  background: #888;
-}
-/* Nested-only: vertical descender. top:-10px puts the top edge
-   at the previous row's bottom (or parent's bottom for the
-   first child); bottom:calc(100% - 8px) anchors the lower edge
-   exactly at the arm's y so the descender meets the arm without
-   a gap. */
-.tw-item > .tw-children > .tw-item.is-reply::after {
-  content: "";
-  position: absolute;
-  left: -10px;
-  top: -10px;
-  bottom: calc(100% - 8px);
-  width: 1px;
-  background: #888;
-}
-/* Top-level comments under the answer: roots — no arm, no
-   descender from above. (The line under a top-level comment is
-   contributed by its own first child's ::after.) */
-.tw-post > .tw-children > .tw-item.is-reply::before,
-.tw-post > .tw-children > .tw-item.is-reply::after {
-  display: none !important;
 }
 
 /* 4. Generic flush: any element using a CSS gradient as its
@@ -453,19 +442,25 @@
 /* 12b. Reply composer layout — textarea + submit button as a
         single seamless bar. Button stretches to match whatever
         height the textarea is (rows / scrolling content),
-        with zero gap between them. The old design had a small
-        flex gap + a fixed-padding pill button. */
+        with zero gap between them. Font sizing 16/600 matches
+        the author name + body so the composer reads as a single
+        typographic system. */
 .reply-composer {
   display: flex !important;
   flex-direction: row !important;
   gap: 0 !important;
   align-items: stretch !important;
+  /* Tight vertical seat against the .tw-meta above it: no extra
+     margin between the author handle and the textarea. */
+  margin-top: 2px !important;
 }
 .reply-composer textarea {
   flex: 1 1 auto !important;
   min-height: 32px !important;
   margin: 0 !important;
   border-right-width: 0 !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
 }
 .reply-composer .post-button,
 .reply-composer .post-button.small {
@@ -475,7 +470,23 @@
   padding-bottom: 0 !important;
   margin: 0 !important;
   border-left-width: 0 !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
   flex-shrink: 0;
+}
+
+/* 12c. Author name to 16px (matches body). Sized here instead
+        of on .tw-name in the component so the brutalist
+        baseline owns the whole typographic scale. The colour
+        inline-style assignment from colorForUser still wins
+        over any defaults. */
+.tw-name {
+  font-size: 16px !important;
+  line-height: 22px !important;
+}
+.tw-meta {
+  /* Tight gap between the name row and the body/composer below. */
+  margin-bottom: 2px !important;
 }
 
 /* 13. Tighten vertical rhythm. The old design had generous

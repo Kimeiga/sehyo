@@ -39,6 +39,16 @@
 	   same user always gets the same colour, including the
 	   viewer's own anonymous handle (the anonymous-plugin
 	   assigns a real username, which propagates). */
+	/* Display name simplification: bots (and the anonymous-plugin
+	   users) ship as "First Last" or "Ji-hye Kim"; the brutalist
+	   pass shows just the first name with hyphens removed —
+	   "Marco", "Jihye", "Minjun". The link target / database row
+	   is untouched (handles + URLs keep the original form). */
+	function shortName(displayName: string | null | undefined): string {
+		if (!displayName) return 'Anonymous';
+		return displayName.split(' ')[0].replace(/-/g, '');
+	}
+
 	function colorForUser(seed: string | null | undefined): string {
 		const s = seed || 'anon';
 		let h = 0;
@@ -738,12 +748,13 @@
 
 {#snippet authorMeta(displayName: string | null | undefined, username: string | null | undefined, isOwn: boolean)}
 	{@const authorColor = colorForUser(username ?? displayName)}
+	{@const shortDisplay = shortName(displayName)}
 	<header class="tw-meta">
 		{#if username}
-			<a class="tw-name" class:author-mask={!isOwn} href="/{username}" style="color:{authorColor}">{displayName ?? 'Anonymous'}</a>
+			<a class="tw-name" class:author-mask={!isOwn} href="/{username}" style="color:{authorColor}">{shortDisplay}</a>
 			<a class="tw-handle" class:author-mask={!isOwn} href="/{username}">@{username}</a>
 		{:else}
-			<span class="tw-name" class:author-mask={!isOwn} style="color:{authorColor}">{displayName ?? 'Anonymous'}</span>
+			<span class="tw-name" class:author-mask={!isOwn} style="color:{authorColor}">{shortDisplay}</span>
 		{/if}
 		{#if isOwn && isAnon}
 			<button
@@ -883,7 +894,7 @@
 			</div>
 			<div class="tw-main">
 				<header class="tw-meta">
-					<span class="tw-name" style="color:{colorForUser(meUsername ?? meDisplayName)}">{meDisplayName}</span>
+					<span class="tw-name" style="color:{colorForUser(meUsername ?? meDisplayName)}">{shortName(meDisplayName)}</span>
 					{#if meUsername}<span class="tw-handle">@{meUsername}</span>{/if}
 				</header>
 				<form class="reply-composer" data-reply-target={threadKey} onsubmit={submitActiveReply}>
@@ -938,7 +949,13 @@
 		{@render replyComposer(postId, c.id)}
 	{/snippet}
 	{#snippet commentChildren()}
+		<!-- Composer lives INSIDE .tw-children (when active) so its
+		     indent + trunk match where the posted comment will end
+		     up — zero visual shift between drafting and submitted. -->
 		<ul class="tw-children" class:capped={depth + 1 >= MAX_NEST_DEPTH}>
+			{#if isActive}
+				{@render replyComposer(postId, c.id)}
+			{/if}
 			{#each kids as child (child.id)}
 				{#if depth + 1 < MAX_NEST_DEPTH}
 					{@render commentNode(child, postId, depth + 1)}
@@ -978,9 +995,13 @@
 			image: c.user?.profile_picture_url,
 			isOwn: ownComment,
 			body: commentBody,
-			composer: isActive ? commentComposerSlot : null,
-			hasKids,
-			children: hasKids ? commentChildren : null,
+			/* Composer now lives inside commentChildren (the .tw-children
+			   <ul>), so treeShell's composer slot is unused — pass null.
+			   Children container must render when the composer is open
+			   even if there are no real replies yet. */
+			composer: null,
+			hasKids: hasKids || isActive,
+			children: hasKids || isActive ? commentChildren : null,
 			onPlus: () => toggleReplyTarget({ postId, parentCommentId: c.id }),
 			plusActive: isActive
 		})}
@@ -1078,7 +1099,13 @@
 		{/if}
 	{/snippet}
 	{#snippet postChildren()}
+		<!-- Composer for the top-level (answer-level) reply also lives
+		     inside .tw-children so its slot matches where the posted
+		     reply will land. -->
 		<ul class="tw-children" class:guest-locked={guestLocked}>
+			{#if isActive && !guestLocked}
+				{@render replyComposer(a.id, null)}
+			{/if}
 			{#each tops as c (c.id)}
 				{@render commentNode(c, a.id, 0)}
 			{/each}
@@ -1096,9 +1123,12 @@
 					? { id: data.user.id, image: (data.user as { image?: string | null }).image }
 					: null,
 				body: postBody,
-				composer: isActive && !guestLocked ? postComposerSlot : null,
-				hasKids: hasTops,
-				children: hasTops ? postChildren : null,
+				/* Composer now rendered inside postChildren; pass null
+				   here and force the children container open when the
+				   composer is active. */
+				composer: null,
+				hasKids: hasTops || (isActive && !guestLocked),
+				children: hasTops || (isActive && !guestLocked) ? postChildren : null,
 				onPlus: () => toggleReplyTarget({ postId: a.id, parentCommentId: null }),
 				plusActive: isActive,
 				showPlus: !guestLocked
@@ -1199,7 +1229,10 @@
 	   page like a normal section. The original styles are preserved
 	   below in comments so they can be re-enabled later. */
 	.hero {
-		min-height: 80vh;
+		/* Brutalist: drop the 80vh viewport-fill so the hero sits
+		   inline with the column instead of pushing everything
+		   below the fold. min-height removed entirely. */
+		/* min-height: 80vh; */
 	}
 	/* The composer doesn't get its own bottom margin inside the
 	   hero — PromptRipple's flex layout handles spacing. */
@@ -1885,9 +1918,11 @@
 	.popover-item.destructive { color: var(--destructive); }
 	.popover-item:disabled { opacity: 0.5; cursor: not-allowed; }
 
-	.answers { display: flex; flex-direction: column; gap: 100px; }
+	/* Brutalist: drop the 100/50px gap between answers — comments
+	   stack flush, density over breathing room. */
+	.answers { display: flex; flex-direction: column; gap: 0; }
 	@media (max-width: 640px) {
-		.answers { gap: 50px; }
+		.answers { gap: 0; }
 		.world-feed { gap: 50px; }
 	}
 

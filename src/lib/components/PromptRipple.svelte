@@ -820,12 +820,12 @@ void main() {
 		position: relative;
 		isolation: isolate;
 		width: 100%;
-		/* height: 100% so the canvas fills the parent's box vertically
-		   when the parent has an explicit height (e.g. .typing-row at
-		   36px). min-height: inherit is kept as a fallback for cases
-		   like .hero where the parent only sets min-height. */
-		height: 100%;
-		min-height: inherit;
+		/* Brutalist: don't inherit parent height/min-height — the
+		   host should size to its content (the h1) so the hero
+		   block sits inline with the column instead of filling an
+		   80vh box. */
+		/* height: 100%; */
+		/* min-height: inherit; */
 		display: flex;
 		flex-direction: column;
 		justify-content: center;
