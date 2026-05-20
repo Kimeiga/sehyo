@@ -1,8 +1,8 @@
 <script lang="ts">
 	import '../app.css';
 	import type { LayoutProps } from './$types';
-	import Navbar from '$lib/components/Navbar.svelte';
 	import Menu from '$lib/components/Menu.svelte';
+	import { menuOpen, toggleMenu } from '$lib/stores/menu';
 	import LoginModal from '$lib/components/LoginModal.svelte';
 	import SignInModal from '$lib/components/SignInModal.svelte';
 	import { onMount } from 'svelte';
@@ -84,12 +84,24 @@
 </svelte:head>
 
 <div class="app" class:names-blurred={data.namesBlurred}>
-	<Navbar user={data.user} unreadCount={data.unreadMessageCount ?? 0} />
+	<!-- Brutalist nav: the entire bar is gone. A single floating
+	     logo button (static blue SVG, no tilt/shine animation)
+	     sits in the top-left and toggles the fullscreen Menu
+	     overlay. Aria label flips between open/close based on
+	     menu state. -->
+	<button
+		type="button"
+		class="logo-button"
+		aria-label={$menuOpen ? 'Close menu' : 'Open menu'}
+		aria-expanded={$menuOpen}
+		onclick={() => toggleMenu()}
+	>
+		<img src="/sehyo-logo.svg" width="32" height="32" alt="Sehyo" />
+	</button>
 
 	{@render children?.()}
 
-	<!-- Fullscreen Menu overlay — opened by the hamburger in Navbar.
-	     Same component, every viewport. -->
+	<!-- Fullscreen Menu overlay — opened by the logo button above. -->
 	<Menu user={data.user} unreadCount={data.unreadMessageCount ?? 0} />
 	<LoginModal open={data.showLoginModal} />
 	<SignInModal />
@@ -100,6 +112,28 @@
 		min-height: 100dvh;
 		background: var(--background);
 		color: var(--foreground);
+	}
+
+	/* Floating logo button — replaces the old Navbar component.
+	   Position: top-left, fixed, above the Menu overlay so the
+	   user can toggle it open AND closed. The img is the static
+	   blue SVG; no tilt or shine animation. */
+	.logo-button {
+		position: fixed;
+		top: 16px;
+		left: 16px;
+		width: 32px;
+		height: 32px;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		cursor: pointer;
+		z-index: 100;
+	}
+	.logo-button img {
+		display: block;
+		width: 100%;
+		height: 100%;
 	}
 
 	/* Author names are masked until the viewer commits to engaging.
