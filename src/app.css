@@ -252,19 +252,20 @@
 
 /* 3. Threading lines. The .tw-line / .tw-trunk-out vertical
       strokes used to be soft→strong gradients; reduce them to a
-      flat 2px light-gray rule. The .tw-hook SVG inherits
-      currentColor for its stroke, so colour wins via the parent. */
+      flat 1px light-gray rule. The .tw-hook SVG inherits
+      currentColor for its stroke. 1px is the hairline weight
+      requested for the brutalist pass. */
 .tw-line,
 .tw-trunk-out {
   background: var(--line-strong) !important;
-  width: 2px !important;
+  width: 1px !important;
 }
 .tw-hook {
   color: var(--line-strong) !important;
 }
 .tw-hook path {
   stroke: var(--line-strong) !important;
-  stroke-width: 2 !important;
+  stroke-width: 1 !important;
 }
 
 /* 4. Generic flush: any element using a CSS gradient as its
@@ -355,7 +356,64 @@
   font-weight: 600 !important;
 }
 
-/* 9. Readable prose exception. The 14/600 brutalist baseline is
+/* 9. Strip the avatar column and @username handles. Click-to-
+      reply replaces the "+" affordance, so all three of those
+      visual elements disappear — but the layout column where
+      avatars used to sit is kept (visibility: hidden, not
+      display: none) so the threading lines still anchor at
+      their original x-coordinate. Names stay; @-handles go. */
+.tw-avatar,
+.tw-avatar-link,
+.tw-avatar-img,
+.tw-avatar-tooltip {
+  visibility: hidden !important;
+}
+.tw-handle {
+  display: none !important;
+}
+
+/* 10. The "+ reply" affordance (inline leaf + trailing has-kids
+       variants) is replaced by click-on-comment. Hide both. */
+.tw-add,
+.tw-add-plus,
+.tw-add-stem {
+  display: none !important;
+}
+
+/* 11. Disable the engagement-gate name blur. The brutalist pass
+       shows real names by default — no .author-mask filter. */
+.app.names-blurred .author-mask,
+.author-mask {
+  filter: none !important;
+}
+
+/* 12. Cursor cue for the click-to-reply body. */
+.tw-body {
+  cursor: pointer;
+}
+
+/* 13. Tighten vertical rhythm. The old design had generous
+       breathing room between rows / between blocks / around the
+       hero composer — the brutalist pass is denser. */
+.tw-body { margin-bottom: 8px !important; }
+.tw-item.is-reply { margin-top: 0 !important; padding-top: 0 !important; }
+.tw-children { margin-top: 0 !important; padding-top: 0 !important; gap: 0 !important; }
+.tw-row { padding-top: 4px !important; padding-bottom: 4px !important; }
+.tw-post { padding-top: 8px !important; padding-bottom: 8px !important; margin-top: 0 !important; margin-bottom: 8px !important; }
+/* Hero/composer block: kill the deep vertical padding the old
+   design used to push the centered banner away from the rest of
+   the page. The new column needs the prompt sitting right next
+   to the composer above and the timeline below. */
+.ripple-host {
+  margin-top: 12px !important;
+  margin-bottom: 12px !important;
+}
+.composer-stack {
+  margin-top: 8px !important;
+  margin-bottom: 8px !important;
+}
+
+/* 14. Readable prose exception. The 14/600 brutalist baseline is
       right for chrome (buttons, labels, meta) but too tight for
       multi-line comment + answer paragraphs. `.tw-body` is the
       <p> for both top-level answers and threaded comment text,
@@ -370,5 +428,6 @@
   line-height: 24px !important;
   color: rgb(250, 250, 250) !important;
   font-feature-settings: "calt", "liga" !important;
-  margin-bottom: 24px !important;
+  /* Was 24px — tightened for the brutalist density pass. */
+  margin-bottom: 8px !important;
 }

@@ -807,9 +807,14 @@
 		</div>
 	</div>
 
-	{#if args.children}{@render args.children()}{/if}
-
+	<!-- Order: row → composer (if open) → children. Putting the
+	     composer ABOVE children means clicking a comment slides
+	     its reply box in directly beneath that comment, pushing
+	     existing child replies down — you keep the parent in view
+	     while drafting, even deep in a thread. -->
 	{#if args.composer}{@render args.composer()}{/if}
+
+	{#if args.children}{@render args.children()}{/if}
 
 	{#if args.hasKids && plusVisible}
 		<!-- Has-kids node, composer closed: render the trailing "+"
@@ -894,7 +899,25 @@
 	{@const ownComment = !!data.user && c.user_id === data.user.id}
 	{@const isActive = isActiveReply(postId, c.id)}
 	{#snippet commentBody()}
-		<p class="tw-body">{c.content}</p>
+		<!-- Click anywhere on the comment text to open the reply
+		     composer beneath it. Skips clicks that originated on a
+		     link/button inside the body (e.g. inline EDIT) so those
+		     keep their own behaviour. -->
+		<p
+			class="tw-body"
+			role="button"
+			tabindex="0"
+			onclick={(e) => {
+				if ((e.target as HTMLElement).closest('button, a')) return;
+				toggleReplyTarget({ postId, parentCommentId: c.id });
+			}}
+			onkeydown={(e) => {
+				if (e.key === 'Enter' || e.key === ' ') {
+					e.preventDefault();
+					toggleReplyTarget({ postId, parentCommentId: c.id });
+				}
+			}}
+		>{c.content}</p>
 	{/snippet}
 	{#snippet commentComposerSlot()}
 		{@render replyComposer(postId, c.id)}
@@ -1012,7 +1035,26 @@
 				</div>
 			</div>
 		{:else}
-			<p class="tw-body">{a.content}{#if isMine} <button
+			<!-- Same click-to-reply behaviour as comments: clicking the
+			     answer body opens a top-level reply composer beneath
+			     it (parentCommentId: null). Inline EDIT and any nested
+			     links keep their own click via the closest('button,a')
+			     short-circuit. -->
+			<p
+				class="tw-body"
+				role="button"
+				tabindex="0"
+				onclick={(e) => {
+					if ((e.target as HTMLElement).closest('button, a')) return;
+					toggleReplyTarget({ postId: a.id, parentCommentId: null });
+				}}
+				onkeydown={(e) => {
+					if (e.key === 'Enter' || e.key === ' ') {
+						e.preventDefault();
+						toggleReplyTarget({ postId: a.id, parentCommentId: null });
+					}
+				}}
+			>{a.content}{#if isMine} <button
 				type="button"
 				class="reply-label edit-label"
 				onclick={startEdit}
