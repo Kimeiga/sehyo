@@ -55,6 +55,7 @@ interface CursorEntry {
 	x: number;
 	y: number;
 	action: 'idle' | 'answer' | 'reply' | 'typing' | 'click';
+	threadId?: string;
 	expiresAt: number;
 }
 
@@ -71,6 +72,7 @@ export interface LiveCursor {
 	x: number;
 	y: number;
 	action: 'idle' | 'answer' | 'reply' | 'typing' | 'click';
+	threadId?: string;
 	expiresAt: number;
 }
 
@@ -135,6 +137,7 @@ export function connectForumTyping(
 			x: v.x,
 			y: v.y,
 			action: v.action,
+			threadId: v.threadId,
 			expiresAt: v.expiresAt
 		})).sort((a, b) => a.displayName.localeCompare(b.displayName))
 	);
@@ -290,11 +293,14 @@ export function connectForumTyping(
 				m.action === 'click'
 					? m.action
 					: 'idle';
+			const threadId = typeof m.threadId === 'string' ? m.threadId : undefined;
+			const point = cursorDocumentPoint(m.x, m.y, action, threadId);
 			const entry: CursorEntry = {
 				displayName: m.displayName,
-				x: Math.max(0.02, Math.min(0.98, m.x)),
-				y: Math.max(0.04, Math.min(0.96, m.y)),
+				x: point.x,
+				y: point.y,
 				action,
+				threadId,
 				expiresAt: Date.now() + 4200
 			};
 			dbg('handleMessage type=cursor → cursorMap.set', {
@@ -302,7 +308,8 @@ export function connectForumTyping(
 				displayName: m.displayName,
 				x: entry.x,
 				y: entry.y,
-				action: entry.action
+				action: entry.action,
+				threadId
 			});
 			cursorMap.update((cur) => {
 				const next = new Map(cur);
@@ -359,6 +366,42 @@ export function connectForumTyping(
 		}
 
 		dbg('handleMessage rejected — unknown shape', m);
+	}
+
+	function cursorDocumentPoint(
+		rawX: number,
+		rawY: number,
+		action: CursorEntry['action'],
+		threadId?: string
+	): { x: number; y: number } {
+		const viewportX = Math.max(0.02, Math.min(0.98, rawX));
+		const viewportY = Math.max(0.04, Math.min(0.96, rawY));
+		const fallback = {
+			x: window.scrollX + viewportX * window.innerWidth,
+			y: window.scrollY + viewportY * window.innerHeight
+		};
+
+		if (!threadId || action !== 'click') return fallback;
+
+		const target = document.querySelector<HTMLElement>(
+			`[data-cursor-target="${escapeSelectorValue(threadId)}"]`
+		);
+		if (!target) return fallback;
+
+		const rect = target.getBoundingClientRect();
+		if (rect.width <= 0 || rect.height <= 0) return fallback;
+
+		return {
+			x: window.scrollX + rect.left + rect.width * 0.55,
+			y: window.scrollY + rect.top + rect.height * 0.55
+		};
+	}
+
+	function escapeSelectorValue(value: string): string {
+		if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+			return CSS.escape(value);
+		}
+		return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 	}
 
 	function prune() {

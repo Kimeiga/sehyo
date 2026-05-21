@@ -36,8 +36,10 @@ const ANSWER_COUNT = 10;
 // Inter-bot comments generated after the initial answers (Pass 2)
 // and nested replies on those (Pass 3). Together they make the
 // thread feel inhabited the moment a human visits.
-const INTERBOT_COMMENT_COUNT = 8;
-const INTERBOT_NESTED_COUNT = 4;
+const INTERBOT_COMMENT_COUNT = 4;
+const INTERBOT_NESTED_COUNT = 2;
+const INTERBOT_DRAMA_CHAIN_COUNT = 2;
+const INTERBOT_DRAMA_CHAIN_LENGTH = 5;
 
 // Bot replies generated on a user's own post when they answer the
 // daily prompt , the "guest-preview comments" engagement loop.
@@ -348,6 +350,11 @@ function shuffle<T>(arr: T[]): T[] {
 	return a;
 }
 
+function pick<T>(arr: T[]): T | null {
+	if (arr.length === 0) return null;
+	return arr[Math.floor(Math.random() * arr.length)] ?? null;
+}
+
 // Anecdote-prone personas: longer, story-shaped answers. Without
 // stratifying the picker, a random shuffle can occasionally produce
 // 10 short-take voices in a row, which makes the thread feel
@@ -389,6 +396,9 @@ export interface CommentContext {
 	// If present, the commenter is replying to a comment, not a top-level post.
 	// Lets the prompt know to keep it tight and conversational.
 	isNested?: boolean;
+	threadBrief?: string;
+	speakerSide?: string;
+	conversationSoFar?: Array<{ authorName: string; text: string; side?: string }>;
 }
 
 /**
@@ -412,22 +422,35 @@ async function generateBatchedComments(
 		.map((s, i) => {
 			const persona = s.commenter.personality ?? 'no specific personality';
 			const parentKind = s.isNested ? 'comment' : 'post';
+			const argumentFrame = s.threadBrief ? `\nArgument frame: ${s.threadBrief}` : '';
+			const speakerSide = s.speakerSide ? `\nSpeaker side: ${s.speakerSide}` : '';
+			const conversation = s.conversationSoFar?.length
+				? `\nConversation so far:\n${s.conversationSoFar
+						.map((turn) => {
+							const side = turn.side ? ` (${turn.side})` : '';
+							return `- ${turn.authorName}${side}: "${turn.text.replace(/"/g, "'")}"`;
+						})
+						.join('\n')}`
+				: '';
 			return `=== SLOT ${i + 1} ===
 Voice: ${s.commenter.name}: ${persona}
-Replying to ${s.parentAuthorName}'s ${parentKind}: "${s.parentText.replace(/"/g, "'")}"`;
+Replying to ${s.parentAuthorName}'s ${parentKind}: "${s.parentText.replace(/"/g, "'")}"${argumentFrame}${speakerSide}${conversation}`;
 		})
 		.join('\n\n');
 
 	const system = `You are simulating a daily-question forum's comment thread. For each numbered SLOT below, write ONE short reply in that voice's first-person register.
 
 Constraints applied to EVERY slot:
-- 3 to 22 words per comment (most should be on the shorter side; nested-reply slots can be even tighter).
+- 4 to 38 words per comment. In argument slots, 18 to 45 words is allowed if the person is making a real point.
 - Plain prose. No quotation marks around your reply, no name labels, no markdown, no narration ("X said"), no emoji, no hashtags.
 - React to what was said. Agree, disagree, joke, ask, share a tiny related thought, or @-reply ("@name same"). Be conversational, not summarizing.
 - Match the messy register of a forum: occasional missing apostrophes ok, lowercase fine, fragments fine.
 - DO NOT close on a profound flourish, metaphor, or "X not Y" construction. Keep it grounded.
 - Never use em dashes, en dashes, the ellipsis character, or three periods. Never say or hint that the writer is artificial intelligence, a bot, a model, or generated.
 - If a voice's personality is anecdote-heavy, ONE concrete tiny detail is fine; if deadpan/sardonic, stay short.
+- Drama is good when it is about an idea, motive, taste, class signal, hypocrisy, or a specific phrase someone used. Do not make it abusive. No slurs, threats, harassment, or cruelty about protected traits.
+- If a SLOT includes "Speaker side", stay consistent with that side. You may soften, escalate, or concede a tiny detail, but do not suddenly switch positions.
+- If a SLOT includes "Conversation so far", answer the latest point and reuse one concrete phrase from the thread so the reply feels related.
 
 ═══ CRITICAL: VARIETY ACROSS THE BATCH ═══
 
@@ -436,7 +459,8 @@ You are writing ALL slots in one pass. You will SEE the comments you write for e
 - NEVER repeat the SAME OPENING across slots ("same here", "got X too", "same thing happened", "happened to me", "honestly", "i mean"). If you've used an opening in an earlier slot, pick something different for the next.
 - NEVER repeat the SAME ANECDOTE TRIGGER ("my grandma", "got lost in the woods", "had bad street food"). One memory hook is fine; a SECOND slot riffing on the same one is forbidden.
 - Mix reply STRATEGIES across the batch: agreement, pushback, tangent, dry one-liner, @-reply, asking a follow-up question. Don't write 4 agreements in a row.
-- Mix LENGTHS: short (3-6 words), medium (8-15 words), occasional longer (15-22 words). Don't write 8 mediums.
+- Mix LENGTHS: short (4-7 words), medium (8-18 words), occasional longer (20-45 words). Don't write all mediums.
+- At least one slot should contain productive friction: a clear "i disagree" or "that feels dishonest" or "youre dodging..." style pushback. Keep it ordinary, not theatrical.
 
 Output exactly ${slots.length} lines, one per slot, in order. No numbering, no labels, no quotes around the lines, no blank lines between them.`;
 
@@ -676,7 +700,109 @@ async function runMultiPassComments(
 		}
 	}
 
-	return { pass2: pass2Inserted.length, pass3: pass3Inserted.length };
+	const dramaInserted = await runDramaChains(d1, ai, prompt, seedPosts, authors, authorById, model);
+
+	return { pass2: pass2Inserted.length, pass3: pass3Inserted.length + dramaInserted };
+}
+
+async function runDramaChains(
+	d1: D1Database,
+	ai: Ai,
+	prompt: { id: string; prompt_text: string },
+	seedPosts: Array<{ id: string; user_id: string; content: string }>,
+	authors: SeedAuthor[],
+	authorById: Map<string, SeedAuthor>,
+	model: string
+): Promise<number> {
+	const db = drizzle(d1);
+	const anchors = shuffle(seedPosts).slice(
+		0,
+		Math.min(INTERBOT_DRAMA_CHAIN_COUNT, seedPosts.length)
+	);
+	const chains = anchors
+		.map((post) => {
+			const defender = authorById.get(post.user_id);
+			const challenger = pick(authors.filter((a) => a.user_id !== post.user_id));
+			if (!defender || !challenger) return null;
+			const threadBrief = `Argument under "${prompt.prompt_text}". Original answer by ${defender.name}: "${post.content
+				.replace(/"/g, "'")
+				.slice(0, 260)}"`;
+			return {
+				postId: post.id,
+				currentParentCommentId: null as string | null,
+				currentParentAuthorName: defender.name,
+				currentParentText: post.content,
+				defender,
+				challenger,
+				threadBrief,
+				conversation: [
+					{ authorName: defender.name, text: post.content.slice(0, 260), side: 'original answer' }
+				] as Array<{ authorName: string; text: string; side?: string }>
+			};
+		})
+		.filter((chain): chain is NonNullable<typeof chain> => !!chain);
+
+	let inserted = 0;
+	for (let depth = 0; depth < INTERBOT_DRAMA_CHAIN_LENGTH; depth++) {
+		if (chains.length === 0) break;
+		const slots = chains.map((chain) => {
+			const speaker = depth % 2 === 0 ? chain.challenger : chain.defender;
+			const side =
+				speaker.user_id === chain.challenger.user_id
+					? `pushes back on ${chain.defender.name}'s original answer. skeptical, direct, thinks something is being dodged.`
+					: `defends the original answer. answers the criticism without switching sides, and makes it more personal.`;
+			return {
+				commenter: speaker,
+				parentAuthorName: chain.currentParentAuthorName,
+				parentText: chain.currentParentText,
+				isNested: chain.currentParentCommentId !== null,
+				threadBrief: chain.threadBrief,
+				speakerSide: side,
+				conversationSoFar: chain.conversation.slice(-6)
+			} satisfies CommentContext;
+		});
+
+		const texts = await generateBatchedComments(ai, slots, model);
+		for (let i = 0; i < chains.length; i++) {
+			const chain = chains[i];
+			const slot = slots[i];
+			const text = texts[i];
+			if (!chain || !slot || !text) continue;
+			const commentId = crypto.randomUUID();
+			try {
+				if (chain.currentParentCommentId) {
+					await db.insert(comments).values({
+						id: commentId,
+						post_id: chain.postId,
+						user_id: slot.commenter.user_id,
+						content: text,
+						parent_comment_id: chain.currentParentCommentId
+					});
+				} else {
+					await db.insert(comments).values({
+						id: commentId,
+						post_id: chain.postId,
+						user_id: slot.commenter.user_id,
+						content: text
+					});
+				}
+			} catch (err) {
+				console.error('drama chain insert failed', err);
+				continue;
+			}
+			inserted++;
+			chain.currentParentCommentId = commentId;
+			chain.currentParentAuthorName = slot.commenter.name;
+			chain.currentParentText = text;
+			chain.conversation.push({
+				authorName: slot.commenter.name,
+				text,
+				side: slot.speakerSide
+			});
+		}
+	}
+
+	return inserted;
 }
 
 /**

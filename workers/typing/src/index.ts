@@ -244,6 +244,7 @@ interface CursorBroadcast {
 	x: number;
 	y: number;
 	action?: 'idle' | 'answer' | 'reply' | 'typing' | 'click';
+	threadId?: string;
 	expiresAt?: number;
 }
 

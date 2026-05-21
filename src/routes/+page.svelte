@@ -802,6 +802,7 @@
 				<form class="composer" onsubmit={onComposerSubmit}>
 					<textarea
 						bind:value={composerValue}
+						data-cursor-target="prompt"
 						placeholder="Your answer…"
 						rows="3"
 						maxlength="2000"
@@ -913,6 +914,7 @@
 				<form class="composer" onsubmit={submitWorld}>
 					<textarea
 						bind:value={worldValue}
+						data-cursor-target="world"
 						oninput={onWorldInput}
 						class:typing-sending={sendingActiveThreadId === 'world'}
 						placeholder={worldTab === 'ask' ? 'Ask a question…' : "What's on your mind?"}
@@ -998,12 +1000,10 @@
 		{#each liveCursors as cursor (cursor.userId)}
 			<div
 				class="live-cursor"
-				style={`--cursor-x:${(cursor.x * 100).toFixed(2)}vw; --cursor-y:${(cursor.y * 100).toFixed(2)}vh;`}
+				style={`--cursor-x:${cursor.x.toFixed(1)}px; --cursor-y:${cursor.y.toFixed(1)}px; --cursor-color:${personColor(cursor.userId, cursor.displayName)};`}
 			>
 				<span class="cursor-pointer"></span>
-				<span class="cursor-name" style:color={personColor(cursor.userId, cursor.displayName)}
-					>{firstName(cursor.displayName)}</span
-				>
+				<span class="cursor-name">{firstName(cursor.displayName)}</span>
 			</div>
 		{/each}
 	</div>
@@ -1096,6 +1096,7 @@
 									class="tw-reply-button"
 									class:active={args.plusActive}
 									type="button"
+									data-cursor-target={args.typingThreadId ?? undefined}
 									onclick={args.onPlus}>{args.plusActive ? 'Cancel' : 'Reply'}</button
 								>
 							</div>
@@ -1110,6 +1111,7 @@
 							class="tw-reply-button"
 							class:active={args.plusActive}
 							type="button"
+							data-cursor-target={args.typingThreadId ?? undefined}
 							onclick={args.onPlus}>{args.plusActive ? 'Cancel' : 'Reply'}</button
 						>
 					</div>
@@ -2013,11 +2015,14 @@
 		line-height: 1.4;
 	}
 	.live-cursor-layer {
-		position: fixed;
-		inset: 0;
+		position: absolute;
+		left: 0;
+		top: 0;
+		width: 100%;
+		height: 0;
 		z-index: 70;
 		pointer-events: none;
-		overflow: hidden;
+		overflow: visible;
 	}
 	.live-cursor {
 		position: absolute;
@@ -2036,19 +2041,19 @@
 		margin-top: 2px;
 		border-top: 6px solid transparent;
 		border-bottom: 6px solid transparent;
-		border-left: 10px solid var(--foreground);
+		border-left: 10px solid var(--cursor-color);
 		transform: rotate(-26deg);
 		transform-origin: 0 50%;
-		filter: drop-shadow(0 0 0 var(--background));
 	}
 	.cursor-name {
 		margin-top: 9px;
-		padding: 1px 4px 2px;
-		border: 1px solid var(--border);
-		background: var(--background);
+		color: var(--cursor-color);
 		font-size: 16px;
 		font-weight: 500;
 		line-height: 1.2;
+		text-shadow:
+			0 1px 0 var(--background),
+			1px 0 0 var(--background);
 	}
 
 	@keyframes tw-posted-content-reveal {

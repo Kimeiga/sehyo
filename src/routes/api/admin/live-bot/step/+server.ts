@@ -106,16 +106,17 @@ async function runLiveBotStep(opts: {
 	if (!canWrite || roll < 0.25) {
 		const author = pick(authors);
 		if (!author) return;
-		await moveCursor(opts, author, roll < 0.2 ? 'answer' : 'reply');
+		const action = roll < 0.2 ? 'answer' : 'reply';
+		await moveCursor(opts, author, action, action === 'answer' ? 'prompt' : undefined);
 		return;
 	}
 
 	if (roll < 0.6) {
-		const target = pick(commentableComments) ?? pick(commentablePosts);
+		const target = pick(commentablePosts) ?? pick(commentableComments);
 		const author = pickAuthorForTarget(authors, target?.user_id);
 		if (!target || !author) return;
 		const threadId = 'post_id' in target ? `reply-${target.id}` : `post-${target.id}`;
-		await moveCursor(opts, author, 'reply');
+		await moveCursor(opts, author, 'reply', threadId);
 		await inject(opts, typingMessage(author, threadId));
 		await sleep(rand(4500, 8200));
 		await inject(opts, { type: 'leave', userId: author.user_id });
@@ -141,12 +142,12 @@ async function showInitialTypingPreview(
 	commentablePosts: PostTarget[],
 	commentableComments: CommentTarget[]
 ) {
-	const target = pick(commentableComments) ?? pick(commentablePosts);
+	const target = pick(commentablePosts) ?? pick(commentableComments);
 	const author = pickAuthorForTarget(authors, target?.user_id);
 	if (!author) return;
 
 	if (!target) {
-		await moveCursor(opts, author, 'answer');
+		await moveCursor(opts, author, 'answer', 'prompt');
 		await inject(opts, typingMessage(author, 'prompt'));
 		await sleep(rand(6000, 8500));
 		await inject(opts, { type: 'leave', userId: author.user_id });
@@ -154,7 +155,7 @@ async function showInitialTypingPreview(
 	}
 
 	const threadId = 'post_id' in target ? `reply-${target.id}` : `post-${target.id}`;
-	await moveCursor(opts, author, 'reply');
+	await moveCursor(opts, author, 'reply', threadId);
 	await inject(opts, typingMessage(author, threadId));
 	await sleep(rand(6000, 8500));
 	await inject(opts, { type: 'leave', userId: author.user_id });
@@ -174,7 +175,7 @@ async function createLiveAnswer(
 	existingPosts: PostTarget[]
 ) {
 	if (!opts.ai) return;
-	await moveCursor(opts, author, 'answer');
+	await moveCursor(opts, author, 'answer', 'prompt');
 	await inject(opts, typingMessage(author, 'prompt'));
 	const textPromise = generateLiveBotAnswer(
 		opts.ai,
@@ -244,7 +245,7 @@ async function createLiveComment(
 	const parentCommentId = isCommentTarget ? target.id : null;
 	const threadId = parentCommentId ? `reply-${parentCommentId}` : `post-${postId}`;
 
-	await moveCursor(opts, author, 'reply');
+	await moveCursor(opts, author, 'reply', threadId);
 	await inject(opts, typingMessage(author, threadId));
 	const textPromise = generateLiveBotComment(
 		opts.ai,
@@ -393,7 +394,8 @@ function typingMessage(author: SeedAuthor, threadId: string) {
 async function moveCursor(
 	opts: { injectUrl: string; injectSecret: string; room: string },
 	author: SeedAuthor,
-	action: CursorAction
+	action: CursorAction,
+	threadId?: string
 ) {
 	const steps = rand(2, 4);
 	for (let i = 0; i < steps; i += 1) {
@@ -405,6 +407,7 @@ async function moveCursor(
 			x: point.x,
 			y: point.y,
 			action: i === steps - 1 ? 'click' : action,
+			threadId,
 			expiresAt: Date.now() + 4200
 		});
 		await sleep(rand(650, 1500));
