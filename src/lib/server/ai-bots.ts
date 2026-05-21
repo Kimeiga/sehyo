@@ -1035,6 +1035,15 @@ export async function orchestrateBotRepliesWithTyping(
 		}
 	};
 	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+	const injectTyping = async (author: SeedAuthor) => {
+		await inject({
+			type: 'typing',
+			userId: author.user_id,
+			displayName: author.name,
+			expiresAt: Date.now() + 8000,
+			threadId
+		});
+	};
 	const moveCursorToReply = async (author: SeedAuthor) => {
 		const steps = 3;
 		for (let i = 0; i < steps; i += 1) {
@@ -1057,10 +1066,12 @@ export async function orchestrateBotRepliesWithTyping(
 	if (authors.length === 0) return;
 	const db = drizzle(d1);
 	const picked = shuffle(authors).slice(0, REPLIES_ON_USER_ANSWER);
+	const firstCommenter = picked[0];
 
 	// One batched call (model sees its own prior lines → no "same
-	// here" spiral). Generation is the bulk of the wall time.
-	const texts = await generateBatchedComments(
+	// here" spiral). Start it before the visible choreography so the
+	// browser shows activity while generation is still in flight.
+	const textsPromise = generateBatchedComments(
 		ai,
 		picked.map((commenter) => ({
 			commenter,
@@ -1070,6 +1081,26 @@ export async function orchestrateBotRepliesWithTyping(
 		})),
 		model
 	);
+	let texts: Array<string | null>;
+	let firstCommenterPrimed = false;
+	if (firstCommenter) {
+		await moveCursorToReply(firstCommenter);
+		await injectTyping(firstCommenter);
+		firstCommenterPrimed = true;
+		while (true) {
+			const result = await Promise.race([
+				textsPromise.then((value) => ({ type: 'texts' as const, value })),
+				sleep(3000).then(() => ({ type: 'pulse' as const }))
+			]);
+			if (result.type === 'texts') {
+				texts = result.value;
+				break;
+			}
+			await injectTyping(firstCommenter);
+		}
+	} else {
+		texts = await textsPromise;
+	}
 
 	// Public profile bits (username/avatar) for the live payload so
 	// the appended comment matches the server-rendered shape.
@@ -1089,14 +1120,10 @@ export async function orchestrateBotRepliesWithTyping(
 
 		// 1. Bot moves to the freshly rendered reply affordance, then
 		//    starts typing in the user's thread.
-		await moveCursorToReply(commenter);
-		await inject({
-			type: 'typing',
-			userId: commenter.user_id,
-			displayName: commenter.name,
-			expiresAt: Date.now() + 8000,
-			threadId
-		});
+		if (!(i === 0 && firstCommenterPrimed)) {
+			await moveCursorToReply(commenter);
+		}
+		await injectTyping(commenter);
 
 		// 2. Human-like compose pause, scaled to reply length and
 		//    clamped so 4 bots stay within the waitUntil budget.
