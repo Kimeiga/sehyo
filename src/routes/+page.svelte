@@ -277,7 +277,8 @@
 	})();
 
 	const guestWatchIdentity = (() => {
-		if (isDevTyping || typeof window === 'undefined' || data.user) return null;
+		const shouldUseWatchOnly = !data.user || data.user.isAnonymous;
+		if (isDevTyping || typeof window === 'undefined' || !shouldUseWatchOnly) return null;
 		let id = sessionStorage.getItem('watch-typing-tab-id');
 		const wasExisting = !!id;
 		if (!id) {
