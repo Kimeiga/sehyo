@@ -40,7 +40,10 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 		throw error(500, 'Live bot bindings missing');
 	}
 
-	const body = (await request.json().catch(() => null)) as { room?: unknown } | null;
+	const body = (await request.json().catch(() => null)) as {
+		room?: unknown;
+		initial?: unknown;
+	} | null;
 	const room = typeof body?.room === 'string' && ROOM_RE.test(body.room) ? body.room : 'forum';
 
 	const work = runLiveBotStep({
@@ -49,7 +52,8 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 		injectUrl: env.TYPING_INJECT_URL,
 		injectSecret: env.ADMIN_SECRET,
 		room,
-		model: env.LIVE_BOT_MODEL
+		model: env.LIVE_BOT_MODEL,
+		initial: body?.initial === true
 	}).catch((err) => console.error('live bot step failed:', err));
 
 	if (platform?.context?.waitUntil) {
@@ -68,6 +72,7 @@ async function runLiveBotStep(opts: {
 	injectSecret: string;
 	room: string;
 	model?: string;
+	initial?: boolean;
 }) {
 	const prompt = await getActivePrompt(opts.db);
 	if (!prompt) return;
@@ -90,17 +95,22 @@ async function runLiveBotStep(opts: {
 		authors.some((author) => author.user_id !== comment.user_id)
 	);
 
+	if (opts.initial) {
+		await showInitialTypingPreview(opts, authors, commentablePosts, commentableComments);
+		return;
+	}
+
 	const canWrite = !!opts.ai && recentContentCount < MAX_RECENT_BOT_CONTENT;
 	const roll = Math.random();
 
-	if (!canWrite || roll < 0.42) {
+	if (!canWrite || roll < 0.25) {
 		const author = pick(authors);
 		if (!author) return;
 		await moveCursor(opts, author, roll < 0.2 ? 'answer' : 'reply');
 		return;
 	}
 
-	if (roll < 0.72) {
+	if (roll < 0.6) {
 		const target = pick(commentableComments) ?? pick(commentablePosts);
 		const author = pickAuthorForTarget(authors, target?.user_id);
 		if (!target || !author) return;
@@ -123,6 +133,31 @@ async function runLiveBotStep(opts: {
 	const author = pick(answerCandidates);
 	if (!opts.ai || !author) return;
 	await createLiveAnswer(opts, author, { id: prompt.id, text: prompt.prompt_text }, posts);
+}
+
+async function showInitialTypingPreview(
+	opts: { injectUrl: string; injectSecret: string; room: string },
+	authors: SeedAuthor[],
+	commentablePosts: PostTarget[],
+	commentableComments: CommentTarget[]
+) {
+	const target = pick(commentableComments) ?? pick(commentablePosts);
+	const author = pickAuthorForTarget(authors, target?.user_id);
+	if (!author) return;
+
+	if (!target) {
+		await moveCursor(opts, author, 'answer');
+		await inject(opts, typingMessage(author, 'prompt'));
+		await sleep(rand(6000, 8500));
+		await inject(opts, { type: 'leave', userId: author.user_id });
+		return;
+	}
+
+	const threadId = 'post_id' in target ? `reply-${target.id}` : `post-${target.id}`;
+	await moveCursor(opts, author, 'reply');
+	await inject(opts, typingMessage(author, threadId));
+	await sleep(rand(6000, 8500));
+	await inject(opts, { type: 'leave', userId: author.user_id });
 }
 
 async function createLiveAnswer(

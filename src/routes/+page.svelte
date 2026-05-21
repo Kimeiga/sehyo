@@ -246,14 +246,15 @@
 
 	/* Forum typing indicator.
 
-	   Production gate: user is fully signed in AND has answered today's
-	   prompt (so they can actually see the World composer).
-
-	   Dev gate: Vite dev only (import.meta.env.DEV). Skips both checks
+	   Dev gate: Vite dev only (import.meta.env.DEV). Skips session checks
 	   and gives each browser tab its own pseudo-identity so a single
 	   developer can test the typing flow across tabs without a second
 	   real sign-in. The Worker mirrors this — when it sees a localhost
 	   host it skips cookie validation and trusts the URL params.
+
+	   Production signed-out viewers connect as watch-only sockets so
+	   the room can still feel alive before they answer. The Worker
+	   refuses to broadcast client frames from watch-only sockets.
 
 	   The writable keeps the raw Worker payload separate from the
 	   visual typing rows, which need a short closing state after the
@@ -275,6 +276,20 @@
 		return { userId: id, displayName: `Tab ${id.slice(-4)}` };
 	})();
 
+	const guestWatchIdentity = (() => {
+		if (isDevTyping || typeof window === 'undefined' || data.user) return null;
+		let id = sessionStorage.getItem('watch-typing-tab-id');
+		const wasExisting = !!id;
+		if (!id) {
+			id = 'viewer_' + Math.random().toString(36).slice(2, 12);
+			sessionStorage.setItem('watch-typing-tab-id', id);
+		}
+		tdbg('guestWatchIdentity resolved', { id, wasExisting });
+		return { userId: id, displayName: 'Viewer', watchOnly: true };
+	})();
+
+	const typingConnectionIdentity = devTabIdentity ?? guestWatchIdentity;
+
 	let worldTypingHandle: ForumTypingHandle | null = null;
 	const worldTypingUsers = writable<TypingUser[]>([]);
 	let visualTypingUsers = $state<VisualTypingUser[]>([]);
@@ -282,18 +297,17 @@
 	let visualTypingCloseTimer: ReturnType<typeof setTimeout> | null = null;
 
 	$effect(() => {
-		// Connect for ANY logged-in viewer (incl. anonymous /
-		// not-yet-answered). Signed-out viewers have no session cookie
-		// for the typing Worker, so skip them (the WS would just
-		// 401-reconnect-loop).
-		const gatePassed = isDevTyping || !!data.user;
+		// Connect for every browser viewer. Signed-out viewers use a
+		// watch-only identity so they can receive bot presence without
+		// being allowed to publish typing frames.
+		const gatePassed = isDevTyping || !!data.user || !!guestWatchIdentity;
 		tdbg('$effect fire', {
 			isDev: isDevTyping,
 			isFullySignedIn,
 			hasMyAnswer: !!data.myAnswer,
 			namesBlurred: data.namesBlurred,
 			userId: data.user?.id ?? null,
-			devTab: devTabIdentity,
+			typingIdentity: typingConnectionIdentity,
 			gatePassed
 		});
 		if (!gatePassed) {
@@ -301,7 +315,7 @@
 			return;
 		}
 		tdbg('$effect gate PASSED — calling connectForumTyping');
-		const handle = connectForumTyping('forum', devTabIdentity);
+		const handle = connectForumTyping('forum', typingConnectionIdentity);
 		worldTypingHandle = handle;
 		const unsub = handle.typingUsers.subscribe((v) => {
 			tdbg('typingUsers subscriber fired', { len: v.length, users: v });
@@ -398,7 +412,7 @@
 		liveAnswers = { ...liveAnswers, [post.id]: post };
 	}
 
-	const typingSelfId = $derived(devTabIdentity?.userId ?? data.user?.id);
+	const typingSelfId = $derived(typingConnectionIdentity?.userId ?? data.user?.id);
 
 	function typingKey(user: Pick<TypingUser, 'threadId' | 'userId'>): string {
 		return `${user.threadId}:${user.userId}`;

@@ -109,6 +109,7 @@ export interface ForumTypingHandle {
 export interface DevIdentity {
 	userId: string;
 	displayName: string;
+	watchOnly?: boolean;
 }
 
 export function connectForumTyping(
@@ -455,6 +456,7 @@ function wsUrl(roomId: string, devIdentity?: DevIdentity | null): string {
 			userId: devIdentity.userId,
 			displayName: devIdentity.displayName
 		});
+		if (devIdentity.watchOnly) qs.set('watchOnly', '1');
 		raw += `?${qs.toString()}`;
 	}
 	return raw;

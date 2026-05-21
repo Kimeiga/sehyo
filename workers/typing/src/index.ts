@@ -23,6 +23,7 @@ const LIVE_ACTIVITY_INITIAL_MIN_MS = 4000;
 const LIVE_ACTIVITY_INITIAL_MAX_MS = 12000;
 const LIVE_ACTIVITY_MIN_MS = 45000;
 const LIVE_ACTIVITY_MAX_MS = 150000;
+const LIVE_ALARM_INITIAL_KEY = 'live-alarm-initial';
 
 const WTAG = '[typing/worker]';
 const DTAG = '[typing/do]';
@@ -104,24 +105,40 @@ export default {
 			wdbg('dev-mode bypass — using URL params', { userId, displayName });
 			doUrl.searchParams.set('userId', userId);
 			doUrl.searchParams.set('displayName', displayName);
+			doUrl.searchParams.set('canBroadcast', '1');
 		} else {
 			const cookie = request.headers.get('Cookie');
 			wdbg('prod auth path — cookie present?', { hasCookie: !!cookie });
 			if (!cookie) {
-				wdbg('no cookie → 401');
-				return new Response('Unauthorized', { status: 401 });
+				const watchOnly = watchOnlyIdentity(url);
+				if (!watchOnly) {
+					wdbg('no cookie → 401');
+					return new Response('Unauthorized', { status: 401 });
+				}
+				wdbg('no cookie → accepting watch-only viewer', watchOnly);
+				doUrl.searchParams.set('userId', watchOnly.userId);
+				doUrl.searchParams.set('displayName', watchOnly.displayName);
+				doUrl.searchParams.set('canBroadcast', '0');
+			} else {
+				wdbg('calling resolveSession');
+				const session = await resolveSession(env.API_BASE_URL, cookie);
+				wdbg('resolveSession result', { session });
+				if (!session) {
+					const watchOnly = watchOnlyIdentity(url);
+					if (!watchOnly) {
+						wdbg('session invalid → 401');
+						return new Response('Unauthorized', { status: 401 });
+					}
+					wdbg('session invalid → accepting watch-only viewer', watchOnly);
+					doUrl.searchParams.set('userId', watchOnly.userId);
+					doUrl.searchParams.set('displayName', watchOnly.displayName);
+					doUrl.searchParams.set('canBroadcast', '0');
+				} else {
+					doUrl.searchParams.set('userId', session.userId);
+					doUrl.searchParams.set('displayName', session.displayName);
+					doUrl.searchParams.set('canBroadcast', '1');
+				}
 			}
-
-			wdbg('calling resolveSession');
-			const session = await resolveSession(env.API_BASE_URL, cookie);
-			wdbg('resolveSession result', { session });
-			if (!session) {
-				wdbg('session invalid → 401');
-				return new Response('Unauthorized', { status: 401 });
-			}
-
-			doUrl.searchParams.set('userId', session.userId);
-			doUrl.searchParams.set('displayName', session.displayName);
 		}
 
 		const roomId = match[1];
@@ -135,6 +152,15 @@ export default {
 interface ResolvedSession {
 	userId: string;
 	displayName: string;
+}
+
+function watchOnlyIdentity(url: URL): ResolvedSession | null {
+	if (url.searchParams.get('watchOnly') !== '1') return null;
+	const userId = url.searchParams.get('userId') ?? '';
+	if (!/^viewer_[a-z0-9_-]{6,64}$/i.test(userId)) return null;
+	const rawDisplayName = url.searchParams.get('displayName') ?? 'Viewer';
+	const displayName = rawDisplayName.trim().slice(0, 40) || 'Viewer';
+	return { userId, displayName };
 }
 
 async function resolveSession(apiBaseUrl: string, cookie: string): Promise<ResolvedSession | null> {
@@ -178,6 +204,7 @@ async function resolveSession(apiBaseUrl: string, cookie: string): Promise<Resol
 interface SocketAttachment {
 	userId: string;
 	displayName: string;
+	canBroadcast?: boolean;
 }
 
 interface TypingBroadcast {
@@ -257,6 +284,7 @@ export class ForumRoom {
 
 		const userId = url.searchParams.get('userId');
 		const displayName = url.searchParams.get('displayName');
+		const canBroadcast = url.searchParams.get('canBroadcast') !== '0';
 		ddbg('fetch() entry', { userId, displayName });
 		if (!userId || !displayName) {
 			ddbg('missing userId/displayName → 400');
@@ -268,10 +296,11 @@ export class ForumRoom {
 
 		ddbg('state.acceptWebSocket() — hibernatable accept');
 		this.state.acceptWebSocket(server);
-		server.serializeAttachment({ userId, displayName } satisfies SocketAttachment);
+		server.serializeAttachment({ userId, displayName, canBroadcast } satisfies SocketAttachment);
 		ddbg('serializeAttachment done', {
 			userId,
 			displayName,
+			canBroadcast,
 			totalSockets: this.state.getWebSockets().length
 		});
 		this.scheduleLiveActivity(true).catch((err) =>
@@ -309,6 +338,10 @@ export class ForumRoom {
 			ddbg('no attachment — skipping');
 			return;
 		}
+		if (self.canBroadcast === false) {
+			ddbg('watch-only socket sent a client frame — ignoring');
+			return;
+		}
 
 		if (msg.type === 'typing') {
 			const threadId =
@@ -337,6 +370,13 @@ export class ForumRoom {
 		const broadcast: LeaveBroadcast = { type: 'leave', userId: self.userId };
 		ddbg('broadcasting leave', broadcast);
 		this.broadcast(broadcast, ws);
+		const remainingSockets = this.state.getWebSockets().filter((socket) => socket !== ws);
+		if (remainingSockets.length === 0) {
+			this.state.storage
+				.deleteAlarm()
+				.then(() => this.state.storage.delete(LIVE_ALARM_INITIAL_KEY))
+				.catch((err) => ddbg('deleteAlarm after final close failed', String(err)));
+		}
 	}
 
 	webSocketError(ws: WebSocket, err: unknown) {
@@ -350,6 +390,8 @@ export class ForumRoom {
 
 	async alarm() {
 		const sockets = this.state.getWebSockets();
+		const initial = (await this.state.storage.get<boolean>(LIVE_ALARM_INITIAL_KEY)) === true;
+		await this.state.storage.delete(LIVE_ALARM_INITIAL_KEY);
 		if (sockets.length === 0) {
 			ddbg('alarm fired with no sockets, no live activity');
 			return;
@@ -371,7 +413,7 @@ export class ForumRoom {
 					'content-type': 'application/json',
 					'x-admin-secret': this.env.ADMIN_SECRET
 				},
-				body: JSON.stringify({ room: 'forum' })
+				body: JSON.stringify({ room: 'forum', initial })
 			});
 		} catch (err) {
 			ddbg('live activity fetch failed', String(err));
@@ -384,15 +426,21 @@ export class ForumRoom {
 
 	private async scheduleLiveActivity(initial: boolean, replace = false) {
 		if (this.state.getWebSockets().length === 0) return;
+		const now = Date.now();
 		const existing = await this.state.storage.getAlarm();
 		if (existing !== null && !replace) {
-			ddbg('scheduleLiveActivity skipped, alarm already set', { existing });
-			return;
+			const acceptableWait = initial ? LIVE_ACTIVITY_INITIAL_MAX_MS : LIVE_ACTIVITY_MAX_MS;
+			if (existing > now && existing <= now + acceptableWait) {
+				ddbg('scheduleLiveActivity skipped, alarm already set', { existing });
+				return;
+			}
+			ddbg('scheduleLiveActivity replacing distant alarm', { existing, initial });
 		}
 		const min = initial ? LIVE_ACTIVITY_INITIAL_MIN_MS : LIVE_ACTIVITY_MIN_MS;
 		const max = initial ? LIVE_ACTIVITY_INITIAL_MAX_MS : LIVE_ACTIVITY_MAX_MS;
 		const delay = min + Math.floor(Math.random() * (max - min + 1));
-		const scheduledAt = Date.now() + delay;
+		const scheduledAt = now + delay;
+		await this.state.storage.put(LIVE_ALARM_INITIAL_KEY, initial);
 		await this.state.storage.setAlarm(scheduledAt);
 		ddbg('scheduleLiveActivity set alarm', { initial, delay, scheduledAt });
 	}
