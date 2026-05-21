@@ -1,21 +1,14 @@
 import type { RequestHandler } from './$types';
+import { getActivePrompt } from '$lib/server/prompts';
 
 /**
- * Dynamic OG image: 1200x630 PNG showing today's prompt rendered with
+ * Dynamic OG image: 1200x630 PNG showing the active prompt rendered with
  * Geist (thin headline) + M PLUS 2 (kanji logo). The same daily-prompt
  * text that appears on the home page lands in the link preview.
  *
- * Cached at the edge for 1 hour. The prompt rotates once per day UTC,
- * so the OG image lags by at most an hour after rotation.
+ * Cached at the edge for 1 hour, so the OG image lags by at most an
+ * hour after rotation.
  */
-
-function todayUTC(): string {
-	const d = new Date();
-	const yyyy = d.getUTCFullYear();
-	const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-	const dd = String(d.getUTCDate()).padStart(2, '0');
-	return `${yyyy}-${mm}-${dd}`;
-}
 
 // workers-og's HTML parser does NOT decode numeric/named entities, so
 // classic HTML escaping (e.g. ' -> &#39;) ends up rendered literally.
@@ -35,10 +28,7 @@ export const GET: RequestHandler = async ({ platform }) => {
 	const db = platform?.env?.DB;
 	let promptText = 'A daily question. Share your thoughts.';
 	if (db) {
-		const row = await db
-			.prepare('SELECT prompt_text FROM daily_prompts WHERE active_date = ?')
-			.bind(todayUTC())
-			.first<{ prompt_text: string }>();
+		const row = await getActivePrompt(db);
 		if (row?.prompt_text) promptText = row.prompt_text;
 	}
 
@@ -72,9 +62,9 @@ export const GET: RequestHandler = async ({ platform }) => {
 		width: 1200,
 		height: 630,
 		fonts: [
-			{ name: 'Geist',     data: geistLight, weight: 200, style: 'normal' },
-			{ name: 'Geist',     data: geistMid,   weight: 500, style: 'normal' },
-			{ name: 'M PLUS 2',  data: mplusBold,  weight: 700, style: 'normal' }
+			{ name: 'Geist', data: geistLight, weight: 200, style: 'normal' },
+			{ name: 'Geist', data: geistMid, weight: 500, style: 'normal' },
+			{ name: 'M PLUS 2', data: mplusBold, weight: 700, style: 'normal' }
 		]
 	});
 

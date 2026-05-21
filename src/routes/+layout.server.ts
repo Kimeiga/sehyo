@@ -1,6 +1,7 @@
 import type { LayoutServerLoad } from './$types';
 import { redirect } from '@sveltejs/kit';
 import { loadCommentsForPosts } from '$lib/server/comments';
+import { getActivePrompt } from '$lib/server/prompts';
 
 interface AnswerRow {
 	id: string;
@@ -14,9 +15,9 @@ interface AnswerRow {
 	image: string | null;
 }
 
-/* Routes that bypass the "answer today's prompt first" gate. Anything
+/* Routes that bypass the "answer the active prompt first" gate. Anything
    outside this set redirects to `/` when the viewer hasn't posted a
-   reply to today's daily_prompt. The home page itself decides what to
+   reply to the active daily_prompt. The home page itself decides what to
    render in the not-yet-answered state (just the prompt + composer);
    /api keeps working for the composer submit + auth endpoints; /auth
    keeps the sign-in flow reachable; /about stays as an info page. */
@@ -76,11 +77,7 @@ export const load: LayoutServerLoad = async ({ platform, locals, url }) => {
 		unreadMessageCount = r?.n ?? 0;
 	}
 
-	const date = todayUTC();
-	const prompt = await db
-		.prepare('SELECT id, prompt_text, active_date FROM daily_prompts WHERE active_date = ?')
-		.bind(date)
-		.first<{ id: string; prompt_text: string; active_date: string }>();
+	const prompt = await getActivePrompt(db);
 
 	let answers: AnswerRow[] = [];
 	let myAnswer: AnswerRow | null = null;
@@ -114,10 +111,10 @@ export const load: LayoutServerLoad = async ({ platform, locals, url }) => {
 		}
 	}
 
-	/* Names blur until the viewer has replied to TODAY'S prompt. This
+	/* Names blur until the viewer has replied to the active prompt. This
 	   is the engagement gate: you can see what everyone else said but
 	   can't tell who said it until you say something yourself. Resets
-	   each UTC day along with the prompt. */
+	   whenever the next prompt is generated. */
 	const namesBlurred = !myAnswer;
 
 	// Set of user_ids the viewer has commented on at least one post by.
@@ -168,11 +165,3 @@ export const load: LayoutServerLoad = async ({ platform, locals, url }) => {
 		hasAnsweredToday
 	};
 };
-
-function todayUTC(): string {
-	const d = new Date();
-	const yyyy = d.getUTCFullYear();
-	const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-	const dd = String(d.getUTCDate()).padStart(2, '0');
-	return `${yyyy}-${mm}-${dd}`;
-}

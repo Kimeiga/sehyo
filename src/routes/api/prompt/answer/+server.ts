@@ -1,11 +1,12 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { orchestrateBotRepliesWithTyping } from '$lib/server/ai-bots';
+import { getActivePrompt } from '$lib/server/prompts';
 
 const MAX_LEN = 2000;
 
 /**
- * Post an answer to today's prompt. Requires an authenticated session
+ * Post an answer to the active prompt. Requires an authenticated session
  * (which can be anonymous — better-auth's anonymous plugin gives a real
  * user row). Frontend is expected to call signIn.anonymous() if no
  * session exists, then retry.
@@ -21,13 +22,9 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	if (!content) throw error(400, 'Content is required');
 	if (content.length > MAX_LEN) throw error(400, `Content is too long (max ${MAX_LEN} characters)`);
 
-	const date = todayUTC();
-	const prompt = await db
-		.prepare('SELECT id FROM daily_prompts WHERE active_date = ?')
-		.bind(date)
-		.first<{ id: string }>();
+	const prompt = await getActivePrompt(db);
 
-	if (!prompt) throw error(409, 'No active prompt today');
+	if (!prompt) throw error(409, 'No active prompt');
 
 	// One answer per user per prompt. If they already have one, tell the
 	// client to use the edit flow instead of creating a duplicate.
@@ -67,11 +64,3 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 
 	return json({ id: postId, prompt_id: prompt.id }, { status: 201 });
 };
-
-function todayUTC(): string {
-	const d = new Date();
-	const yyyy = d.getUTCFullYear();
-	const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-	const dd = String(d.getUTCDate()).padStart(2, '0');
-	return `${yyyy}-${mm}-${dd}`;
-}

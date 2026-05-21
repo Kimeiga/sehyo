@@ -1,14 +1,15 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { getActivePrompt } from '$lib/server/prompts';
 
 const MAX_LEN = 2000;
 
 /**
  * Create a free-form post (not tied to a daily prompt).
  *
- * Gating: the user must already have an answer to today's prompt. Once
- * you've answered today, you've earned the ability to post freely
- * for the day. Server-enforced.
+ * Gating: the user must already have an answer to the active prompt.
+ * Once you've answered it, you've earned the ability to post freely
+ * until the next prompt is generated. Server-enforced.
  */
 export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	if (!locals.user) throw error(401, 'Unauthorized');
@@ -21,17 +22,13 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	if (!content) throw error(400, 'Content is required');
 	if (content.length > MAX_LEN) throw error(400, `Content is too long (max ${MAX_LEN} characters)`);
 
-	const date = todayUTC();
-	const todayPrompt = await db
-		.prepare('SELECT id FROM daily_prompts WHERE active_date = ?')
-		.bind(date)
-		.first<{ id: string }>();
+	const activePrompt = await getActivePrompt(db);
 
-	if (!todayPrompt) throw error(409, 'No active prompt today');
+	if (!activePrompt) throw error(409, 'No active prompt');
 
 	const myAnswer = await db
 		.prepare('SELECT id FROM posts WHERE user_id = ? AND prompt_id = ?')
-		.bind(locals.user.id, todayPrompt.id)
+		.bind(locals.user.id, activePrompt.id)
 		.first<{ id: string }>();
 
 	if (!myAnswer) {
@@ -46,11 +43,3 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 
 	return json({ id: postId }, { status: 201 });
 };
-
-function todayUTC(): string {
-	const d = new Date();
-	const yyyy = d.getUTCFullYear();
-	const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-	const dd = String(d.getUTCDate()).padStart(2, '0');
-	return `${yyyy}-${mm}-${dd}`;
-}

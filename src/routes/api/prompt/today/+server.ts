@@ -1,9 +1,10 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { getActivePrompt } from '$lib/server/prompts';
 
 /**
- * Today's prompt + its answers, ranked by HN-style decay so fresher and
- * more-engaged answers float to the top while old cold ones sink.
+ * The active prompt + its answers, ranked by HN-style decay so fresher
+ * and more-engaged answers float to the top while old cold ones sink.
  *
  * Public — no auth required. Anonymous users get the same view as
  * signed-in users; identity-reveal happens client-side after engagement.
@@ -12,12 +13,7 @@ export const GET: RequestHandler = async ({ platform }) => {
 	const db = platform?.env?.DB;
 	if (!db) throw error(500, 'Database not available');
 
-	const date = todayUTC();
-
-	const prompt = await db
-		.prepare('SELECT id, prompt_text, active_date, created_at FROM daily_prompts WHERE active_date = ?')
-		.bind(date)
-		.first<{ id: string; prompt_text: string; active_date: string; created_at: number }>();
+	const prompt = await getActivePrompt(db);
 
 	if (!prompt) {
 		return json({ prompt: null, answers: [], total_answers: 0 });
@@ -74,11 +70,3 @@ export const GET: RequestHandler = async ({ platform }) => {
 		total_answers: answers.length
 	});
 };
-
-function todayUTC(): string {
-	const d = new Date();
-	const yyyy = d.getUTCFullYear();
-	const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-	const dd = String(d.getUTCDate()).padStart(2, '0');
-	return `${yyyy}-${mm}-${dd}`;
-}

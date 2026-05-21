@@ -1,5 +1,6 @@
 import type { PageServerLoad } from './$types';
 import { loadCommentsForPosts } from '$lib/server/comments';
+import { getActivePrompt, todayUTC } from '$lib/server/prompts';
 
 interface AnswerRow {
 	id: string;
@@ -117,9 +118,11 @@ export const load: PageServerLoad = async ({ platform }) => {
 
 	const today = todayUTC();
 	const startOfTodayUtc = Math.floor(Date.parse(today + 'T00:00:00Z') / 1000);
-	const startOfTomorrowUtc = startOfTodayUtc + 86400;
+	const activePrompt = await getActivePrompt(db);
+	const activePromptDate = activePrompt?.active_date ?? today;
+	const activeWindowStart = activePrompt?.created_at ?? startOfTodayUtc;
 
-	// ── Past daily prompts (everything before today) ─────────────────
+	// ── Past daily prompts (everything before the active prompt) ─────
 	const promptRowsRes = await db
 		.prepare(
 			`SELECT id, prompt_text, active_date
@@ -128,7 +131,7 @@ export const load: PageServerLoad = async ({ platform }) => {
 			 ORDER BY active_date DESC
 			 LIMIT ?`
 		)
-		.bind(today, PAST_DAYS_LIMIT)
+		.bind(activePromptDate, PAST_DAYS_LIMIT)
 		.all<{ id: string; prompt_text: string; active_date: string }>();
 	const pastPrompts = promptRowsRes.results ?? [];
 
@@ -177,7 +180,7 @@ export const load: PageServerLoad = async ({ platform }) => {
 		}));
 	}
 
-	// ── Today's free-form posts (rendered inside the World section) ──
+	// ── Current free-form posts (rendered inside the World section) ──
 	const todayFreeRes = await db
 		.prepare(
 			`SELECT
@@ -195,15 +198,14 @@ export const load: PageServerLoad = async ({ platform }) => {
 			JOIN user u ON u.id = p.user_id
 			WHERE p.prompt_id IS NULL
 			  AND p.created_at >= ?
-			  AND p.created_at < ?
 			ORDER BY p.created_at DESC
 			LIMIT 100`
 		)
-		.bind(startOfTodayUtc, startOfTomorrowUtc)
+		.bind(activeWindowStart)
 		.all<AnswerRow>();
 	const todayFreePosts = todayFreeRes.results ?? [];
 
-	// ── Older free-form posts (everything before today) ──────────────
+	// ── Older free-form posts (everything before the active prompt) ──
 	// These will be interleaved with past daily prompts in the
 	// chronological timeline below the World section.
 	const pastFreeRes = await db
@@ -226,7 +228,7 @@ export const load: PageServerLoad = async ({ platform }) => {
 			ORDER BY p.created_at DESC
 			LIMIT ?`
 		)
-		.bind(startOfTodayUtc, PAST_FREE_POSTS_LIMIT)
+		.bind(activeWindowStart, PAST_FREE_POSTS_LIMIT)
 		.all<AnswerRow>();
 	const pastFreePosts = pastFreeRes.results ?? [];
 
@@ -256,11 +258,3 @@ export const load: PageServerLoad = async ({ platform }) => {
 		sendLabelMono
 	};
 };
-
-function todayUTC(): string {
-	const d = new Date();
-	const yyyy = d.getUTCFullYear();
-	const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-	const dd = String(d.getUTCDate()).padStart(2, '0');
-	return `${yyyy}-${mm}-${dd}`;
-}
