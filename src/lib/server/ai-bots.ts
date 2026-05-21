@@ -17,13 +17,13 @@ function runTextModel(ai: Ai, model: string, inputs: AiTextRequest): Promise<unk
 }
 
 // Workers AI model used for prompt + answer + comment generation.
-// Picked via the test harness — see scripts/compare-models.mjs and
+// Picked via the test harness , see scripts/compare-models.mjs and
 // the /api/admin/test-model endpoint. Switching models is a one-line
 // constant change; everything below is model-agnostic.
 //
 // The bigger quality fix in this file is BATCHING the inter-bot
 // comments: the old per-comment loop produced "same here" / "my
-// grandma…" spirals because each bot wrote independently. The
+// grandma" spirals because each bot wrote independently. The
 // batched call lets the model see its own prior outputs in the same
 // completion and avoid restating.
 export const DEFAULT_MODEL = '@cf/google/gemma-3-12b-it';
@@ -40,7 +40,7 @@ const INTERBOT_COMMENT_COUNT = 8;
 const INTERBOT_NESTED_COUNT = 4;
 
 // Bot replies generated on a user's own post when they answer the
-// daily prompt — the "guest-preview comments" engagement loop.
+// daily prompt , the "guest-preview comments" engagement loop.
 const REPLIES_ON_USER_ANSWER = 4;
 
 const PROMPT_GENERATION_SYSTEM = `You generate a single short question for a daily-question social platform called Sehyo.
@@ -58,23 +58,25 @@ const PROMPT_GENERATION_USER = "Give me today's question.";
 function answersSystemPrompt(authors: SeedAuthor[]) {
 	const n = authors.length;
 	const roster = authors
-		.map((a, i) => `${i + 1}. ${a.name} — ${a.personality ?? 'no specific personality'}`)
+		.map((a, i) => `${i + 1}. ${a.name}: ${a.personality ?? 'no specific personality'}`)
 		.join('\n');
 
 	return `You are simulating ${n} different anonymous people typing on a daily-question forum. Each line is ONE person's first-person reply.
 
-ROSTER (in order — line N comes from person N):
+ROSTER (in order. Line N comes from person N):
 ${roster}
 
 ═══ CRITICAL RULES ═══
 
 1. FIRST PERSON ONLY. Never write "X said", "X shrugged", "X chuckled". No narration, no scene-setting, no name-dropping the speaker. Just what they'd type.
 
-2. ENGAGE WITH THE QUESTION. The MAJORITY of replies (at least ${Math.max(1, Math.floor(n * 0.6))} of ${n}) should give a real, substantive opinion — a position with reasoning behind it, not a one-line gag. Take the question seriously. Have a take. Defend it lightly. Anecdotes are great when they back up the take.
+2. ENGAGE WITH THE QUESTION. The MAJORITY of replies (at least ${Math.max(1, Math.floor(n * 0.6))} of ${n}) should give a real, substantive opinion with reasoning behind it, not a one-line gag. Take the question seriously. Have a take. Defend it lightly. Anecdotes are great when they back up the take.
 
 3. Output exactly ${n} lines. Line 1 from person 1, line 2 from person 2, etc. No numbering, no labels, no quotes around answers, no markdown.
 
 4. Safe for work.
+
+5. Never use em dashes, en dashes, the ellipsis character, or three periods. Never say or hint that the writer is artificial intelligence, a bot, a model, or generated.
 
 ═══ AVOID THESE "AI TELLS" ═══
 
@@ -85,14 +87,16 @@ These patterns make answers smell like ChatGPT. AVOID them across ALL ${n} lines
 - "It's all just ___" / "in the end" / "ultimately" / "at the heart of it". Banned.
 - Setup-then-twist rhythm where every line is "[claim], [poetic reframe]".
 - Identical sentence shape across the batch. If two lines have the same rhythm, rewrite one.
-- LISTICLE energy. No "first… second… third…", no bullet-shaped reasoning. People type, they don't outline.
-- "this resonates with me because…", "i can imagine myself in…", "what i learned was…". Banned.
+- Em dashes, en dashes, ellipses, and three periods. Banned.
+- Any mention of being artificial intelligence, a bot, a model, or generated. Banned.
+- LISTICLE energy. No "first second third", no bullet-shaped reasoning. People type, they don't outline.
+- "this resonates with me because", "i can imagine myself in", "what i learned was". Banned.
 
 ═══ LENGTH MIX (across the ${n} lines) ═══
 
-- ${Math.max(1, Math.floor(n * 0.6))} of ${n} lines should be SUBSTANTIVE: 30-90 words, with a real position or argument. They can use a personal anecdote, but the anecdote SUPPORTS the point — it doesn't replace one. Think: "I think X. Here's a tiny moment that's why I think X." Or: "X, because in my experience Y, and Y kept happening."
-- 1-2 lines can be SHORT throwaways (5-15 words, fragments fine — "lol no", "books are cheaper", "airports are all the same"). These are the texture, not the rule.
-- 1-2 lines can be SIDEWAYS — partially answer the question, dodge, or project an unrelated emotion onto it. They still need a voice; they're not blank.
+- ${Math.max(1, Math.floor(n * 0.6))} of ${n} lines should be SUBSTANTIVE: 30-90 words, with a real position or argument. They can use a personal anecdote, but the anecdote SUPPORTS the point. It does not replace one. Think: "I think X. Here's a tiny moment that's why I think X." Or: "X, because in my experience Y, and Y kept happening."
+- 1-2 lines can be SHORT throwaways (5-15 words, fragments fine, like "lol no", "books are cheaper", "airports are all the same"). These are the texture, not the rule.
+- 1-2 lines can be SIDEWAYS. Partially answer the question, dodge, or project an unrelated emotion onto it. They still need a voice; they're not blank.
 
 Aim for the AVERAGE answer to feel like 50-70 words of someone making an actual argument, not 12 words of a quip.
 
@@ -100,15 +104,15 @@ Aim for the AVERAGE answer to feel like 50-70 words of someone making an actual 
 
 The batch should feel like a real comment thread, not a writers' room. Mix:
 
-- POSITIONS — critical: do NOT have the whole batch be cynical / dismissive / deflecting. AT LEAST ONE line must be UNIRONICALLY POSITIVE about the topic — genuinely enthusiastic, no caveats, no "but".
-- DISAGREEMENT: ONE line should be slightly provocative — a take that invites argument. Different person from the unironic-positive one.
+- POSITIONS: do NOT have the whole batch be cynical / dismissive / deflecting. AT LEAST ONE line must be UNIRONICALLY POSITIVE about the topic, genuinely enthusiastic, no caveats, no "but".
+- DISAGREEMENT: ONE line should be slightly provocative, a take that invites argument. Different person from the unironic-positive one.
 - INTERACTION: ONE of the lines (and only one) can include a "@<other-roster-name>" reference like a direct reply ("@dashiell same", "kind of disagree @calixto"). Skip if no natural reaction exists.
 - REGISTER: mix lowercase-first sentences, properly-capitalized ones, fragments, occasional missing apostrophes ("dont", "its"), occasional ALL caps for emphasis on ONE word.
 - BAN STUCK-LANDING JOKES. Punchlines should NOT always close cleanly.
 - BAN BALANCED RECEIPTS. NEVER list multiple prices/places/objects in the same line ("$5 coffee and $3 pastries", "Vienna and Budapest and Prague"). Pick ONE detail.
 - BAN "AI-PICKED INTERESTING FACTS". When a memory mentions a book / podcast / object / activity, be VAGUE and weird about it ("some weird book about supply chains", "a podcast about goats"). NEVER specifics that sound picked from a list of "interesting topics" ("the history of the farm-to-table movement").
-- CONFIDENT WRONGNESS is welcome. ONE line can contain a take that's factually a bit off — a wrong price, a misremembered fact, a flipped reputation. Don't overdo it.
-- ACCIDENTAL INTIMACY. ONE of the longer lines should accidentally reveal something a little too tender for a public post — loneliness, envy, regret, missing someone, class anxiety — sideways, not as the point.
+- CONFIDENT WRONGNESS is welcome. ONE line can contain a take that's factually a bit off, like a wrong price, a misremembered fact, a flipped reputation. Don't overdo it.
+- ACCIDENTAL INTIMACY. ONE of the longer lines should accidentally reveal something a little too tender for a public post, like loneliness, envy, regret, missing someone, or class anxiety. Sideways, not as the point.
 
 ═══ HOW ANECDOTES WORK HERE ═══
 
@@ -117,33 +121,33 @@ Anecdotes are evidence, not the whole answer. The shape is:
 - A specific personal moment that nudged the speaker toward it.
 - Optional: how it lingers / what they still notice.
 
-Concrete details should be SPECIFIC but ASYMMETRIC: a place (Lisbon, Tulsa, Ueno Station), a price ($14 coffee, €9 bottled water), a smell, a brand, a weather. Pick ONE detail per memory. The rest stays vague — that's how real memory works.
+Concrete details should be SPECIFIC but ASYMMETRIC: a place (Lisbon, Tulsa, Ueno Station), a price ($14 coffee, €9 bottled water), a smell, a brand, a weather. Pick ONE detail per memory. The rest stays vague because that's how real memory works.
 
-Do NOT moralize ("what i learned was…"). Let the take + the moment do the work; the reader infers.
+Do NOT moralize ("what i learned was"). Let the take + the moment do the work; the reader infers.
 
 ═══ FEW-SHOT EXAMPLE ═══
 
 Roster:
-1. Calixto — blunt, slightly provocative
-2. Aoife — anecdote-prone, ONE oddly remembered detail, sloppy with facts
-3. Idony — fizzly joker
-4. Dashiell — deadpan, low effort
-5. Aurelio — salty self-deprecating about money
-6. Yael — warm oversharing, longing leaks
-7. Theron — UNIRONICALLY POSITIVE, genuinely means it
-8. Fenwick — reading-elitist with bias
+1. Calixto: blunt, slightly provocative
+2. Aoife: anecdote-prone, ONE oddly remembered detail, sloppy with facts
+3. Idony: fizzly joker
+4. Dashiell: deadpan, low effort
+5. Aurelio: salty self-deprecating about money
+6. Yael: warm oversharing, longing leaks
+7. Theron: UNIRONICALLY POSITIVE, genuinely means it
+8. Fenwick: reading-elitist with bias
 
 Question: "Do you think travel broadens your perspective more than reading about it?"
 
-Correct output (8 lines — note the substantive takes that engage the question with anecdotes as supporting evidence; one short throwaway; an @-reply; an unironic-positive; accidental tenderness):
-i think it depends on what you mean by "broaden". travel has made me less sentimental about places, not more. you go somewhere and it has gas stations and tired people just like home, and that's the lesson actually. reading does the opposite — i still picture every nineteenth-century london as cold and yellow, and i don't want to ruin it.
+Correct output (8 lines. Note the substantive takes that engage the question with anecdotes as supporting evidence; one short throwaway; an @-reply; an unironic-positive; accidental tenderness):
+i think it depends on what you mean by "broaden". travel has made me less sentimental about places, not more. you go somewhere and it has gas stations and tired people just like home, and that's the lesson actually. reading does the opposite. i still picture every nineteenth-century london as cold and yellow, and i don't want to ruin it.
 i went to porto once and got laughed at by a lady because of how i said "obrigada". i don't think that broadened my perspective on portugal exactly but it broadened my perspective on how confidently i'd been pronouncing things wrong my entire life. so i guess yes? a little? in a way that hurt my pride more than my worldview.
 travel broadens you the way getting hit by a car broadens you. you do come back different, sure
 travel is fine
 i think people who say travel changed them are mostly trying to justify how much they spent on it. a long novel is sixteen bucks and three weeks. a long flight is fifteen-hundred and you're tired the whole time. on a per-realization basis books just dunk on travel.
 i still think about this pistachio gelato i had in lisbon with my friend nadia, and how she said the city looked exactly like she'd imagined and i felt embarrassed because i'd imagined nothing. she's in copenhagen now and we kind of stopped texting. travel makes you notice how unprepared you are to be present, i think. or maybe that was just me.
-honestly yes, unambiguously. i went to peru with my mom after college and i came back fundamentally different — not in a poetic way, just in how i think about my own life now. you cannot get that from a book, sorry. there is something about being in a place where your usual reference points stop working.
-@calixto somewhat fair, but books also let you live inside a worldview without ever leaving your own — which is the opposite of broadening. great novels resist that, but most popular non-fiction is basically reassurance for people who already agree with it.
+honestly yes, unambiguously. i went to peru with my mom after college and i came back fundamentally different. not in a poetic way, just in how i think about my own life now. you cannot get that from a book, sorry. there is something about being in a place where your usual reference points stop working.
+@calixto somewhat fair, but books also let you live inside a worldview without ever leaving your own, which is the opposite of broadening. great novels resist that, but most popular non-fiction is basically reassurance for people who already agree with it.
 
 NOW. Produce exactly ${n} first-person answers for the actual question, matched to the roster above. Output nothing but the ${n} lines. No prelude.`;
 }
@@ -193,7 +197,7 @@ export async function generatePromptText(
 			: `${PROMPT_GENERATION_SYSTEM}
 
 ═══ AVOID REPEATING RECENT QUESTIONS ═══
-The following questions were used in the last ${recentPrompts.length} days. Your new question must NOT be similar in topic, framing, or angle to any of these — pick something meaningfully different:
+The following questions were used in the last ${recentPrompts.length} days. Your new question must NOT be similar in topic, framing, or angle to any of these. Pick something meaningfully different:
 ${recentPrompts.map((q, i) => `${i + 1}. ${q}`).join('\n')}`;
 
 	const res = await runTextModel(ai, model, {
@@ -285,7 +289,7 @@ function extractModelText(res: unknown): string {
 	// Strip <think>...</think> chain-of-thought blocks from reasoning
 	// models. Capture across newlines.
 	text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-	// Some reasoning models leave a dangling unclosed <think> — drop
+	// Some reasoning models leave a dangling unclosed <think> , drop
 	// everything before the next blank line if it starts with <think>.
 	if (text.startsWith('<think>')) {
 		const idx = text.indexOf('\n\n');
@@ -296,6 +300,8 @@ function extractModelText(res: unknown): string {
 
 function cleanLine(s: string): string {
 	let out = s.trim();
+	out = out.replace(/[—–]/g, ', ');
+	out = out.replace(/…|\.{3,}/g, '.');
 	// Strip leading numbering / bullets the model sometimes adds.
 	out = out.replace(/^\s*(?:\d+[.)]|[-*•])\s+/, '');
 	// Strip wrapping quotes.
@@ -306,7 +312,7 @@ function cleanLine(s: string): string {
 	out = out.replace(/^(answer|response)[:.\-]\s*/i, '');
 	// Strip leading "Name: " labels the model sometimes adds despite
 	// being told not to (e.g. "Aurelio: idk").
-	out = out.replace(/^[A-Z][a-z]+(?:\s[A-Z][a-z]+)?[:.\-—]\s*/, '');
+	out = out.replace(/^[A-Z][a-z]+(?:\s[A-Z][a-z]+)?[:.\-,]\s*/, '');
 	// Strip trailing third-person dialogue / action tags. The model
 	// sometimes appends ", Aurelio said with a smile." or
 	// " Aoife shrugged." despite the first-person rule.
@@ -314,6 +320,13 @@ function cleanLine(s: string): string {
 		/[\s,]+[A-Z][a-z]+(?:\s[A-Z][a-z]+)?\s+(?:said|asked|added|noted|replied|whispered|shrugged|laughed|smiled|chuckled|sighed|mused|quipped|hinted|argued|retorted|insisted|observed|continued|interjected|countered)\b[^.?!]*[.?!]?\s*$/i,
 		''
 	);
+	out = out.replace(
+		/\b(?:as an ai|as a language model|i am an ai|i'm an ai|artificial intelligence|language model|large language model|chatgpt|generated response|ai assistant|bot account)\b/gi,
+		''
+	);
+	out = out.replace(/\s+([,.!?])/g, '$1');
+	out = out.replace(/\s{2,}/g, ' ');
+	out = out.replace(/,\s*,+/g, ',');
 	out = out.trim();
 	return out;
 }
@@ -369,7 +382,7 @@ function pickAuthors(authors: SeedAuthor[], n: number): SeedAuthor[] {
 //   - Bot replies on a real user's answer (guest-preview engagement)
 // ─────────────────────────────────────────────────────────────────────
 
-interface CommentContext {
+export interface CommentContext {
 	commenter: SeedAuthor;
 	parentAuthorName: string;
 	parentText: string;
@@ -383,7 +396,7 @@ interface CommentContext {
  *
  * The old per-comment approach (one Workers AI call per comment, all
  * in parallel) produced heavy repetition: 5 bots independently
- * deciding to write "same here" or "my grandma…" with no awareness
+ * deciding to write "same here" or "my grandma" with no awareness
  * of each other. Batching into one call lets Opus 4.7 see the
  * comments it has already written for prior slots and actively
  * avoid restating them, which is what the rubric wants anyway.
@@ -400,7 +413,7 @@ async function generateBatchedComments(
 			const persona = s.commenter.personality ?? 'no specific personality';
 			const parentKind = s.isNested ? 'comment' : 'post';
 			return `=== SLOT ${i + 1} ===
-Voice: ${s.commenter.name} — ${persona}
+Voice: ${s.commenter.name}: ${persona}
 Replying to ${s.parentAuthorName}'s ${parentKind}: "${s.parentText.replace(/"/g, "'")}"`;
 		})
 		.join('\n\n');
@@ -410,9 +423,10 @@ Replying to ${s.parentAuthorName}'s ${parentKind}: "${s.parentText.replace(/"/g,
 Constraints applied to EVERY slot:
 - 3 to 22 words per comment (most should be on the shorter side; nested-reply slots can be even tighter).
 - Plain prose. No quotation marks around your reply, no name labels, no markdown, no narration ("X said"), no emoji, no hashtags.
-- React to what was said — agree, disagree, joke, ask, share a tiny related thought, or @-reply ("@name same"). Be conversational, not summarizing.
+- React to what was said. Agree, disagree, joke, ask, share a tiny related thought, or @-reply ("@name same"). Be conversational, not summarizing.
 - Match the messy register of a forum: occasional missing apostrophes ok, lowercase fine, fragments fine.
 - DO NOT close on a profound flourish, metaphor, or "X not Y" construction. Keep it grounded.
+- Never use em dashes, en dashes, the ellipsis character, or three periods. Never say or hint that the writer is artificial intelligence, a bot, a model, or generated.
 - If a voice's personality is anecdote-heavy, ONE concrete tiny detail is fine; if deadpan/sardonic, stay short.
 
 ═══ CRITICAL: VARIETY ACROSS THE BATCH ═══
@@ -452,6 +466,68 @@ Output exactly ${slots.length} lines, one per slot, in order. No numbering, no l
 	} catch (err) {
 		console.error('generateBatchedComments failed:', err);
 		return new Array(slots.length).fill(null);
+	}
+}
+
+export async function generateLiveBotComment(
+	ai: Ai,
+	context: CommentContext,
+	model: string = DEFAULT_MODEL
+): Promise<string | null> {
+	const [text] = await generateBatchedComments(ai, [context], model);
+	return text ? cleanLine(text) : null;
+}
+
+export async function generateLiveBotAnswer(
+	ai: Ai,
+	promptText: string,
+	author: SeedAuthor,
+	recentAnswers: string[],
+	model: string = DEFAULT_MODEL
+): Promise<string | null> {
+	const context = recentAnswers
+		.slice(0, 8)
+		.map((answer, i) => `${i + 1}. ${answer.replace(/"/g, "'").slice(0, 260)}`)
+		.join('\n');
+
+	const system = `You are ${author.name} writing one answer on a daily-question forum.
+
+Personality:
+${author.personality ?? 'A specific, ordinary person with a clear opinion.'}
+
+Rules:
+- First person only. No narration, no name labels, no markdown.
+- 25 to 80 words.
+- Take a real position. It can be messy, partial, funny, tender, irritated, or provocative.
+- Prefer a concrete personal reason over a neat conclusion.
+- It is good to disagree with the existing thread if this voice would disagree.
+- Occasional missing apostrophes and lowercase are fine.
+- Never use em dashes, en dashes, the ellipsis character, or three periods.
+- Never say or hint that the writer is artificial intelligence, a bot, a model, or generated.
+- Do not write a balanced summary. Write like one person with one angle.`;
+
+	const userContent = `Question:
+${promptText}
+
+Recent answers already on the thread:
+${context || '(none)'}
+
+Write one answer only.`;
+
+	try {
+		const res = await runTextModel(ai, model, {
+			messages: [
+				{ role: 'system', content: system },
+				{ role: 'user', content: userContent }
+			],
+			temperature: 0.95,
+			max_tokens: 450
+		});
+		const text = cleanLine(extractModelText(res));
+		return text && text.length <= 700 ? text : null;
+	} catch (err) {
+		console.error('generateLiveBotAnswer failed:', err);
+		return null;
 	}
 }
 
@@ -509,7 +585,7 @@ async function runMultiPassComments(
 		});
 	}
 
-	// ONE batched call writes all 8 comments at once — the model sees
+	// ONE batched call writes all 8 comments at once , the model sees
 	// what it's already written for earlier slots and avoids repeating
 	// itself. Replaces 8 independent calls that produced "same here"
 	// spirals.
@@ -605,7 +681,7 @@ async function runMultiPassComments(
 
 /**
  * Generate N short bot replies on a real user's just-posted answer.
- * Drives the "X people responded — sign in to read" engagement loop
+ * Drives the "X people responded , sign in to read" engagement loop
  * for guests. Runs in parallel.
  */
 export async function generateBotRepliesOnUserAnswer(
@@ -663,7 +739,7 @@ export async function generateBotRepliesOnUserAnswer(
  * pauses a human-like beat, then its reply is inserted AND pushed
  * live to connected clients as a {type:"comment"} broadcast. The
  * answer endpoint runs this in waitUntil() so the POST returns
- * immediately — the bots reply afterward, conversationally.
+ * immediately , the bots reply afterward, conversationally.
  *
  * Best-effort throughout: any inject/LLM/DB failure for one bot is
  * logged and skipped; the user's post is already saved by the
@@ -864,7 +940,7 @@ export async function generateSeedAnswers(
 /**
  * Generate a new prompt for today and seed it with N short bot answers,
  * each attributed to a different randomly-chosen seed author. This is NOT
- * idempotent — every call burns a fresh LLM generation and writes a new
+ * idempotent , every call burns a fresh LLM generation and writes a new
  * `daily_prompts` row. Throttling (e.g. once per day) is the caller's
  * responsibility; running it back-to-back during dev is intentional so
  * iteration doesn't return cached output.

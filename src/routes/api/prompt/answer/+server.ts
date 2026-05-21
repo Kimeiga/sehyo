@@ -56,7 +56,8 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 			postContent: content,
 			postAuthorName: locals.user.name ?? 'Anonymous',
 			injectUrl,
-			injectSecret
+			injectSecret,
+			model: platform?.env?.LIVE_BOT_MODEL
 		}).catch((err) => console.error('bot choreography failed:', err));
 		// Keep the worker alive past the response without blocking it.
 		if (platform?.context?.waitUntil) platform.context.waitUntil(work);

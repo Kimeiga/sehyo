@@ -18,6 +18,11 @@
  */
 
 const TYPING_TTL_MS = 5000;
+const LIVE_ACTIVITY_ENDPOINT = '/api/admin/live-bot/step';
+const LIVE_ACTIVITY_INITIAL_MIN_MS = 4000;
+const LIVE_ACTIVITY_INITIAL_MAX_MS = 12000;
+const LIVE_ACTIVITY_MIN_MS = 45000;
+const LIVE_ACTIVITY_MAX_MS = 150000;
 
 const WTAG = '[typing/worker]';
 const DTAG = '[typing/do]';
@@ -89,8 +94,7 @@ export default {
 		// is the documented local-dev setup (workers/README.md) and
 		// is never true in production (where it's https://sehyo.com).
 		const apiIsLocal = /\/\/(localhost|127\.0\.0\.1)/.test(env.API_BASE_URL ?? '');
-		const isDev =
-			url.hostname === 'localhost' || url.hostname === '127.0.0.1' || apiIsLocal;
+		const isDev = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || apiIsLocal;
 		wdbg('mode resolved', { isDev, hostname: url.hostname, apiIsLocal });
 		const doUrl = new URL(request.url);
 
@@ -133,10 +137,7 @@ interface ResolvedSession {
 	displayName: string;
 }
 
-async function resolveSession(
-	apiBaseUrl: string,
-	cookie: string
-): Promise<ResolvedSession | null> {
+async function resolveSession(apiBaseUrl: string, cookie: string): Promise<ResolvedSession | null> {
 	const target = `${apiBaseUrl}/api/auth/get-session`;
 	wdbg('resolveSession → fetch', { target });
 	let res: Response;
@@ -204,11 +205,35 @@ interface CommentBroadcast {
 	comment: unknown;
 }
 
+interface PostBroadcast {
+	type: 'post';
+	post: unknown;
+}
+
+interface CursorBroadcast {
+	type: 'cursor';
+	userId: string;
+	displayName: string;
+	x: number;
+	y: number;
+	action?: 'idle' | 'answer' | 'reply' | 'typing' | 'click';
+	expiresAt?: number;
+}
+
+type ServerBroadcast =
+	| TypingBroadcast
+	| LeaveBroadcast
+	| CommentBroadcast
+	| PostBroadcast
+	| CursorBroadcast;
+
 export class ForumRoom {
 	private state: DurableObjectState;
+	private env: Env;
 
-	constructor(state: DurableObjectState, _env: Env) {
+	constructor(state: DurableObjectState, env: Env) {
 		this.state = state;
+		this.env = env;
 		ddbg('constructor() — DO instance instantiated/re-hydrated');
 	}
 
@@ -219,7 +244,7 @@ export class ForumRoom {
 		// pre-built message and fan it out to every connected socket
 		// (no `except` — the user watching their thread is the target).
 		if (url.pathname === '/broadcast') {
-			let msg: TypingBroadcast | LeaveBroadcast | CommentBroadcast;
+			let msg: ServerBroadcast;
 			try {
 				msg = (await request.json()) as typeof msg;
 			} catch {
@@ -244,7 +269,14 @@ export class ForumRoom {
 		ddbg('state.acceptWebSocket() — hibernatable accept');
 		this.state.acceptWebSocket(server);
 		server.serializeAttachment({ userId, displayName } satisfies SocketAttachment);
-		ddbg('serializeAttachment done', { userId, displayName, totalSockets: this.state.getWebSockets().length });
+		ddbg('serializeAttachment done', {
+			userId,
+			displayName,
+			totalSockets: this.state.getWebSockets().length
+		});
+		this.scheduleLiveActivity(true).catch((err) =>
+			ddbg('scheduleLiveActivity after connect failed', String(err))
+		);
 
 		return new Response(null, { status: 101, webSocket: client });
 	}
@@ -316,10 +348,56 @@ export class ForumRoom {
 		}
 	}
 
-	private broadcast(
-		msg: TypingBroadcast | LeaveBroadcast | CommentBroadcast,
-		except: WebSocket | null
-	) {
+	async alarm() {
+		const sockets = this.state.getWebSockets();
+		if (sockets.length === 0) {
+			ddbg('alarm fired with no sockets, no live activity');
+			return;
+		}
+
+		const base = (this.env.API_BASE_URL ?? '').replace(/\/+$/, '');
+		if (!base || !this.env.ADMIN_SECRET) {
+			ddbg('alarm missing API_BASE_URL or ADMIN_SECRET');
+			await this.scheduleLiveActivity(false, true);
+			return;
+		}
+
+		try {
+			const target = `${base}${LIVE_ACTIVITY_ENDPOINT}`;
+			ddbg('alarm → live activity endpoint', { target, sockets: sockets.length });
+			await fetch(target, {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json',
+					'x-admin-secret': this.env.ADMIN_SECRET
+				},
+				body: JSON.stringify({ room: 'forum' })
+			});
+		} catch (err) {
+			ddbg('live activity fetch failed', String(err));
+		}
+
+		if (this.state.getWebSockets().length > 0) {
+			await this.scheduleLiveActivity(false, true);
+		}
+	}
+
+	private async scheduleLiveActivity(initial: boolean, replace = false) {
+		if (this.state.getWebSockets().length === 0) return;
+		const existing = await this.state.storage.getAlarm();
+		if (existing !== null && !replace) {
+			ddbg('scheduleLiveActivity skipped, alarm already set', { existing });
+			return;
+		}
+		const min = initial ? LIVE_ACTIVITY_INITIAL_MIN_MS : LIVE_ACTIVITY_MIN_MS;
+		const max = initial ? LIVE_ACTIVITY_INITIAL_MAX_MS : LIVE_ACTIVITY_MAX_MS;
+		const delay = min + Math.floor(Math.random() * (max - min + 1));
+		const scheduledAt = Date.now() + delay;
+		await this.state.storage.setAlarm(scheduledAt);
+		ddbg('scheduleLiveActivity set alarm', { initial, delay, scheduledAt });
+	}
+
+	private broadcast(msg: ServerBroadcast, except: WebSocket | null) {
 		const payload = JSON.stringify(msg);
 		const all = this.state.getWebSockets();
 		let delivered = 0;

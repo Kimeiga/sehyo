@@ -27,6 +27,7 @@ declare global {
 				ADMIN_SECRET: string;
 				BOT_SECRET?: string;
 				TYPING_INJECT_URL: string;
+				LIVE_BOT_MODEL?: string;
 				AI: import('@cloudflare/workers-types').Ai;
 			};
 			context: {

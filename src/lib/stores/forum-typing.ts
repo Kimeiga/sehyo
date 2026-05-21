@@ -50,11 +50,28 @@ interface TypingEntry {
 	threadId: string;
 }
 
+interface CursorEntry {
+	displayName: string;
+	x: number;
+	y: number;
+	action: 'idle' | 'answer' | 'reply' | 'typing' | 'click';
+	expiresAt: number;
+}
+
 export interface TypingUser {
 	userId: string;
 	displayName: string;
 	expiresAt: number;
 	threadId: string;
+}
+
+export interface LiveCursor {
+	userId: string;
+	displayName: string;
+	x: number;
+	y: number;
+	action: 'idle' | 'answer' | 'reply' | 'typing' | 'click';
+	expiresAt: number;
 }
 
 /** A bot reply pushed live by the server after its typing indicator.
@@ -66,12 +83,21 @@ export interface LiveComment {
 	comment: unknown;
 }
 
+export interface LivePost {
+	post: unknown;
+}
+
 export interface ForumTypingHandle {
 	typingUsers: Readable<TypingUser[]>;
 	/** Most-recent server-pushed bot reply (or null). The page
 	 *  subscribes and merges each new value into the matching post's
 	 *  comment list, so replies appear without a reload. */
 	liveComment: Readable<LiveComment | null>;
+	/** Most-recent server-pushed bot answer (or null). */
+	livePost: Readable<LivePost | null>;
+	/** Sparse bot cursor presence. These are server-injected and expire
+	 *  locally so disconnected tabs don't leave ghosts behind. */
+	liveCursors: Readable<LiveCursor[]>;
 	/** Returns true if a typing frame was actually sent on the wire,
 	 *  false if it was throttled or the socket isn't open. Pass the
 	 *  threadId so receivers know which composer to attribute the
@@ -92,6 +118,7 @@ export function connectForumTyping(
 	dbg('connectForumTyping()', { roomId, devIdentity, browser });
 
 	const map = writable<Map<string, TypingEntry>>(new Map());
+	const cursorMap = writable<Map<string, CursorEntry>>(new Map());
 	const typingUsers = derived(map, (m) =>
 		Array.from(m, ([userId, v]) => ({
 			userId,
@@ -100,13 +127,26 @@ export function connectForumTyping(
 			threadId: v.threadId
 		})).sort((a, b) => a.displayName.localeCompare(b.displayName))
 	);
+	const liveCursors = derived(cursorMap, (m) =>
+		Array.from(m, ([userId, v]) => ({
+			userId,
+			displayName: v.displayName,
+			x: v.x,
+			y: v.y,
+			action: v.action,
+			expiresAt: v.expiresAt
+		})).sort((a, b) => a.displayName.localeCompare(b.displayName))
+	);
 	const liveComment = writable<LiveComment | null>(null);
+	const livePost = writable<LivePost | null>(null);
 
 	if (!browser) {
 		dbg('non-browser → returning no-op handle');
 		return {
 			typingUsers,
 			liveComment,
+			livePost,
+			liveCursors,
 			notifyTyping: (_threadId: string) => false,
 			disconnect: () => {}
 		};
@@ -137,7 +177,10 @@ export function connectForumTyping(
 		});
 
 		ws.addEventListener('message', (e) => {
-			dbg('ws.event=message', { dataType: typeof e.data, dataLen: typeof e.data === 'string' ? e.data.length : undefined });
+			dbg('ws.event=message', {
+				dataType: typeof e.data,
+				dataLen: typeof e.data === 'string' ? e.data.length : undefined
+			});
 			if (typeof e.data !== 'string') {
 				dbg('ws.message ignored — non-string');
 				return;
@@ -174,10 +217,7 @@ export function connectForumTyping(
 			dbg('scheduleReconnect skipped — already scheduled');
 			return;
 		}
-		const delay = Math.min(
-			RECONNECT_BASE_MS * 2 ** reconnectAttempt,
-			RECONNECT_MAX_MS
-		);
+		const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempt, RECONNECT_MAX_MS);
 		const jitter = Math.random() * 200;
 		dbg('scheduleReconnect', { attempt: reconnectAttempt, delay, jitter });
 		reconnectAttempt++;
@@ -199,6 +239,9 @@ export function connectForumTyping(
 			displayName?: unknown;
 			expiresAt?: unknown;
 			threadId?: unknown;
+			x?: unknown;
+			y?: unknown;
+			action?: unknown;
 		};
 
 		if (
@@ -232,6 +275,42 @@ export function connectForumTyping(
 			return;
 		}
 
+		if (
+			m.type === 'cursor' &&
+			typeof m.userId === 'string' &&
+			typeof m.displayName === 'string' &&
+			typeof m.x === 'number' &&
+			typeof m.y === 'number'
+		) {
+			const action =
+				m.action === 'answer' ||
+				m.action === 'reply' ||
+				m.action === 'typing' ||
+				m.action === 'click'
+					? m.action
+					: 'idle';
+			const entry: CursorEntry = {
+				displayName: m.displayName,
+				x: Math.max(0.02, Math.min(0.98, m.x)),
+				y: Math.max(0.04, Math.min(0.96, m.y)),
+				action,
+				expiresAt: Date.now() + 4200
+			};
+			dbg('handleMessage type=cursor → cursorMap.set', {
+				userId: m.userId,
+				displayName: m.displayName,
+				x: entry.x,
+				y: entry.y,
+				action: entry.action
+			});
+			cursorMap.update((cur) => {
+				const next = new Map(cur);
+				next.set(m.userId as string, entry);
+				return next;
+			});
+			return;
+		}
+
 		if (m.type === 'leave' && typeof m.userId === 'string') {
 			dbg('handleMessage type=leave', { userId: m.userId });
 			map.update((cur) => {
@@ -242,6 +321,12 @@ export function connectForumTyping(
 				const next = new Map(cur);
 				next.delete(m.userId as string);
 				dbg('map after leave', { size: next.size, keys: Array.from(next.keys()) });
+				return next;
+			});
+			cursorMap.update((cur) => {
+				if (!cur.has(m.userId as string)) return cur;
+				const next = new Map(cur);
+				next.delete(m.userId as string);
 				return next;
 			});
 			return;
@@ -258,6 +343,17 @@ export function connectForumTyping(
 			// New object identity each time so the page's subscriber
 			// fires even if the same comment somehow repeats.
 			liveComment.set({ postId: mc.postId, comment: mc.comment });
+			return;
+		}
+
+		if (
+			m.type === 'post' &&
+			(m as { post?: unknown }).post &&
+			typeof (m as { post?: unknown }).post === 'object'
+		) {
+			const mp = m as unknown as { post: unknown };
+			dbg('handleMessage type=post → livePost.set');
+			livePost.set({ post: mp.post });
 			return;
 		}
 
@@ -279,6 +375,16 @@ export function connectForumTyping(
 					after: next.size,
 					remaining: Array.from(next.keys())
 				});
+			}
+			return changed ? next : cur;
+		});
+		cursorMap.update((cur) => {
+			const now = Date.now();
+			let changed = false;
+			const next = new Map<string, CursorEntry>();
+			for (const [k, v] of cur) {
+				if (v.expiresAt > now) next.set(k, v);
+				else changed = true;
 			}
 			return changed ? next : cur;
 		});
@@ -328,9 +434,10 @@ export function connectForumTyping(
 			socket = null;
 		}
 		map.set(new Map());
+		cursorMap.set(new Map());
 	}
 
-	return { typingUsers, liveComment, notifyTyping, disconnect };
+	return { typingUsers, liveComment, livePost, liveCursors, notifyTyping, disconnect };
 }
 
 function wsUrl(roomId: string, devIdentity?: DevIdentity | null): string {

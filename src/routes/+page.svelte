@@ -9,6 +9,7 @@
 	import {
 		connectForumTyping,
 		type ForumTypingHandle,
+		type LiveCursor,
 		type TypingUser
 	} from '$lib/stores/forum-typing';
 
@@ -28,6 +29,19 @@
 			username: string | null;
 		};
 		sort_order?: number | null;
+	}
+
+	interface AnswerPostRow {
+		id: string;
+		user_id: string;
+		content: string;
+		created_at: number;
+		display_name: string | null;
+		username?: string | null;
+		bot_id: string | null;
+		comment_count: number;
+		is_question?: number;
+		image?: string | null;
 	}
 
 	interface CommentEditRow {
@@ -156,6 +170,17 @@
 	// (server choreography). Keyed by postId, appended to the
 	// server-loaded comments below so they appear without a reload.
 	let liveComments = $state<Record<string, CommentRow[]>>({});
+	let liveAnswers = $state<Record<string, AnswerPostRow>>({});
+
+	const visibleAnswers = $derived.by<AnswerPostRow[]>(() => {
+		const byId = new Map<string, AnswerPostRow>();
+		for (const answer of data.answers ?? []) byId.set(answer.id, answer as AnswerPostRow);
+		for (const answer of Object.values(liveAnswers)) byId.set(answer.id, answer);
+		if (data.myAnswer) byId.delete(data.myAnswer.id);
+		return Array.from(byId.values()).sort(
+			(a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id)
+		);
+	});
 
 	const commentsByPost = $derived.by<Record<string, CommentRow[]>>(() => {
 		const base: Record<string, CommentRow[]> = {
@@ -253,6 +278,7 @@
 	let worldTypingHandle: ForumTypingHandle | null = null;
 	const worldTypingUsers = writable<TypingUser[]>([]);
 	let visualTypingUsers = $state<VisualTypingUser[]>([]);
+	let liveCursors = $state<LiveCursor[]>([]);
 	let visualTypingCloseTimer: ReturnType<typeof setTimeout> | null = null;
 
 	$effect(() => {
@@ -288,14 +314,27 @@
 			tdbg('liveComment received', { postId: lc.postId, commentId: c.id });
 			upsertLiveComment(lc.postId, prepareIncomingComment(lc.postId, c));
 		});
+		const unsubPost = handle.livePost.subscribe((lp) => {
+			if (!lp) return;
+			const post = lp.post as AnswerPostRow;
+			if (!post || typeof post.id !== 'string') return;
+			tdbg('livePost received', { postId: post.id });
+			upsertLivePost(post);
+		});
+		const unsubCursors = handle.liveCursors.subscribe((v) => {
+			liveCursors = v;
+		});
 		return () => {
 			tdbg('$effect cleanup — unsubscribing + disconnecting');
 			unsub();
 			unsubLive();
+			unsubPost();
+			unsubCursors();
 			handle.disconnect();
 			worldTypingHandle = null;
 			worldTypingUsers.set([]);
 			visualTypingUsers = [];
+			liveCursors = [];
 		};
 	});
 
@@ -352,6 +391,11 @@
 			...liveComments,
 			[postId]: [comment, ...cur.filter((c) => c.id !== comment.id)]
 		};
+	}
+
+	function upsertLivePost(post: AnswerPostRow) {
+		if (data.myAnswer?.id === post.id) return;
+		liveAnswers = { ...liveAnswers, [post.id]: post };
 	}
 
 	const typingSelfId = $derived(devTabIdentity?.userId ?? data.user?.id);
@@ -766,6 +810,13 @@
 			{/if}
 		</section>
 
+		{@const promptTypers = visualTypingForThread('prompt')}
+		{#each promptTypers as typer (typer.key)}
+			<p class="world-typing prompt-typing" class:closing={typer.closing} aria-live="polite">
+				{@render typingText(typer)}
+			</p>
+		{/each}
+
 		<section class="answers">
 			{#if data.myAnswer}
 				{@render postArticle(
@@ -781,7 +832,7 @@
 					{ isMine: true }
 				)}
 			{/if}
-			{#each data.answers as a (a.id)}
+			{#each visibleAnswers as a (a.id)}
 				{@render postArticle(a, { isMine: false })}
 			{/each}
 		</section>
@@ -927,6 +978,22 @@
 		{/if}
 	{/if}
 </main>
+
+{#if liveCursors.length > 0}
+	<div class="live-cursor-layer" aria-hidden="true">
+		{#each liveCursors as cursor (cursor.userId)}
+			<div
+				class="live-cursor"
+				style={`--cursor-x:${(cursor.x * 100).toFixed(2)}vw; --cursor-y:${(cursor.y * 100).toFixed(2)}vh;`}
+			>
+				<span class="cursor-pointer"></span>
+				<span class="cursor-name" style:color={personColor(cursor.userId, cursor.displayName)}
+					>{firstName(cursor.displayName)}</span
+				>
+			</div>
+		{/each}
+	</div>
+{/if}
 
 <!-- Text-only thread row. Every node renders author, body, actions,
      and an optional branch containing replies/composer. -->
@@ -1930,6 +1997,44 @@
 		border-radius: 0;
 		font-size: 16px;
 		line-height: 1.4;
+	}
+	.live-cursor-layer {
+		position: fixed;
+		inset: 0;
+		z-index: 70;
+		pointer-events: none;
+		overflow: hidden;
+	}
+	.live-cursor {
+		position: absolute;
+		left: 0;
+		top: 0;
+		display: inline-flex;
+		align-items: flex-start;
+		gap: 6px;
+		transform: translate3d(var(--cursor-x), var(--cursor-y), 0);
+		transition: transform 1400ms cubic-bezier(0.16, 1, 0.3, 1);
+		will-change: transform;
+	}
+	.cursor-pointer {
+		width: 0;
+		height: 0;
+		margin-top: 2px;
+		border-top: 6px solid transparent;
+		border-bottom: 6px solid transparent;
+		border-left: 10px solid var(--foreground);
+		transform: rotate(-26deg);
+		transform-origin: 0 50%;
+		filter: drop-shadow(0 0 0 var(--background));
+	}
+	.cursor-name {
+		margin-top: 9px;
+		padding: 1px 4px 2px;
+		border: 1px solid var(--border);
+		background: var(--background);
+		font-size: 16px;
+		font-weight: 500;
+		line-height: 1.2;
 	}
 
 	@keyframes tw-posted-content-reveal {
