@@ -3,6 +3,19 @@ import { drizzle } from 'drizzle-orm/d1';
 import { and, desc, eq, inArray, like } from 'drizzle-orm';
 import { user, dailyPrompts, posts, comments, botProfiles } from './db/schema';
 
+interface AiTextRequest {
+	messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+	temperature?: number;
+	max_tokens?: number;
+}
+
+function runTextModel(ai: Ai, model: string, inputs: AiTextRequest): Promise<unknown> {
+	return (ai.run as unknown as (model: string, inputs: AiTextRequest) => Promise<unknown>)(
+		model,
+		inputs
+	);
+}
+
 // Workers AI model used for prompt + answer + comment generation.
 // Picked via the test harness — see scripts/compare-models.mjs and
 // the /api/admin/test-model endpoint. Switching models is a one-line
@@ -183,7 +196,7 @@ export async function generatePromptText(
 The following questions were used in the last ${recentPrompts.length} days. Your new question must NOT be similar in topic, framing, or angle to any of these — pick something meaningfully different:
 ${recentPrompts.map((q, i) => `${i + 1}. ${q}`).join('\n')}`;
 
-	const res = await ai.run(model, {
+	const res = await runTextModel(ai, model, {
 		messages: [
 			{ role: 'system', content: systemContent },
 			{ role: 'user', content: PROMPT_GENERATION_USER }
@@ -214,7 +227,7 @@ export async function generateAnswerLines(
 	authors: SeedAuthor[],
 	model: string = DEFAULT_MODEL
 ): Promise<string[]> {
-	const res = await ai.run(model, {
+	const res = await runTextModel(ai, model, {
 		messages: [
 			{ role: 'system', content: answersSystemPrompt(authors) },
 			{ role: 'user', content: promptText }
@@ -414,7 +427,7 @@ You are writing ALL slots in one pass. You will SEE the comments you write for e
 Output exactly ${slots.length} lines, one per slot, in order. No numbering, no labels, no quotes around the lines, no blank lines between them.`;
 
 	try {
-		const res = await ai.run(model, {
+		const res = await runTextModel(ai, model, {
 			messages: [
 				{ role: 'system', content: system },
 				{ role: 'user', content: slotBlock }

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
 	import { invalidateAll } from '$app/navigation';
-	import { tick, type Snippet } from 'svelte';
+	import { tick, untrack, type Snippet } from 'svelte';
 	import { authClient } from '$lib/auth-client';
 	import { promptSignIn } from '$lib/stores/sign-in-modal';
 	import { Pencil, MoreHorizontal, Check, ArrowUp } from 'lucide-svelte';
@@ -19,6 +19,7 @@
 		content: string;
 		created_at: number;
 		updated_at?: number | null;
+		fromTyping?: boolean;
 		user_id: string;
 		parent_comment_id: string | null;
 		user: {
@@ -42,7 +43,14 @@
 		edits: CommentEditRow[];
 	};
 
+	type VisualTypingUser = TypingUser & {
+		key: string;
+		closing: boolean;
+		removeAt: number | null;
+	};
+
 	const MAX_NEST_DEPTH = 3;
+	const TYPING_CLOSE_MS = 260;
 
 	function newestCommentFirst(a: CommentRow, b: CommentRow): number {
 		return b.created_at - a.created_at || (b.sort_order ?? 0) - (a.sort_order ?? 0);
@@ -222,8 +230,9 @@
 	   real sign-in. The Worker mirrors this — when it sees a localhost
 	   host it skips cookie validation and trusts the URL params.
 
-	   The empty `writable` is a placeholder so the template can use
-	   $worldTypingUsers unconditionally. */
+	   The writable keeps the raw Worker payload separate from the
+	   visual typing rows, which need a short closing state after the
+	   Worker stops reporting someone as active. */
 	const TYPING_TAG = '[typing/page]';
 	const tdbg = (...args: unknown[]) => console.debug(TYPING_TAG, ...args);
 
@@ -243,6 +252,8 @@
 
 	let worldTypingHandle: ForumTypingHandle | null = null;
 	const worldTypingUsers = writable<TypingUser[]>([]);
+	let visualTypingUsers = $state<VisualTypingUser[]>([]);
+	let visualTypingCloseTimer: ReturnType<typeof setTimeout> | null = null;
 
 	$effect(() => {
 		// Connect for ANY logged-in viewer (incl. anonymous /
@@ -275,7 +286,7 @@
 			const c = lc.comment as CommentRow;
 			if (!c || typeof c.id !== 'string') return;
 			tdbg('liveComment received', { postId: lc.postId, commentId: c.id });
-			upsertLiveComment(lc.postId, c);
+			upsertLiveComment(lc.postId, prepareIncomingComment(lc.postId, c));
 		});
 		return () => {
 			tdbg('$effect cleanup — unsubscribing + disconnecting');
@@ -284,6 +295,21 @@
 			handle.disconnect();
 			worldTypingHandle = null;
 			worldTypingUsers.set([]);
+			visualTypingUsers = [];
+		};
+	});
+
+	$effect(() => {
+		const selfId = typingSelfId;
+		const unsubscribe = worldTypingUsers.subscribe((users) => {
+			untrack(() => syncVisualTypingUsers(users.filter((u) => u.userId !== selfId)));
+		});
+		return unsubscribe;
+	});
+
+	$effect(() => {
+		return () => {
+			if (visualTypingCloseTimer) clearTimeout(visualTypingCloseTimer);
 		};
 	});
 
@@ -330,12 +356,79 @@
 
 	const typingSelfId = $derived(devTabIdentity?.userId ?? data.user?.id);
 
-	function typingForThread(all: TypingUser[], threadId: string, selfId: string | undefined) {
-		return all.filter((u) => u.threadId === threadId && u.userId !== selfId);
+	function typingKey(user: Pick<TypingUser, 'threadId' | 'userId'>): string {
+		return `${user.threadId}:${user.userId}`;
 	}
 
-	// Typing-indicator label is rendered via the {#snippet typingLabel}
-	// in markup so names can be normalized the same way as feed authors.
+	function syncVisualTypingUsers(activeUsers: TypingUser[]) {
+		const now = Date.now();
+		const activeKeys = new Set(activeUsers.map(typingKey));
+		const previous = new Map(visualTypingUsers.map((u) => [u.key, u]));
+		const next: VisualTypingUser[] = activeUsers.map((user) => ({
+			...(previous.get(typingKey(user)) ?? {}),
+			...user,
+			key: typingKey(user),
+			closing: false,
+			removeAt: null
+		}));
+
+		for (const user of visualTypingUsers) {
+			if (activeKeys.has(user.key)) continue;
+			if (user.closing) {
+				if ((user.removeAt ?? 0) > now) next.push(user);
+				continue;
+			}
+			next.push({ ...user, closing: true, removeAt: now + TYPING_CLOSE_MS });
+		}
+
+		visualTypingUsers = next;
+		scheduleVisualTypingPrune();
+	}
+
+	function scheduleVisualTypingPrune() {
+		if (visualTypingCloseTimer) {
+			clearTimeout(visualTypingCloseTimer);
+			visualTypingCloseTimer = null;
+		}
+		const now = Date.now();
+		const nextRemoveAt = Math.min(
+			...visualTypingUsers.filter((u) => u.closing && u.removeAt).map((u) => u.removeAt as number)
+		);
+		if (!Number.isFinite(nextRemoveAt)) return;
+		visualTypingCloseTimer = setTimeout(
+			() => {
+				const pruneAt = Date.now();
+				visualTypingUsers = visualTypingUsers.filter(
+					(u) => !u.closing || (u.removeAt ?? 0) > pruneAt
+				);
+				scheduleVisualTypingPrune();
+			},
+			Math.max(0, nextRemoveAt - now)
+		);
+	}
+
+	function visualTypingForThread(threadId: string | null | undefined): VisualTypingUser[] {
+		if (!threadId) return [];
+		return visualTypingUsers.filter((u) => u.threadId === threadId);
+	}
+
+	function commentThreadId(postId: string, comment: CommentRow): string {
+		return comment.parent_comment_id ? `reply-${comment.parent_comment_id}` : `post-${postId}`;
+	}
+
+	function prepareIncomingComment(postId: string, comment: CommentRow): CommentRow {
+		const threadId = commentThreadId(postId, comment);
+		const key = typingKey({ threadId, userId: comment.user_id });
+		const fromTyping = visualTypingUsers.some((u) => u.key === key);
+		if (fromTyping) {
+			visualTypingUsers = visualTypingUsers.filter((u) => u.key !== key);
+			scheduleVisualTypingPrune();
+		}
+		return { ...comment, fromTyping };
+	}
+
+	// Typing rows use the same branch geometry as replies so a posted
+	// comment can replace the indicator with minimal layout change.
 
 	function firstName(name: string | null | undefined): string {
 		const trimmed = name?.trim();
@@ -529,7 +622,9 @@
 			});
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			const payload = (await res.json().catch(() => null)) as { comment?: CommentRow } | null;
-			if (payload?.comment) upsertLiveComment(target.postId, payload.comment);
+			if (payload?.comment) {
+				upsertLiveComment(target.postId, prepareIncomingComment(target.postId, payload.comment));
+			}
 			closeReply();
 			void invalidateAll().catch((err) => console.error('Reply sync failed:', err));
 		} catch (err) {
@@ -723,12 +818,12 @@
 			<hr class="world-divider" />
 			<h2 class="world-label">World</h2>
 
-			{@const worldTypers = typingForThread($worldTypingUsers, 'world', typingSelfId)}
-			{#if worldTypers.length > 0}
-				<p class="world-typing" aria-live="polite">
-					{@render typingLabel(worldTypers)}
+			{@const worldTypers = visualTypingForThread('world')}
+			{#each worldTypers as typer (typer.key)}
+				<p class="world-typing" class:closing={typer.closing} aria-live="polite">
+					{@render typingText(typer)}
 				</p>
-			{/if}
+			{/each}
 
 			<section class="free-section">
 				<div class="world-tabs" role="tablist" aria-label="World composer">
@@ -835,36 +930,31 @@
 
 <!-- Text-only thread row. Every node renders author, body, actions,
      and an optional branch containing replies/composer. -->
-{#snippet typingLabel(users: TypingUser[])}
-	{#if users.length === 1}
-		<span class="typing-name" style:color={personColor(users[0].userId, users[0].displayName)}
-			>{firstName(users[0].displayName)}</span
-		> is typing…
-	{:else if users.length === 2}
-		<span class="typing-name" style:color={personColor(users[0].userId, users[0].displayName)}
-			>{firstName(users[0].displayName)}</span
-		>
-		and
-		<span class="typing-name" style:color={personColor(users[1].userId, users[1].displayName)}
-			>{firstName(users[1].displayName)}</span
-		> are typing…
-	{:else if users.length >= 3}
-		<span class="typing-name" style:color={personColor(users[0].userId, users[0].displayName)}
-			>{firstName(users[0].displayName)}</span
-		>,
-		<span class="typing-name" style:color={personColor(users[1].userId, users[1].displayName)}
-			>{firstName(users[1].displayName)}</span
-		>, and
-		{users.length - 2} other{users.length - 2 === 1 ? '' : 's'} are typing…
-	{/if}
+{#snippet typingText(user: VisualTypingUser)}
+	<span class="typing-name" style:color={personColor(user.userId, user.displayName)}
+		>{firstName(user.displayName)}</span
+	>
+	<span>is typing</span>
 {/snippet}
 
-{#snippet threadTyping(threadId: string)}
-	{@const typers = typingForThread($worldTypingUsers, threadId, typingSelfId)}
+{#snippet threadTypingItems(threadId: string)}
+	{@const typers = visualTypingForThread(threadId)}
 	{#if typers.length > 0}
-		<p class="thread-typing" aria-live="polite">
-			{@render typingLabel(typers)}
-		</p>
+		<ul class="tw-children tw-typing-list">
+			{#each typers as typer (typer.key)}
+				<li class="tw-item is-typing" class:closing={typer.closing}>
+					<div class="tw-typing-shell">
+						<div class="tw-row">
+							<div class="tw-main">
+								<p class="thread-typing" aria-live="polite">
+									{@render typingText(typer)}
+								</p>
+							</div>
+						</div>
+					</div>
+				</li>
+			{/each}
+		</ul>
 	{/if}
 {/snippet}
 
@@ -908,31 +998,49 @@
 	plusActive?: boolean;
 	showPlus?: boolean;
 	typingThreadId?: string | null;
+	postedReveal?: boolean;
 })}
 	{@const replyVisible = args.showPlus !== false}
+	{@const hasTypers = visualTypingForThread(args.typingThreadId).length > 0}
 	<div class="tw-row">
 		<div class="tw-main">
 			{@render authorMeta(args.userId, args.displayName, args.username, args.isOwn)}
-			{@render args.body()}
-			{#if replyVisible}
-				<div class="tw-actions">
-					<button
-						class="tw-reply-button"
-						class:active={args.plusActive}
-						type="button"
-						onclick={args.onPlus}>{args.plusActive ? 'Cancel' : 'Reply'}</button
-					>
+			{#if args.postedReveal}
+				<div class="tw-posted-content">
+					<div class="tw-posted-content-inner">
+						{@render args.body()}
+						{#if replyVisible}
+							<div class="tw-actions">
+								<button
+									class="tw-reply-button"
+									class:active={args.plusActive}
+									type="button"
+									onclick={args.onPlus}>{args.plusActive ? 'Cancel' : 'Reply'}</button
+								>
+							</div>
+						{/if}
+					</div>
 				</div>
-			{/if}
-			{#if args.typingThreadId}
-				{@render threadTyping(args.typingThreadId)}
+			{:else}
+				{@render args.body()}
+				{#if replyVisible}
+					<div class="tw-actions">
+						<button
+							class="tw-reply-button"
+							class:active={args.plusActive}
+							type="button"
+							onclick={args.onPlus}>{args.plusActive ? 'Cancel' : 'Reply'}</button
+						>
+					</div>
+				{/if}
 			{/if}
 		</div>
 	</div>
 
-	{#if args.children || args.composer}
+	{#if args.children || args.composer || hasTypers}
 		<div class="tw-branch">
 			{#if args.composer}{@render args.composer()}{/if}
+			{#if args.typingThreadId}{@render threadTypingItems(args.typingThreadId)}{/if}
 			{#if args.children}{@render args.children()}{/if}
 		</div>
 	{/if}
@@ -1073,7 +1181,8 @@
 			children: hasKids ? commentChildren : null,
 			onPlus: () => toggleReplyTarget({ postId, parentCommentId: c.id }),
 			plusActive: isActive,
-			typingThreadId: 'reply-' + c.id
+			typingThreadId: 'reply-' + c.id,
+			postedReveal: !!c.fromTyping
 		})}
 	</li>
 {/snippet}
@@ -1410,6 +1519,7 @@
 	}
 	.tw-post {
 		--branch-gutter: 20px;
+		--reply-stem-x: 0.35em;
 		--line-strong: color-mix(in oklab, var(--foreground), var(--background) 58%);
 		--line-cover: var(--background);
 		width: 100%;
@@ -1424,12 +1534,14 @@
 		width: 100%;
 	}
 	.tw-item.is-reply,
-	.tw-item.is-composer {
+	.tw-item.is-composer,
+	.tw-item.is-typing {
 		position: relative;
 		list-style: none;
 	}
 	.tw-item.is-reply::before,
-	.tw-item.is-composer::before {
+	.tw-item.is-composer::before,
+	.tw-item.is-typing::before {
 		content: '';
 		position: absolute;
 		left: calc(-1 * var(--branch-gutter));
@@ -1483,6 +1595,16 @@
 		white-space: pre-wrap;
 		word-wrap: break-word;
 	}
+	.tw-posted-content {
+		display: grid;
+		grid-template-rows: 1fr;
+		overflow: hidden;
+		animation: tw-posted-content-reveal 320ms cubic-bezier(0.22, 1, 0.36, 1);
+	}
+	.tw-posted-content-inner {
+		min-height: 0;
+		overflow: hidden;
+	}
 	.tw-actions {
 		display: flex;
 		align-items: center;
@@ -1513,8 +1635,10 @@
 	.tw-reply-button::before {
 		content: '+';
 		display: inline-block;
+		width: calc(var(--reply-stem-x) * 2);
 		margin-right: 5px;
 		color: var(--foreground);
+		text-align: center;
 	}
 	.tw-reply-button.active::before {
 		content: '-';
@@ -1544,7 +1668,7 @@
 		justify-content: center;
 	}
 	.tw-branch {
-		margin: 7px 0 0 8px;
+		margin: 7px 0 0 var(--reply-stem-x);
 		padding: 8px 0 0 var(--branch-gutter);
 		border-left: 1px solid var(--line-strong);
 	}
@@ -1559,8 +1683,31 @@
 	.tw-children + .tw-item.is-composer {
 		margin-top: 12px;
 	}
+	.tw-children + .tw-children {
+		margin-top: 12px;
+	}
 	.tw-item.is-composer + .tw-children {
 		margin-top: 12px;
+	}
+	.tw-item.is-typing {
+		overflow: visible;
+	}
+	.tw-item.is-typing.closing {
+		pointer-events: none;
+	}
+	.tw-item.is-typing.closing .tw-typing-shell {
+		animation: tw-typing-node-close 260ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+	}
+	.tw-typing-shell {
+		display: grid;
+		grid-template-rows: 1fr;
+		min-height: 0;
+		overflow: hidden;
+		animation: tw-posted-content-reveal 260ms cubic-bezier(0.22, 1, 0.36, 1);
+	}
+	.tw-typing-shell > .tw-row {
+		min-height: 0;
+		overflow: hidden;
 	}
 	.reply-composer {
 		display: grid;
@@ -1586,6 +1733,8 @@
 		padding-left: 10px;
 		border-left: 1px solid var(--line-strong);
 		color: var(--muted-foreground);
+		overflow: hidden;
+		animation: tw-posted-content-reveal 260ms cubic-bezier(0.22, 1, 0.36, 1);
 	}
 	.edit-history p {
 		margin: 0;
@@ -1686,6 +1835,9 @@
 	}
 	.world-typing,
 	.thread-typing {
+		display: flex;
+		align-items: baseline;
+		gap: 4px;
 		font-family: var(--font-sans);
 		font-size: 16px;
 		line-height: 1.4;
@@ -1694,9 +1846,16 @@
 	}
 	.world-typing {
 		margin: 0 0 8px;
+		overflow: hidden;
+	}
+	.world-typing.closing {
+		animation: tw-world-typing-close 260ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 	}
 	.thread-typing {
-		margin: 5px 0 0;
+		margin: 0;
+	}
+	.typing-name {
+		font-weight: 500;
 	}
 	.world-tabs {
 		display: flex;
@@ -1771,6 +1930,48 @@
 		border-radius: 0;
 		font-size: 16px;
 		line-height: 1.4;
+	}
+
+	@keyframes tw-posted-content-reveal {
+		from {
+			grid-template-rows: 0fr;
+			opacity: 0;
+			transform: translateY(-2px);
+		}
+
+		to {
+			grid-template-rows: 1fr;
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	@keyframes tw-typing-node-close {
+		from {
+			grid-template-rows: 1fr;
+			opacity: 1;
+			transform: translateY(0);
+		}
+
+		to {
+			grid-template-rows: 0fr;
+			opacity: 0;
+			transform: translateY(-2px);
+		}
+	}
+
+	@keyframes tw-world-typing-close {
+		from {
+			max-height: 32px;
+			opacity: 1;
+			transform: translateY(0);
+		}
+
+		to {
+			max-height: 0;
+			opacity: 0;
+			transform: translateY(-2px);
+		}
 	}
 
 	@media (max-width: 560px) {

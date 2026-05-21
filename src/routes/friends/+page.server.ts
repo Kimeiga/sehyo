@@ -1,13 +1,42 @@
 import type { PageServerLoad } from './$types';
 import { error } from '@sveltejs/kit';
 
+type FriendshipLabel = 'pending_outgoing' | 'pending_incoming' | 'accepted';
+
+interface FriendRow {
+	id: string;
+	friend_id: string;
+	display_name: string | null;
+	username: string | null;
+	profile_picture_url: string | null;
+	bio: string | null;
+}
+
+interface RequestRow {
+	id: string;
+	requester_id: string;
+	display_name: string | null;
+	username: string | null;
+	profile_picture_url: string | null;
+	bio: string | null;
+}
+
+interface FindUserRow {
+	id: string;
+	display_name: string | null;
+	username: string | null;
+	profile_picture_url: string | null;
+	bio: string | null;
+}
+
 export const load: PageServerLoad = async ({ platform, locals }) => {
 	// Allow viewing friends page but show sign-in prompt if not authenticated
 	if (!locals.user) {
 		return {
 			friends: [],
 			requests: [],
-			allUsers: []
+			allUsers: [],
+			friendshipByUser: {} as Record<string, FriendshipLabel>
 		};
 	}
 
@@ -36,7 +65,7 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
 			ORDER BY f.created_at DESC`
 		)
 			.bind(locals.user.id, locals.user.id, locals.user.id)
-			.all();
+			.all<FriendRow>();
 
 		// Get pending friend requests (received)
 		const requestsResult = await platform.env.DB.prepare(
@@ -52,7 +81,7 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
 			ORDER BY f.created_at DESC`
 		)
 			.bind(locals.user.id)
-			.all();
+			.all<RequestRow>();
 
 		// Friends Find tab list. Filters intentionally:
 		//   - Skip the current user.
@@ -97,7 +126,7 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
 			LIMIT 100`
 		)
 			.bind(locals.user.id)
-			.all();
+			.all<FindUserRow>();
 
 		// Pull every existing friendship row touching the viewer so we can
 		// surface "Requested" / "Pending" / "Friends" on each Find row
@@ -111,10 +140,9 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
 			.all<{ requester_id: string; addressee_id: string; status: string }>();
 
 		// Map[other_user_id] -> 'pending_outgoing' | 'pending_incoming' | 'accepted'
-		const friendshipByUser: Record<string, 'pending_outgoing' | 'pending_incoming' | 'accepted'> = {};
+		const friendshipByUser: Record<string, FriendshipLabel> = {};
 		for (const row of myFriendshipsRes.results ?? []) {
-			const otherId =
-				row.requester_id === locals.user.id ? row.addressee_id : row.requester_id;
+			const otherId = row.requester_id === locals.user.id ? row.addressee_id : row.requester_id;
 			if (row.status === 'accepted') {
 				friendshipByUser[otherId] = 'accepted';
 			} else if (row.status === 'pending') {
@@ -134,4 +162,3 @@ export const load: PageServerLoad = async ({ platform, locals }) => {
 		throw error(500, 'Failed to load friends');
 	}
 };
-

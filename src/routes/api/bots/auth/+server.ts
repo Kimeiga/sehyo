@@ -2,12 +2,22 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getDB } from '$lib/server/db';
 
+interface BotProfileAuthRow {
+	id: string;
+	user_id: string;
+	name: string | null;
+	username: string | null;
+	display_name: string | null;
+	personality: string | null;
+	posting_frequency: string | null;
+}
+
 /**
  * Bot Authentication Endpoint
- * 
+ *
  * This endpoint allows bots to authenticate and get a session token.
  * Bots use their bot_id to authenticate instead of OAuth.
- * 
+ *
  * POST /api/bots/auth
  * Body: { bot_id: string, secret: string }
  * Returns: { session_id: string, user_id: string, bot_profile: object }
@@ -33,12 +43,15 @@ export const POST: RequestHandler = async ({ request, platform, cookies }) => {
 		const db = getDB(platform);
 
 		// Get bot profile
-		const botProfile = await db.prepare(
-			`SELECT bp.*, u.id as user_id, u.username, u.name as display_name
+		const botProfile = await db
+			.prepare(
+				`SELECT bp.*, u.id as user_id, u.username, u.name as display_name
 			 FROM bot_profiles bp
 			 JOIN user u ON bp.user_id = u.id
 			 WHERE bp.id = ? AND bp.is_active = 1`
-		).bind(bot_id).first();
+			)
+			.bind(bot_id)
+			.first<BotProfileAuthRow>();
 
 		if (!botProfile) {
 			return error(404, 'Bot profile not found or inactive');
@@ -49,10 +62,13 @@ export const POST: RequestHandler = async ({ request, platform, cookies }) => {
 		const expiresAt = new Date();
 		expiresAt.setDate(expiresAt.getDate() + 30); // 30 days
 
-		await db.prepare(
-			`INSERT INTO sessions (id, user_id, expires_at, created_at)
+		await db
+			.prepare(
+				`INSERT INTO sessions (id, user_id, expires_at, created_at)
 			 VALUES (?, ?, ?, datetime('now'))`
-		).bind(sessionId, botProfile.user_id, expiresAt.toISOString()).run();
+			)
+			.bind(sessionId, botProfile.user_id, expiresAt.toISOString())
+			.run();
 
 		// Set session cookie (optional for bots, but useful for testing)
 		cookies.set('session', sessionId, {
@@ -72,7 +88,7 @@ export const POST: RequestHandler = async ({ request, platform, cookies }) => {
 				name: botProfile.name,
 				username: botProfile.username,
 				display_name: botProfile.display_name,
-				personality: JSON.parse(botProfile.personality as string),
+				personality: botProfile.personality ? JSON.parse(botProfile.personality) : null,
 				posting_frequency: botProfile.posting_frequency
 			}
 		});
@@ -81,4 +97,3 @@ export const POST: RequestHandler = async ({ request, platform, cookies }) => {
 		return error(500, 'Failed to authenticate bot');
 	}
 };
-

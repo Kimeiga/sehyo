@@ -19,18 +19,17 @@ export class AuthService {
 			// Update existing user
 			return await this.db.updateUser(user.id, {
 				email: googleUser.email,
-				display_name: googleUser.name,
-				profile_picture_url: googleUser.picture || user.profile_picture_url
+				name: googleUser.name,
+				image: googleUser.picture || user.image
 			});
 		} else {
 			// Create new user
 			const userId = crypto.randomUUID();
 			return await this.db.createUser({
 				id: userId,
-				google_id: googleUser.sub,
 				email: googleUser.email,
-				display_name: googleUser.name,
-				profile_picture_url: googleUser.picture
+				name: googleUser.name,
+				image: googleUser.picture
 			});
 		}
 	}
@@ -61,11 +60,7 @@ export class AuthService {
 }
 
 // Helper function to get Google OAuth URL
-export function getGoogleOAuthURL(
-	clientId: string,
-	redirectUri: string,
-	state: string
-): string {
+export function getGoogleOAuthURL(clientId: string, redirectUri: string, state: string): string {
 	const params = new URLSearchParams({
 		client_id: clientId,
 		redirect_uri: redirectUri,
@@ -133,4 +128,3 @@ export function decodeJWT(token: string): any {
 	const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
 	return JSON.parse(decoded);
 }
-

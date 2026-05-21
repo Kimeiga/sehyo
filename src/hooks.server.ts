@@ -2,6 +2,11 @@ import type { Handle } from '@sveltejs/kit';
 import { createAuth } from '$lib/server/better-auth';
 import { generateUniqueUsername } from '$lib/server/usernames';
 
+type SessionResult = {
+	user: App.Locals['user'];
+	session: App.Locals['session'];
+} | null;
+
 export const handle: Handle = async ({ event, resolve }) => {
 	event.locals.user = null;
 	event.locals.session = null;
@@ -14,16 +19,22 @@ export const handle: Handle = async ({ event, resolve }) => {
 		const url = new URL(event.request.url);
 		const baseURL = `${url.protocol}//${url.host}`;
 
-		const auth = createAuth(event.platform.env.DB, {
-			GOOGLE_CLIENT_ID: event.platform.env.GOOGLE_CLIENT_ID,
-			GOOGLE_CLIENT_SECRET: event.platform.env.GOOGLE_CLIENT_SECRET,
-			GOOGLE_REDIRECT_URI: event.platform.env.GOOGLE_REDIRECT_URI,
-			BETTER_AUTH_SECRET: event.platform.env.BETTER_AUTH_SECRET
-		}, baseURL);
+		const auth = createAuth(
+			event.platform.env.DB,
+			{
+				GOOGLE_CLIENT_ID: event.platform.env.GOOGLE_CLIENT_ID,
+				GOOGLE_CLIENT_SECRET: event.platform.env.GOOGLE_CLIENT_SECRET,
+				GOOGLE_REDIRECT_URI: event.platform.env.GOOGLE_REDIRECT_URI,
+				BETTER_AUTH_SECRET: event.platform.env.BETTER_AUTH_SECRET
+			},
+			baseURL
+		);
 
-		const session = await auth.api.getSession({
-			headers: event.request.headers
-		});
+		const session = await (
+			auth.api as {
+				getSession: (ctx: { headers: Headers }) => Promise<SessionResult>;
+			}
+		).getSession({ headers: event.request.headers });
 
 		if (session) {
 			event.locals.user = session.user;
@@ -40,10 +51,9 @@ export const handle: Handle = async ({ event, resolve }) => {
 						session.user.name,
 						session.user.id
 					);
-					await event.platform.env.DB
-						.prepare(
-							"UPDATE user SET username = ? WHERE id = ? AND (username IS NULL OR username = '')"
-						)
+					await event.platform.env.DB.prepare(
+						"UPDATE user SET username = ? WHERE id = ? AND (username IS NULL OR username = '')"
+					)
 						.bind(u, session.user.id)
 						.run();
 					(event.locals.user as { username?: string }).username = u;
@@ -58,4 +68,3 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	return resolve(event);
 };
-

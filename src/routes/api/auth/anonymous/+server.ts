@@ -20,9 +20,11 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 		});
 
 		// Use Better Auth's anonymous sign-in API
-		const response = await auth.api.signInAnonymous({
-			headers: request.headers
-		});
+		const response = await (
+			auth.api as {
+				signInAnonymous: (ctx: { headers: Headers }) => Promise<Response>;
+			}
+		).signInAnonymous({ headers: request.headers });
 
 		return response;
 	} catch (err) {
@@ -30,4 +32,3 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 		throw error(500, 'Failed to create anonymous session');
 	}
 };
-

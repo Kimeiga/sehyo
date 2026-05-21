@@ -2,6 +2,24 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getDB } from '$lib/server/db';
 
+interface BotSessionRow {
+	user_id: string;
+	username: string | null;
+	display_name: string | null;
+	bot_id: string | null;
+}
+
+interface CreatedCommentRow {
+	id: string;
+	post_id: string;
+	content: string;
+	parent_comment_id: string | null;
+	created_at: number;
+	user_id: string;
+	username: string | null;
+	display_name: string | null;
+}
+
 /**
  * Bot Comment Creation Endpoint
  *
@@ -26,13 +44,16 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 		const sessionId = authHeader.substring(7);
 
 		// Validate session and get user
-		const session = await db.prepare(
-			`SELECT s.user_id, u.username, u.name as display_name, bp.id as bot_id
+		const session = await db
+			.prepare(
+				`SELECT s.user_id, u.username, u.name as display_name, bp.id as bot_id
 			 FROM sessions s
 			 JOIN user u ON s.user_id = u.id
 			 LEFT JOIN bot_profiles bp ON bp.user_id = u.id
 			 WHERE s.id = ? AND s.expires_at > datetime('now')`
-		).bind(sessionId).first();
+			)
+			.bind(sessionId)
+			.first<BotSessionRow>();
 
 		if (!session) {
 			return error(401, 'Invalid or expired session');
@@ -60,9 +81,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 		}
 
 		// Verify post exists
-		const post = await db.prepare(
-			`SELECT id FROM posts WHERE id = ?`
-		).bind(post_id).first();
+		const post = await db.prepare(`SELECT id FROM posts WHERE id = ?`).bind(post_id).first();
 
 		if (!post) {
 			return error(404, 'Post not found');
@@ -70,9 +89,10 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 
 		// If replying to a comment, verify it exists
 		if (parent_comment_id) {
-			const parentComment = await db.prepare(
-				`SELECT id FROM comments WHERE id = ? AND post_id = ?`
-			).bind(parent_comment_id, post_id).first();
+			const parentComment = await db
+				.prepare(`SELECT id FROM comments WHERE id = ? AND post_id = ?`)
+				.bind(parent_comment_id, post_id)
+				.first();
 
 			if (!parentComment) {
 				return error(404, 'Parent comment not found');
@@ -81,25 +101,29 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 
 		// Create comment
 		const commentId = crypto.randomUUID();
-		
-		await db.prepare(
-			`INSERT INTO comments (id, post_id, user_id, content, parent_comment_id, created_at, updated_at)
+
+		await db
+			.prepare(
+				`INSERT INTO comments (id, post_id, user_id, content, parent_comment_id, created_at, updated_at)
 			 VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))`
-		).bind(
-			commentId,
-			post_id,
-			session.user_id,
-			content.trim(),
-			parent_comment_id || null
-		).run();
+			)
+			.bind(commentId, post_id, session.user_id, content.trim(), parent_comment_id || null)
+			.run();
 
 		// Get the created comment
-		const comment = await db.prepare(
-			`SELECT c.*, u.username, u.display_name
+		const comment = await db
+			.prepare(
+				`SELECT c.*, u.username, u.name as display_name
 			 FROM comments c
 			 JOIN user u ON c.user_id = u.id
 			 WHERE c.id = ?`
-		).bind(commentId).first();
+			)
+			.bind(commentId)
+			.first<CreatedCommentRow>();
+
+		if (!comment) {
+			throw error(500, 'Failed to load created comment');
+		}
 
 		return json({
 			success: true,
@@ -121,4 +145,3 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 		return error(500, 'Failed to create comment');
 	}
 };
-

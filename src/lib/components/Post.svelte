@@ -79,11 +79,11 @@
 <Card class="mb-4">
 	<CardContent class="py-4">
 		<!-- Post Header -->
-		<div class="flex items-start justify-between mb-4">
+		<div class="mb-4 flex items-start justify-between">
 			<a href="/profile/{post.user_id}" class="flex items-center gap-3 hover:underline">
 				{#if post.user?.display_name === 'Anonymous' && post.user?.sprite_id}
 					<!-- For anonymous users, show sprite as profile picture -->
-					<div class="size-10 flex items-center justify-center flex-shrink-0">
+					<div class="flex size-10 flex-shrink-0 items-center justify-center">
 						<img
 							src="/sprites/{post.user.sprite_id}.png"
 							alt="Sprite"
@@ -126,12 +126,12 @@
 
 		<!-- Post Image -->
 		{#if post.image_url}
-			<img src={post.image_url} alt="Post" class="w-full rounded-lg mb-4" />
+			<img src={post.image_url} alt="Post" class="mb-4 w-full rounded-lg" />
 		{/if}
 
 		<!-- Reaction Counts -->
 		{#if post.reaction_counts && post.reaction_counts.total > 0}
-			<div class="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+			<div class="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
 				<Badge variant="secondary" class="gap-1">
 					👍 {post.reaction_counts.total}
 				</Badge>
@@ -143,7 +143,11 @@
 		<!-- Action Buttons -->
 		<div class="flex items-center gap-2">
 			{#if currentUserId}
-				<ReactionPicker targetType="post" targetId={post.id} reactionCounts={post.reaction_counts} />
+				<ReactionPicker
+					targetType="post"
+					targetId={post.id}
+					reactionCounts={post.reaction_counts}
+				/>
 			{:else}
 				<!-- Disabled reaction button for non-authenticated users -->
 				<Button variant="ghost" size="sm" class="gap-2" disabled>
@@ -157,7 +161,9 @@
 				size="sm"
 				onclick={() => {
 					// Scroll to comment input when clicked
-					const commentInput = document.querySelector(`[data-post-id="${post.id}"] input`);
+					const commentInput = document.querySelector<HTMLInputElement>(
+						`[data-post-id="${post.id}"] input`
+					);
 					commentInput?.focus();
 				}}
 				class="gap-2"
@@ -177,4 +183,3 @@
 		<CommentSection postId={post.id} {currentUserId} />
 	</CardContent>
 </Card>
-

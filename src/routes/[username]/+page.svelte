@@ -1,7 +1,16 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
 	import { goto, invalidateAll } from '$app/navigation';
-	import { Pencil, Check, X, Camera, Trash2, UserPlus, MessageCircle, MoveVertical } from 'lucide-svelte';
+	import {
+		Pencil,
+		Check,
+		X,
+		Camera,
+		Trash2,
+		UserPlus,
+		MessageCircle,
+		MoveVertical
+	} from 'lucide-svelte';
 	import { gradientFor } from '$lib/header-gradient';
 
 	let { data }: PageProps = $props();
@@ -445,7 +454,13 @@
 	<header class="profile-header">
 		<h1 class="display-name">{u.name ?? '—'}</h1>
 		{#if isOwnProfile && editing}
-			<form class="handle-editor" onsubmit={(e) => { e.preventDefault(); saveUsername(); }}>
+			<form
+				class="handle-editor"
+				onsubmit={(e) => {
+					e.preventDefault();
+					saveUsername();
+				}}
+			>
 				<span class="handle-prefix">@</span>
 				<input
 					type="text"
@@ -498,7 +513,13 @@
 			</p>
 		{/if}
 		{#if isOwnProfile && editingBio}
-			<form class="bio-editor" onsubmit={(e) => { e.preventDefault(); saveBio(); }}>
+			<form
+				class="bio-editor"
+				onsubmit={(e) => {
+					e.preventDefault();
+					saveBio();
+				}}
+			>
 				<textarea
 					bind:value={bioDraft}
 					rows="3"
@@ -508,7 +529,9 @@
 				></textarea>
 				<div class="bio-bar">
 					<span class="bio-count">{bioDraft.length}/280</span>
-					<button type="button" class="ghost-button" onclick={cancelBioEdit} disabled={savingBio}>Cancel</button>
+					<button type="button" class="ghost-button" onclick={cancelBioEdit} disabled={savingBio}
+						>Cancel</button
+					>
 					<button type="submit" class="primary-button" disabled={savingBio}>
 						{savingBio ? 'Saving…' : 'Save'}
 					</button>
@@ -576,7 +599,7 @@
 								<span class="entry-tag">Replied</span>
 								{#if c.reply_target_username}
 									<span class="entry-replied-to">
-										to <a class="entry-replied-handle" href="/{c.reply_target_username}" onclick={(e) => e.stopPropagation()}>@{c.reply_target_username}</a>
+										to <span class="entry-replied-handle">@{c.reply_target_username}</span>
 									</span>
 								{/if}
 							</p>
@@ -653,8 +676,13 @@
 		backdrop-filter: blur(6px);
 		-webkit-backdrop-filter: blur(6px);
 	}
-	.banner-button:hover { background: rgba(0, 0, 0, 0.7); }
-	.banner-button:disabled { opacity: 0.6; cursor: not-allowed; }
+	.banner-button:hover {
+		background: rgba(0, 0, 0, 0.7);
+	}
+	.banner-button:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
 	.hidden-input {
 		position: absolute;
 		left: -9999px;
@@ -698,7 +726,9 @@
 		width: 100%;
 		height: 100%;
 		object-fit: cover;
-		transition: filter 240ms ease, transform 240ms ease;
+		transition:
+			filter 240ms ease,
+			transform 240ms ease;
 		pointer-events: none;
 		user-select: none;
 		-webkit-user-drag: none;
@@ -748,7 +778,9 @@
 		border: 1px solid var(--border);
 		cursor: pointer;
 		padding: 0;
-		transition: background-color 200ms ease, border-color 200ms ease;
+		transition:
+			background-color 200ms ease,
+			border-color 200ms ease;
 	}
 	.message-button:hover {
 		background: var(--muted);
@@ -772,7 +804,9 @@
 		white-space: nowrap;
 		opacity: 0;
 		pointer-events: none;
-		transition: opacity 180ms ease, transform 180ms ease;
+		transition:
+			opacity 180ms ease,
+			transform 180ms ease;
 		transition-delay: 0ms;
 	}
 	.message-button:hover .message-button-label,
@@ -801,7 +835,9 @@
 		color: var(--muted-foreground);
 		border: 1px solid var(--border);
 	}
-	.friend-button:hover { opacity: 0.92; }
+	.friend-button:hover {
+		opacity: 0.92;
+	}
 	.friend-tooltip {
 		position: absolute;
 		top: calc(100% + 8px);
@@ -818,7 +854,16 @@
 		z-index: 10;
 		animation: pop 200ms ease-out;
 	}
-	@keyframes pop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+	@keyframes pop {
+		from {
+			opacity: 0;
+			transform: translateY(-4px);
+		}
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
 
 	.profile-header {
 		margin-bottom: 56px;
@@ -912,13 +957,21 @@
 		border-radius: 14px;
 		cursor: pointer;
 	}
-	.icon-btn:hover { background: var(--muted); color: var(--foreground); }
-	.icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+	.icon-btn:hover {
+		background: var(--muted);
+		color: var(--foreground);
+	}
+	.icon-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
 	.icon-btn.primary {
 		background: var(--foreground);
 		color: var(--background);
 	}
-	.icon-btn.primary:hover { opacity: 0.9; }
+	.icon-btn.primary:hover {
+		opacity: 0.9;
+	}
 	.bio {
 		font-size: 16px;
 		color: var(--foreground);
@@ -945,7 +998,9 @@
 		cursor: pointer;
 		text-align: left;
 	}
-	.add-bio:hover { color: var(--foreground); }
+	.add-bio:hover {
+		color: var(--foreground);
+	}
 
 	.bio-editor {
 		max-width: 540px;
@@ -964,14 +1019,21 @@
 		resize: vertical;
 		min-height: 80px;
 	}
-	.bio-editor textarea:focus { outline: 2px solid var(--ring); outline-offset: -1px; }
+	.bio-editor textarea:focus {
+		outline: 2px solid var(--ring);
+		outline-offset: -1px;
+	}
 	.bio-bar {
 		display: flex;
 		align-items: center;
 		gap: 8px;
 		margin-top: 10px;
 	}
-	.bio-count { font-size: 12px; color: var(--muted-foreground); margin-right: auto; }
+	.bio-count {
+		font-size: 12px;
+		color: var(--muted-foreground);
+		margin-right: auto;
+	}
 	.ghost-button {
 		appearance: none;
 		border: 0;
@@ -984,7 +1046,9 @@
 		border-radius: 999px;
 		cursor: pointer;
 	}
-	.ghost-button:hover { color: var(--foreground); }
+	.ghost-button:hover {
+		color: var(--foreground);
+	}
 	.primary-button {
 		appearance: none;
 		border: 0;
@@ -997,7 +1061,10 @@
 		border-radius: 999px;
 		cursor: pointer;
 	}
-	.primary-button:disabled { opacity: 0.4; cursor: not-allowed; }
+	.primary-button:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
 
 	.joined {
 		font-size: 13px;
@@ -1079,12 +1146,10 @@
 		font-size: 12px;
 		color: var(--muted-foreground);
 	}
-	.entry-replied-to a {
+	.entry-replied-handle {
 		color: var(--foreground);
-		text-decoration: none;
 		font-weight: 500;
 	}
-	.entry-replied-to a:hover { text-decoration: underline; }
 	.entry-quote {
 		margin: 6px 0;
 		padding-left: 10px;

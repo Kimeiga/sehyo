@@ -74,7 +74,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 			const key = `posts/${locals.user.id}/${imageId}.${extension}`;
 
 			// Upload to R2
-			await platform.env.IMAGES.put(key, image.stream(), {
+			await platform.env.IMAGES.put(key, await image.arrayBuffer(), {
 				httpMetadata: {
 					contentType: image.type
 				}
@@ -98,7 +98,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 			id: postId,
 			user_id: locals.user.id,
 			content: content.trim(),
-			image_url: imageUrl
+			image_url: imageUrl ?? undefined
 		});
 
 		return json({ post }, { status: 201 });
@@ -107,4 +107,3 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 		throw error(500, 'Failed to create post');
 	}
 };
-

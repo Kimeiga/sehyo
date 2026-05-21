@@ -17,11 +17,12 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	if (image.size > MAX_BYTES) throw error(400, 'Image is too large (max 10MB)');
 	if (!ALLOWED.has(image.type)) throw error(400, 'Invalid image type');
 
-	const ext = (image.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+	const ext =
+		(image.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
 	const key = `users/${locals.user.id}/header-${crypto.randomUUID()}.${ext}`;
 
 	try {
-		await env.IMAGES.put(key, image.stream(), {
+		await env.IMAGES.put(key, await image.arrayBuffer(), {
 			httpMetadata: { contentType: image.type }
 		});
 	} catch (err) {
@@ -30,8 +31,7 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	}
 
 	const url = `/api/images/${key}`;
-	await env.DB
-		.prepare('UPDATE user SET header_image_url = ? WHERE id = ?')
+	await env.DB.prepare('UPDATE user SET header_image_url = ? WHERE id = ?')
 		.bind(url, locals.user.id)
 		.run();
 
@@ -53,8 +53,7 @@ export const PATCH: RequestHandler = async ({ request, platform, locals }) => {
 	}
 	const clamped = Math.max(0, Math.min(100, Math.round(position_y)));
 
-	await env.DB
-		.prepare('UPDATE user SET header_image_position_y = ? WHERE id = ?')
+	await env.DB.prepare('UPDATE user SET header_image_position_y = ? WHERE id = ?')
 		.bind(clamped, locals.user.id)
 		.run();
 
@@ -67,20 +66,20 @@ export const DELETE: RequestHandler = async ({ platform, locals }) => {
 	if (!env?.DB) throw error(500, 'Database not available');
 
 	// Look up current header so we can clean up R2.
-	const row = await env.DB
-		.prepare('SELECT header_image_url FROM user WHERE id = ?')
+	const row = await env.DB.prepare('SELECT header_image_url FROM user WHERE id = ?')
 		.bind(locals.user.id)
 		.first<{ header_image_url: string | null }>();
 
 	if (row?.header_image_url && env.IMAGES) {
 		const key = row.header_image_url.replace(/^\/api\/images\//, '');
-		try { await env.IMAGES.delete(key); } catch (err) {
+		try {
+			await env.IMAGES.delete(key);
+		} catch (err) {
 			console.error('R2 delete (header) failed:', err);
 		}
 	}
 
-	await env.DB
-		.prepare('UPDATE user SET header_image_url = NULL WHERE id = ?')
+	await env.DB.prepare('UPDATE user SET header_image_url = NULL WHERE id = ?')
 		.bind(locals.user.id)
 		.run();
 

@@ -43,7 +43,9 @@ export const actions: Actions = {
 		}
 
 		if (username && !/^[a-zA-Z0-9_-]+$/.test(username)) {
-			return fail(400, { error: 'Username can only contain letters, numbers, underscores, and hyphens' });
+			return fail(400, {
+				error: 'Username can only contain letters, numbers, underscores, and hyphens'
+			});
 		}
 
 		if (bio && bio.length > 500) {
@@ -70,7 +72,7 @@ export const actions: Actions = {
 		try {
 			const db = new Database(platform.env.DB);
 			await db.updateUser(locals.user.id, {
-				display_name: displayName.trim(),
+				name: displayName.trim(),
 				username: username?.trim() || null,
 				bio: bio?.trim() || null,
 				location: location?.trim() || null,
@@ -115,7 +117,7 @@ export const actions: Actions = {
 			const key = `profiles/${locals.user.id}/profile-${imageId}.${extension}`;
 
 			// Upload to R2
-			await platform.env.IMAGES.put(key, image.stream(), {
+			await platform.env.IMAGES.put(key, await image.arrayBuffer(), {
 				httpMetadata: {
 					contentType: image.type
 				}
@@ -126,7 +128,7 @@ export const actions: Actions = {
 			// Update user in database
 			const db = new Database(platform.env.DB);
 			await db.updateUser(locals.user.id, {
-				profile_picture_url: imageUrl
+				image: imageUrl
 			});
 
 			return { success: true, profile_picture_url: imageUrl };
@@ -167,7 +169,7 @@ export const actions: Actions = {
 			const key = `profiles/${locals.user.id}/cover-${imageId}.${extension}`;
 
 			// Upload to R2
-			await platform.env.IMAGES.put(key, image.stream(), {
+			await platform.env.IMAGES.put(key, await image.arrayBuffer(), {
 				httpMetadata: {
 					contentType: image.type
 				}
@@ -224,4 +226,3 @@ export const actions: Actions = {
 		}
 	}
 };
-

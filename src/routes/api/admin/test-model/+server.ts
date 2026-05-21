@@ -37,6 +37,19 @@ interface CommentSlot {
 	isNested?: boolean;
 }
 
+interface AiTextRequest {
+	messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+	temperature?: number;
+	max_tokens?: number;
+}
+
+function runTextModel(ai: Ai, model: string, inputs: AiTextRequest): Promise<unknown> {
+	return (ai.run as unknown as (model: string, inputs: AiTextRequest) => Promise<unknown>)(
+		model,
+		inputs
+	);
+}
+
 // Local copy of ai-bots.ts's extractModelText so the test endpoint
 // handles all the same response shapes (Llama-style { response },
 // OpenAI chat-completion-style { choices[0].message.content }, +
@@ -105,7 +118,7 @@ You are writing ALL slots in one pass. You will SEE the comments you write for e
 
 Output exactly ${slots.length} lines, one per slot, in order. No numbering, no labels, no quotes, no blank lines.`;
 
-	const res = await ai.run(model, {
+	const res = await runTextModel(ai, model, {
 		messages: [
 			{ role: 'system', content: system },
 			{ role: 'user', content: slotBlock }
@@ -143,9 +156,7 @@ export const POST: RequestHandler = async ({ request, platform, url }) => {
 	const started = Date.now();
 	try {
 		// 1. Prompt (generate if not provided)
-		const promptText = body.prompt
-			? body.prompt
-			: await generatePromptText(env.AI, [], model);
+		const promptText = body.prompt ? body.prompt : await generatePromptText(env.AI, [], model);
 
 		// 2. Seed authors + pick 10
 		const allAuthors = await getSeedAuthors(env.DB);

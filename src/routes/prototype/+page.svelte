@@ -14,6 +14,11 @@
 			href: '/prototype/typing-indicators',
 			name: 'Typing indicators',
 			summary: 'Mock chat UI for iterating on the typing-indicator animation.'
+		},
+		{
+			href: '/prototype/comment-stress',
+			name: 'Comment stress loop',
+			summary: 'In-memory thread churn: posts, replies, typing, edits, deletes, and reset.'
 		}
 	];
 </script>
@@ -42,10 +47,7 @@
 	:global(body) {
 		background: #0a0a0a;
 		color: #e4e4e7;
-		font-family:
-			ui-sans-serif,
-			system-ui,
-			sans-serif;
+		font-family: ui-sans-serif, system-ui, sans-serif;
 	}
 
 	.page {

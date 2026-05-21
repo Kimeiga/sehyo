@@ -18,13 +18,7 @@ export class Database {
 				 VALUES (?, ?, ?, ?, ?, unixepoch(), unixepoch(), 0)
 				 RETURNING *`
 			)
-			.bind(
-				data.id,
-				data.bot_id || null,
-				data.email,
-				data.name,
-				data.image || null
-			)
+			.bind(data.id, data.bot_id || null, data.email, data.name, data.image || null)
 			.first<User>();
 
 		if (!result) throw new Error('Failed to create user');
@@ -35,11 +29,20 @@ export class Database {
 		return await this.db.prepare('SELECT * FROM user WHERE id = ?').bind(id).first<User>();
 	}
 
-	async getUserByBotId(bot_id: string): Promise<User | null> {
+	async getUserByGoogleId(googleId: string): Promise<User | null> {
 		return await this.db
-			.prepare('SELECT * FROM user WHERE bot_id = ?')
-			.bind(bot_id)
+			.prepare(
+				`SELECT u.*
+				 FROM user u
+				 JOIN account a ON a.userId = u.id
+				 WHERE a.providerId = 'google' AND a.accountId = ?`
+			)
+			.bind(googleId)
 			.first<User>();
+	}
+
+	async getUserByBotId(bot_id: string): Promise<User | null> {
+		return await this.db.prepare('SELECT * FROM user WHERE bot_id = ?').bind(bot_id).first<User>();
 	}
 
 	async getUserByUsername(username: string): Promise<User | null> {
@@ -81,7 +84,12 @@ export class Database {
 	}
 
 	// Post operations
-	async createPost(data: { id: string; user_id: string; content: string; image_url?: string }): Promise<Post> {
+	async createPost(data: {
+		id: string;
+		user_id: string;
+		content: string;
+		image_url?: string;
+	}): Promise<Post> {
 		// Insert the post
 		await this.db
 			.prepare(

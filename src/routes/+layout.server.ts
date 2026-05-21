@@ -38,6 +38,20 @@ export const load: LayoutServerLoad = async ({ platform, locals, url }) => {
 		throw redirect(302, '/auth/login');
 	}
 
+	if (url.pathname === '/prototype' || url.pathname.startsWith('/prototype/')) {
+		return {
+			user: locals.user,
+			prompt: null,
+			answers: [] as AnswerRow[],
+			myAnswer: null,
+			namesBlurred: false,
+			unlockedAvatars: [] as string[],
+			todayCommentsByPost: {},
+			unreadMessageCount: 0,
+			hasAnsweredToday: true
+		};
+	}
+
 	const db = platform?.env?.DB;
 	if (!db) {
 		return {
@@ -56,9 +70,7 @@ export const load: LayoutServerLoad = async ({ platform, locals, url }) => {
 	let unreadMessageCount = 0;
 	if (locals.user && !locals.user.isAnonymous) {
 		const r = await db
-			.prepare(
-				'SELECT COUNT(*) AS n FROM messages WHERE recipient_id = ? AND read_at IS NULL'
-			)
+			.prepare('SELECT COUNT(*) AS n FROM messages WHERE recipient_id = ? AND read_at IS NULL')
 			.bind(locals.user.id)
 			.first<{ n: number }>();
 		unreadMessageCount = r?.n ?? 0;
@@ -128,10 +140,7 @@ export const load: LayoutServerLoad = async ({ platform, locals, url }) => {
 	// answer. Comments are always-visible in the feed (no click-to-open),
 	// so we hydrate everything up-front and avoid a flicker / extra
 	// round-trip when the page paints.
-	const todayPostIds = [
-		...(myAnswer ? [myAnswer.id] : []),
-		...answers.map((a) => a.id)
-	];
+	const todayPostIds = [...(myAnswer ? [myAnswer.id] : []), ...answers.map((a) => a.id)];
 	const todayCommentsByPost = await loadCommentsForPosts(db, todayPostIds);
 
 	const hasAnsweredToday = !!myAnswer;
@@ -147,7 +156,9 @@ export const load: LayoutServerLoad = async ({ platform, locals, url }) => {
 
 	return {
 		user: locals.user,
-		prompt: prompt ? { id: prompt.id, text: prompt.prompt_text, active_date: prompt.active_date } : null,
+		prompt: prompt
+			? { id: prompt.id, text: prompt.prompt_text, active_date: prompt.active_date }
+			: null,
 		answers,
 		myAnswer,
 		namesBlurred,

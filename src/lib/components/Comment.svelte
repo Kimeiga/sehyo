@@ -40,7 +40,7 @@
 	let replies = $state<any[]>([]);
 	let loadingReplies = $state(false);
 	let hasLoadedReplies = $state(false); // Track if we've checked for replies
-	let replyInputRef: HTMLInputElement | null = null;
+	let replyInputRef = $state<HTMLInputElement | null>(null);
 
 	// Focus reply input when reply form is shown
 	$effect(() => {
@@ -84,7 +84,7 @@
 
 			replyContent = '';
 			showReplyForm = false;
-			
+
 			// Load replies to show the new one
 			await loadReplies();
 			showReplies = true;
@@ -146,7 +146,7 @@
 	<a href="/profile/{comment.user_id}" class="flex-shrink-0">
 		{#if comment.user?.display_name === 'Anonymous' && comment.user?.sprite_id}
 			<!-- For anonymous users, show sprite as profile picture -->
-			<div class="size-8 flex items-center justify-center">
+			<div class="flex size-8 items-center justify-center">
 				<img
 					src="/sprites/{comment.user.sprite_id}.png"
 					alt="Sprite"
@@ -165,45 +165,37 @@
 		{/if}
 	</a>
 
-	<div class="flex-1 min-w-0">
+	<div class="min-w-0 flex-1">
 		<!-- Comment Content -->
-		<div class="bg-muted rounded-2xl px-3 py-2 inline-block max-w-full">
-			<a href="/profile/{comment.user_id}" class="font-semibold text-sm hover:underline">
+		<div class="inline-block max-w-full rounded-2xl bg-muted px-3 py-2">
+			<a href="/profile/{comment.user_id}" class="text-sm font-semibold hover:underline">
 				{comment.user?.display_name || 'Unknown User'}
 			</a>
-			<p class="text-sm whitespace-pre-wrap break-words">{comment.content}</p>
+			<p class="text-sm break-words whitespace-pre-wrap">{comment.content}</p>
 		</div>
 
 		<!-- Actions -->
-		<div class="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+		<div class="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
 			{#if currentUserId}
-				<ReactionPicker targetType="comment" targetId={comment.id} reactionCounts={comment.reaction_counts} />
+				<ReactionPicker
+					targetType="comment"
+					targetId={comment.id}
+					reactionCounts={comment.reaction_counts}
+				/>
 				<Button
 					variant="ghost"
 					size="sm"
 					onclick={() => (showReplyForm = !showReplyForm)}
-					class="h-auto p-0 hover:underline font-semibold"
+					class="h-auto p-0 font-semibold hover:underline"
 				>
 					Reply
 				</Button>
 			{:else}
-				<Button
-					variant="ghost"
-					size="sm"
-					disabled
-					class="h-auto p-0 font-semibold gap-1"
-				>
+				<Button variant="ghost" size="sm" disabled class="h-auto gap-1 p-0 font-semibold">
 					<Heart class="size-3" />
 					Like
 				</Button>
-				<Button
-					variant="ghost"
-					size="sm"
-					disabled
-					class="h-auto p-0 font-semibold"
-				>
-					Reply
-				</Button>
+				<Button variant="ghost" size="sm" disabled class="h-auto p-0 font-semibold">Reply</Button>
 			{/if}
 			<span>{formatDate(comment.created_at)}</span>
 			{#if currentUserId === comment.user_id}
@@ -212,7 +204,7 @@
 					size="sm"
 					onclick={handleDelete}
 					disabled={isDeleting}
-					class="h-auto p-0 hover:underline text-destructive"
+					class="h-auto p-0 text-destructive hover:underline"
 				>
 					Delete
 				</Button>
@@ -229,13 +221,13 @@
 					placeholder="Write a reply..."
 					disabled={isSubmitting}
 					onkeydown={(e) => e.key === 'Enter' && handleReply()}
-					class="border-input bg-background selection:bg-primary dark:bg-input/30 selection:text-primary-foreground ring-offset-background placeholder:text-muted-foreground shadow-xs flex h-8 w-full min-w-0 rounded-full border px-3 py-1 text-sm outline-none transition-[color,box-shadow] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+					class="flex h-8 w-full min-w-0 rounded-full border border-input bg-background px-3 py-1 text-sm shadow-xs ring-offset-background transition-[color,box-shadow] outline-none selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
 				/>
 				<Button
 					size="sm"
 					onclick={handleReply}
 					disabled={isSubmitting || !replyContent.trim()}
-					class="rounded-full h-8"
+					class="h-8 rounded-full"
 				>
 					{isSubmitting ? '...' : 'Send'}
 				</Button>
@@ -248,9 +240,11 @@
 				variant="ghost"
 				size="sm"
 				onclick={toggleReplies}
-				class="mt-2 h-auto p-0 text-xs hover:underline font-semibold"
+				class="mt-2 h-auto p-0 text-xs font-semibold hover:underline"
 			>
-				{showReplies ? `Hide ${replies.length} ${replies.length === 1 ? 'reply' : 'replies'}` : `Show ${replies.length} ${replies.length === 1 ? 'reply' : 'replies'}`}
+				{showReplies
+					? `Hide ${replies.length} ${replies.length === 1 ? 'reply' : 'replies'}`
+					: `Show ${replies.length} ${replies.length === 1 ? 'reply' : 'replies'}`}
 			</Button>
 		{/if}
 
@@ -268,4 +262,3 @@
 		{/if}
 	</div>
 </div>
-

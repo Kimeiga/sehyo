@@ -49,7 +49,7 @@
 	let newMessage = $state('');
 	let isSending = $state(false);
 	let isLoadingInitial = $state(false);
-	let messagesContainer = $state<HTMLDivElement>();
+	let messagesContainer = $state<HTMLElement | null>(null);
 	let otherTyping = $state(false);
 
 	// ── Polling cadence ─────────────────────────────────────────────
@@ -130,9 +130,7 @@
 	async function pollNewMessages(userId: string) {
 		try {
 			const latest = lastServerTimestamp();
-			const url = latest
-				? `/api/messages/${userId}?since=${latest}`
-				: `/api/messages/${userId}`;
+			const url = latest ? `/api/messages/${userId}?since=${latest}` : `/api/messages/${userId}`;
 			const response = await fetch(url);
 			if (!response.ok) return;
 			const body = await response.json();
@@ -301,9 +299,7 @@
 			} else {
 				// Server didn't return the row — just drop the pending
 				// flag, the next poll will reconcile.
-				messages = messages.map((m) =>
-					m.id === optimisticId ? { ...m, _pending: false } : m
-				);
+				messages = messages.map((m) => (m.id === optimisticId ? { ...m, _pending: false } : m));
 			}
 		} catch (err) {
 			console.error('Send message error:', err);
@@ -364,7 +360,7 @@
 	}
 </script>
 
-<div class="messages-root container mx-auto px-4 py-8 max-w-6xl">
+<div class="messages-root container mx-auto max-w-6xl px-4 py-8">
 	{#if !data.user}
 		<Card>
 			<CardHeader>
@@ -374,10 +370,10 @@
 				</CardTitle>
 			</CardHeader>
 			<CardContent>
-				<div class="text-center py-12">
-					<MessageCircle class="size-16 mx-auto text-muted-foreground mb-4" />
-					<h3 class="text-xl font-semibold mb-2">Sign in to view messages</h3>
-					<p class="text-muted-foreground mb-6">Sign in to start a conversation.</p>
+				<div class="py-12 text-center">
+					<MessageCircle class="mx-auto mb-4 size-16 text-muted-foreground" />
+					<h3 class="mb-2 text-xl font-semibold">Sign in to view messages</h3>
+					<p class="mb-6 text-muted-foreground">Sign in to start a conversation.</p>
 					<a href="/auth/login">
 						<Button>Sign In</Button>
 					</a>
@@ -385,7 +381,7 @@
 			</CardContent>
 		</Card>
 	{:else}
-		<div class="grid grid-cols-1 md:grid-cols-3 gap-4 h-[calc(100vh-12rem)]">
+		<div class="grid h-[calc(100vh-12rem)] grid-cols-1 gap-4 md:grid-cols-3">
 			<Card class="md:col-span-1">
 				<CardHeader>
 					<CardTitle class="flex items-center gap-2">
@@ -394,12 +390,12 @@
 					</CardTitle>
 				</CardHeader>
 				<CardContent class="p-0">
-					<div class="overflow-y-auto max-h-[calc(100vh-16rem)]">
+					<div class="max-h-[calc(100vh-16rem)] overflow-y-auto">
 						{#if conversations.length === 0}
-							<div class="text-center py-8 px-4">
-								<MessageCircle class="size-12 mx-auto text-muted-foreground mb-2" />
+							<div class="px-4 py-8 text-center">
+								<MessageCircle class="mx-auto mb-2 size-12 text-muted-foreground" />
 								<p class="text-sm text-muted-foreground">No conversations yet</p>
-								<p class="text-xs text-muted-foreground mt-1">
+								<p class="mt-1 text-xs text-muted-foreground">
 									Start a conversation from a user's profile
 								</p>
 							</div>
@@ -407,26 +403,29 @@
 							{#each conversations as conversation (conversation.user_id)}
 								<button
 									onclick={() => selectConversation(conversation)}
-									class="w-full p-4 hover:bg-accent transition-colors border-b border-border text-left {selectedConversation?.user_id ===
+									class="w-full border-b border-border p-4 text-left transition-colors hover:bg-accent {selectedConversation?.user_id ===
 									conversation.user_id
 										? 'bg-accent'
 										: ''}"
 								>
 									<div class="flex items-center gap-3">
 										<Avatar>
-											<AvatarImage src={conversation.profile_picture_url} alt={conversation.display_name} />
+											<AvatarImage
+												src={conversation.profile_picture_url}
+												alt={conversation.display_name}
+											/>
 											<AvatarFallback>{conversation.display_name[0]}</AvatarFallback>
 										</Avatar>
-										<div class="flex-1 min-w-0">
+										<div class="min-w-0 flex-1">
 											<div class="flex items-center justify-between">
-												<p class="font-semibold truncate">{conversation.display_name}</p>
+												<p class="truncate font-semibold">{conversation.display_name}</p>
 												{#if conversation.unread_count > 0}
-													<span class="bg-blue-600 text-white text-xs rounded-full px-2 py-0.5">
+													<span class="rounded-full bg-blue-600 px-2 py-0.5 text-xs text-white">
 														{conversation.unread_count}
 													</span>
 												{/if}
 											</div>
-											<p class="text-sm text-muted-foreground truncate">@{conversation.username}</p>
+											<p class="truncate text-sm text-muted-foreground">@{conversation.username}</p>
 										</div>
 									</div>
 								</button>
@@ -436,7 +435,7 @@
 				</CardContent>
 			</Card>
 
-			<Card class="md:col-span-2 flex flex-col">
+			<Card class="flex flex-col md:col-span-2">
 				{#if selectedConversation}
 					<CardHeader class="border-b">
 						<div class="flex items-center gap-3">
@@ -454,15 +453,17 @@
 						</div>
 					</CardHeader>
 
-					<CardContent class="flex-1 overflow-y-auto p-4" bind:this={messagesContainer}>
+					<CardContent class="flex-1 overflow-y-auto p-4" bind:ref={messagesContainer}>
 						{#if isLoadingInitial}
-							<div class="flex justify-center items-center h-full">
-								<div class="animate-spin size-8 border-4 border-blue-600 border-t-transparent rounded-full"></div>
+							<div class="flex h-full items-center justify-center">
+								<div
+									class="size-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"
+								></div>
 							</div>
 						{:else if messages.length === 0}
-							<div class="flex flex-col items-center justify-center h-full text-center">
-								<MessageCircle class="size-16 text-muted-foreground mb-4" />
-								<h3 class="text-lg font-semibold mb-2">Start a conversation</h3>
+							<div class="flex h-full flex-col items-center justify-center text-center">
+								<MessageCircle class="mb-4 size-16 text-muted-foreground" />
+								<h3 class="mb-2 text-lg font-semibold">Start a conversation</h3>
 								<p class="text-sm text-muted-foreground">Send your first message.</p>
 							</div>
 						{:else}
@@ -471,13 +472,11 @@
 									{@const isOwn = message.sender_id === data.user?.id}
 									{@const prev = messages[idx - 1]}
 									{@const showAvatar = !isOwn && (!prev || prev.sender_id !== message.sender_id)}
-									{@const isLatestOwn =
-										isOwn &&
-										idx === messages.length - 1}
+									{@const isLatestOwn = isOwn && idx === messages.length - 1}
 									<div class="flex {isOwn ? 'justify-end' : 'justify-start'}">
-										<div class="max-w-[70%] flex flex-col {isOwn ? 'items-end' : 'items-start'}">
+										<div class="flex max-w-[70%] flex-col {isOwn ? 'items-end' : 'items-start'}">
 											{#if showAvatar}
-												<div class="flex items-center gap-2 mb-1">
+												<div class="mb-1 flex items-center gap-2">
 													<Avatar class="size-6">
 														<AvatarImage
 															src={message.sender_profile_picture}
@@ -485,7 +484,9 @@
 														/>
 														<AvatarFallback>{message.sender_display_name[0]}</AvatarFallback>
 													</Avatar>
-													<span class="text-xs text-muted-foreground">{message.sender_display_name}</span>
+													<span class="text-xs text-muted-foreground"
+														>{message.sender_display_name}</span
+													>
 												</div>
 											{/if}
 											<div
@@ -493,10 +494,10 @@
 													? 'bg-blue-600 text-white'
 													: 'bg-muted text-foreground'} {message._pending ? 'opacity-70' : ''}"
 											>
-												<p class="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+												<p class="text-sm break-words whitespace-pre-wrap">{message.content}</p>
 											</div>
 											<p
-												class="text-[11px] text-muted-foreground mt-1 flex items-center gap-1 {isOwn
+												class="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground {isOwn
 													? 'self-end'
 													: 'self-start'}"
 											>
@@ -524,12 +525,14 @@
 								{#if otherTyping}
 									<div class="flex justify-start">
 										<div class="max-w-[70%]">
-											<div class="rounded-2xl px-4 py-2 bg-muted text-foreground inline-flex items-center gap-1">
+											<div
+												class="inline-flex items-center gap-1 rounded-2xl bg-muted px-4 py-2 text-foreground"
+											>
 												<span class="typing-dot"></span>
 												<span class="typing-dot"></span>
 												<span class="typing-dot"></span>
 											</div>
-											<p class="text-[11px] text-muted-foreground mt-1">
+											<p class="mt-1 text-[11px] text-muted-foreground">
 												{selectedConversation.display_name} is typing…
 											</p>
 										</div>
@@ -556,7 +559,9 @@
 							/>
 							<Button type="submit" disabled={!newMessage.trim() || isSending}>
 								{#if isSending}
-									<div class="animate-spin size-4 border-2 border-white border-t-transparent rounded-full"></div>
+									<div
+										class="size-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+									></div>
 								{:else}
 									<Send class="size-4" />
 								{/if}
@@ -564,10 +569,10 @@
 						</form>
 					</div>
 				{:else}
-					<CardContent class="flex-1 flex items-center justify-center">
+					<CardContent class="flex flex-1 items-center justify-center">
 						<div class="text-center">
-							<MessageCircle class="size-16 mx-auto text-muted-foreground mb-4" />
-							<h3 class="text-lg font-semibold mb-2">Select a conversation</h3>
+							<MessageCircle class="mx-auto mb-4 size-16 text-muted-foreground" />
+							<h3 class="mb-2 text-lg font-semibold">Select a conversation</h3>
 							<p class="text-sm text-muted-foreground">
 								Choose a conversation from the list to start messaging
 							</p>
@@ -601,11 +606,23 @@
 		opacity: 0.5;
 		animation: typing 1.2s infinite ease-in-out;
 	}
-	.typing-dot:nth-child(2) { animation-delay: 0.15s; }
-	.typing-dot:nth-child(3) { animation-delay: 0.3s; }
+	.typing-dot:nth-child(2) {
+		animation-delay: 0.15s;
+	}
+	.typing-dot:nth-child(3) {
+		animation-delay: 0.3s;
+	}
 
 	@keyframes typing {
-		0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-		40% { transform: translateY(-3px); opacity: 1; }
+		0%,
+		80%,
+		100% {
+			transform: translateY(0);
+			opacity: 0.4;
+		}
+		40% {
+			transform: translateY(-3px);
+			opacity: 1;
+		}
 	}
 </style>

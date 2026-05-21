@@ -34,6 +34,9 @@
 			? `Sehyo — the most human social media on earth™. Today's question: ${data.prompt.text}`
 			: DEFAULT_DESC
 	);
+	const showLoginModal = $derived(
+		(data as LayoutProps['data'] & { showLoginModal?: boolean }).showLoginModal ?? false
+	);
 	// Dynamic prompt-of-the-day image. Generated edge-side via workers-og.
 	// Lives under /api/og so SvelteKit-Cloudflare doesn't apply its
 	// static-asset cache-control override (which would mark the response
@@ -95,7 +98,7 @@
 	<!-- Fullscreen Menu overlay — opened by the hamburger in Navbar.
 	     Same component, every viewport. -->
 	<Menu user={data.user} unreadCount={data.unreadMessageCount ?? 0} />
-	<LoginModal open={data.showLoginModal} />
+	<LoginModal open={showLoginModal} />
 	<SignInModal />
 </div>
 

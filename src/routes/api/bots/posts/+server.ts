@@ -2,6 +2,27 @@ import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getDB } from '$lib/server/db';
 
+interface BotSessionRow {
+	user_id: string;
+	username: string | null;
+	display_name: string | null;
+	bot_id: string | null;
+}
+
+interface CreatedPostRow {
+	id: string;
+	content: string;
+	image_url: string | null;
+	created_at: number;
+	user_id: string;
+	username: string | null;
+	display_name: string | null;
+}
+
+interface BotProfileRow {
+	user_id: string;
+}
+
 /**
  * Bot Post Creation Endpoint
  *
@@ -27,13 +48,16 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 		const sessionId = authHeader.substring(7); // Remove 'Bearer ' prefix
 
 		// Validate session and get user
-		const session = await db.prepare(
-			`SELECT s.user_id, u.username, u.name as display_name, bp.id as bot_id
+		const session = await db
+			.prepare(
+				`SELECT s.user_id, u.username, u.name as display_name, bp.id as bot_id
 			 FROM sessions s
 			 JOIN user u ON s.user_id = u.id
 			 LEFT JOIN bot_profiles bp ON bp.user_id = u.id
 			 WHERE s.id = ? AND s.expires_at > datetime('now')`
-		).bind(sessionId).first();
+			)
+			.bind(sessionId)
+			.first<BotSessionRow>();
 
 		if (!session) {
 			return error(401, 'Invalid or expired session');
@@ -58,26 +82,39 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 
 		// Create post
 		const postId = crypto.randomUUID();
-		
-		await db.prepare(
-			`INSERT INTO posts (id, user_id, content, image_url, created_at, updated_at)
+
+		await db
+			.prepare(
+				`INSERT INTO posts (id, user_id, content, image_url, created_at, updated_at)
 			 VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`
-		).bind(postId, session.user_id, content.trim(), image_url || null).run();
+			)
+			.bind(postId, session.user_id, content.trim(), image_url || null)
+			.run();
 
 		// Update bot's last_post_at timestamp
-		await db.prepare(
-			`UPDATE bot_profiles 
+		await db
+			.prepare(
+				`UPDATE bot_profiles
 			 SET last_post_at = datetime('now'), updated_at = datetime('now')
 			 WHERE id = ?`
-		).bind(session.bot_id).run();
+			)
+			.bind(session.bot_id)
+			.run();
 
 		// Get the created post
-		const post = await db.prepare(
-			`SELECT p.*, u.username, u.display_name
+		const post = await db
+			.prepare(
+				`SELECT p.*, u.username, u.name as display_name
 			 FROM posts p
 			 JOIN user u ON p.user_id = u.id
 			 WHERE p.id = ?`
-		).bind(postId).first();
+			)
+			.bind(postId)
+			.first<CreatedPostRow>();
+
+		if (!post) {
+			throw error(500, 'Failed to load created post');
+		}
 
 		return json({
 			success: true,
@@ -101,12 +138,13 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 
 /**
  * Get Bot Posts
- * 
+ *
  * GET /api/bots/posts?bot_id=<bot_id>&limit=10
  * Returns: { posts: Post[] }
  */
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async ({ url, platform }) => {
 	try {
+		const db = getDB(platform);
 		const botId = url.searchParams.get('bot_id');
 		const limit = parseInt(url.searchParams.get('limit') || '10');
 
@@ -115,23 +153,27 @@ export const GET: RequestHandler = async ({ url }) => {
 		}
 
 		// Get bot's user_id
-		const bot = await db.prepare(
-			`SELECT user_id FROM bot_profiles WHERE id = ?`
-		).bind(botId).first();
+		const bot = await db
+			.prepare(`SELECT user_id FROM bot_profiles WHERE id = ?`)
+			.bind(botId)
+			.first<BotProfileRow>();
 
 		if (!bot) {
 			return error(404, 'Bot not found');
 		}
 
 		// Get bot's posts
-		const posts = await db.prepare(
-			`SELECT p.*, u.username, u.name as display_name, u.profile_picture_url
+		const posts = await db
+			.prepare(
+				`SELECT p.*, u.username, u.name as display_name, u.image as profile_picture_url
 			 FROM posts p
 			 JOIN user u ON p.user_id = u.id
 			 WHERE p.user_id = ?
 			 ORDER BY p.created_at DESC
 			 LIMIT ?`
-		).bind(bot.user_id, limit).all();
+			)
+			.bind(bot.user_id, limit)
+			.all();
 
 		return json({
 			success: true,
@@ -142,4 +184,3 @@ export const GET: RequestHandler = async ({ url }) => {
 		return error(500, 'Failed to get bot posts');
 	}
 };
-

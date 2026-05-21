@@ -101,8 +101,7 @@ export default defineConfig({
 			},
 			devOptions: {
 				enabled: true,
-				type: 'module',
-				navigateFallback: null
+				type: 'module'
 			}
 		})
 	]

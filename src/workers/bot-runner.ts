@@ -1,14 +1,21 @@
 /**
  * Bot Runner Worker
- * 
+ *
  * This Cloudflare Worker runs on a schedule (via Cron Triggers) to:
  * 1. Fetch active bot profiles
  * 2. Generate content using Workers AI
  * 3. Post content via bot API endpoints
  * 4. Interact with other posts (comments, reactions)
- * 
+ *
  * Scheduled via wrangler.toml cron triggers
  */
+
+import type { D1Database, ExecutionContext } from '@cloudflare/workers-types';
+
+interface ScheduledControllerLike {
+	cron: string;
+	scheduledTime: number;
+}
 
 interface Env {
 	DB: D1Database;
@@ -27,13 +34,13 @@ interface BotProfile {
 }
 
 export default {
-	async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+	async scheduled(event: ScheduledControllerLike, env: Env, _ctx: ExecutionContext): Promise<void> {
 		console.log('Bot runner triggered at:', new Date(event.scheduledTime).toISOString());
 
 		try {
 			// Get active bots that should post
 			const bots = await getBotsToRun(env.DB, event.cron);
-			
+
 			console.log(`Found ${bots.length} bots to run`);
 
 			// Run each bot
@@ -65,9 +72,11 @@ export default {
 				}
 
 				// Get specific bot
-				const bot = await env.DB.prepare(
+				const bot = (await env.DB.prepare(
 					`SELECT * FROM bot_profiles WHERE id = ? AND is_active = 1`
-				).bind(bot_id).first() as BotProfile;
+				)
+					.bind(bot_id)
+					.first()) as BotProfile;
 
 				if (!bot) {
 					return new Response('Bot not found or inactive', { status: 404 });
@@ -97,17 +106,19 @@ export default {
 async function getBotsToRun(db: D1Database, cronPattern: string): Promise<BotProfile[]> {
 	// For now, get all active bots
 	// In production, you'd filter based on posting_frequency and last_post_at
-	const result = await db.prepare(
-		`SELECT * FROM bot_profiles 
+	const result = await db
+		.prepare(
+			`SELECT * FROM bot_profiles
 		 WHERE is_active = 1
 		 AND (
 		   last_post_at IS NULL 
 		   OR datetime(last_post_at) < datetime('now', '-1 hour')
 		 )
 		 LIMIT 5`
-	).all();
+		)
+		.all<BotProfile>();
 
-	return result.results as BotProfile[];
+	return result.results ?? [];
 }
 
 /**
@@ -182,7 +193,7 @@ async function createBotPost(bot: BotProfile, sessionId: string, env: Env): Prom
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
-				'Authorization': `Bearer ${sessionId}`
+				Authorization: `Bearer ${sessionId}`
 			},
 			body: JSON.stringify({ content })
 		});
@@ -212,7 +223,9 @@ async function createBotComment(bot: BotProfile, sessionId: string, env: Env): P
 			 AND p.created_at > datetime('now', '-24 hours')
 			 ORDER BY RANDOM()
 			 LIMIT 1`
-		).bind(bot.user_id).all();
+		)
+			.bind(bot.user_id)
+			.all();
 
 		if (!posts.results || posts.results.length === 0) {
 			console.log('No posts to comment on');
@@ -230,7 +243,7 @@ async function createBotComment(bot: BotProfile, sessionId: string, env: Env): P
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
-				'Authorization': `Bearer ${sessionId}`
+				Authorization: `Bearer ${sessionId}`
 			},
 			body: JSON.stringify({
 				post_id: post.id,
@@ -255,7 +268,7 @@ async function createBotComment(bot: BotProfile, sessionId: string, env: Env): P
  */
 function decideAction(): 'post' | 'comment' | 'react' {
 	const random = Math.random();
-	
+
 	if (random < 0.6) {
 		return 'post'; // 60% chance to post
 	} else if (random < 0.9) {
@@ -270,7 +283,7 @@ function decideAction(): 'post' | 'comment' | 'react' {
  */
 async function generatePostContent(personality: any, ai: any): Promise<string> {
 	const topic = personality.interests[Math.floor(Math.random() * personality.interests.length)];
-	
+
 	const prompt = `Write a short, engaging social media post about ${topic}. 
 Tone: ${personality.tone}
 Traits: ${personality.traits.join(', ')}
@@ -296,7 +309,11 @@ Keep it under 280 characters and ${personality.emoji_usage} emojis.`;
 /**
  * Generate comment content using AI
  */
-async function generateCommentContent(personality: any, postContent: string, ai: any): Promise<string> {
+async function generateCommentContent(
+	personality: any,
+	postContent: string,
+	ai: any
+): Promise<string> {
 	const prompt = `Write a thoughtful comment responding to this post: "${postContent}"
 Tone: ${personality.tone}
 Keep it under 200 characters and ${personality.emoji_usage} emojis.`;
@@ -336,4 +353,3 @@ function getFallbackPost(topic: string): string {
 	];
 	return templates[Math.floor(Math.random() * templates.length)];
 }
-
