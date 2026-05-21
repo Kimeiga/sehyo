@@ -38,8 +38,9 @@ const ANSWER_COUNT = 10;
 // thread feel inhabited the moment a human visits.
 const INTERBOT_COMMENT_COUNT = 4;
 const INTERBOT_NESTED_COUNT = 2;
-const INTERBOT_DRAMA_CHAIN_COUNT = 2;
-const INTERBOT_DRAMA_CHAIN_LENGTH = 5;
+const INTERBOT_ARGUMENT_CHAIN_COUNT = 1;
+const INTERBOT_SUPPORT_CHAIN_COUNT = 1;
+const INTERBOT_CHAIN_LENGTH = 5;
 
 // Bot replies generated on a user's own post when they answer the
 // daily prompt , the "guest-preview comments" engagement loop.
@@ -107,9 +108,10 @@ Aim for the AVERAGE answer to feel like 50-70 words of someone making an actual 
 The batch should feel like a real comment thread, not a writers' room. Mix:
 
 - POSITIONS: do NOT have the whole batch be cynical / dismissive / deflecting. AT LEAST ONE line must be UNIRONICALLY POSITIVE about the topic, genuinely enthusiastic, no caveats, no "but".
-- DISAGREEMENT: ONE line should be slightly provocative, a take that invites argument. Different person from the unironic-positive one.
-- INTERACTION: ONE of the lines (and only one) can include a "@<other-roster-name>" reference like a direct reply ("@dashiell same", "kind of disagree @calixto"). Skip if no natural reaction exists.
+- DISAGREEMENT: AT MOST ONE line should be slightly provocative, a take that invites argument. Different person from the unironic-positive one. If the batch already has enough tension, skip it.
+- INTERACTION: ONE of the lines can respond to another person's idea indirectly, but do not use @ handles and do not force direct name-addressing.
 - REGISTER: mix lowercase-first sentences, properly-capitalized ones, fragments, occasional missing apostrophes ("dont", "its"), occasional ALL caps for emphasis on ONE word.
+- SOCIAL TEMPERATURE: most people are not looking for a fight. Include agreement, curiosity, riffing, tenderness, jokes, and small clarifications. Disagreement should be the seasoning, not the whole meal.
 - BAN STUCK-LANDING JOKES. Punchlines should NOT always close cleanly.
 - BAN BALANCED RECEIPTS. NEVER list multiple prices/places/objects in the same line ("$5 coffee and $3 pastries", "Vienna and Budapest and Prague"). Pick ONE detail.
 - BAN "AI-PICKED INTERESTING FACTS". When a memory mentions a book / podcast / object / activity, be VAGUE and weird about it ("some weird book about supply chains", "a podcast about goats"). NEVER specifics that sound picked from a list of "interesting topics" ("the history of the farm-to-table movement").
@@ -141,7 +143,7 @@ Roster:
 
 Question: "Do you think travel broadens your perspective more than reading about it?"
 
-Correct output (8 lines. Note the substantive takes that engage the question with anecdotes as supporting evidence; one short throwaway; an @-reply; an unironic-positive; accidental tenderness):
+Correct output (8 lines. Note the substantive takes that engage the question with anecdotes as supporting evidence; one short throwaway; one indirect reply; an unironic-positive; accidental tenderness):
 i think it depends on what you mean by "broaden". travel has made me less sentimental about places, not more. you go somewhere and it has gas stations and tired people just like home, and that's the lesson actually. reading does the opposite. i still picture every nineteenth-century london as cold and yellow, and i don't want to ruin it.
 i went to porto once and got laughed at by a lady because of how i said "obrigada". i don't think that broadened my perspective on portugal exactly but it broadened my perspective on how confidently i'd been pronouncing things wrong my entire life. so i guess yes? a little? in a way that hurt my pride more than my worldview.
 travel broadens you the way getting hit by a car broadens you. you do come back different, sure
@@ -149,7 +151,7 @@ travel is fine
 i think people who say travel changed them are mostly trying to justify how much they spent on it. a long novel is sixteen bucks and three weeks. a long flight is fifteen-hundred and you're tired the whole time. on a per-realization basis books just dunk on travel.
 i still think about this pistachio gelato i had in lisbon with my friend nadia, and how she said the city looked exactly like she'd imagined and i felt embarrassed because i'd imagined nothing. she's in copenhagen now and we kind of stopped texting. travel makes you notice how unprepared you are to be present, i think. or maybe that was just me.
 honestly yes, unambiguously. i went to peru with my mom after college and i came back fundamentally different. not in a poetic way, just in how i think about my own life now. you cannot get that from a book, sorry. there is something about being in a place where your usual reference points stop working.
-@calixto somewhat fair, but books also let you live inside a worldview without ever leaving your own, which is the opposite of broadening. great novels resist that, but most popular non-fiction is basically reassurance for people who already agree with it.
+somewhat fair, but books also let you live inside a worldview without ever leaving your own, which is the opposite of broadening. great novels resist that, but most popular non-fiction is basically reassurance for people who already agree with it.
 
 NOW. Produce exactly ${n} first-person answers for the actual question, matched to the roster above. Output nothing but the ${n} lines. No prelude.`;
 }
@@ -310,6 +312,12 @@ function cleanLine(s: string): string {
 	if ((out.startsWith('"') && out.endsWith('"')) || (out.startsWith('“') && out.endsWith('”'))) {
 		out = out.slice(1, -1).trim();
 	}
+	// Strip markdown emphasis that makes generated comments look
+	// over-written in the thread UI.
+	out = out.replace(/\*/g, '');
+	// The public UI does not use handles, so remove any that slip
+	// through model output instead of displaying a half-social syntax.
+	out = out.replace(/@\w+\s*/g, '');
 	// Strip leading "Answer:" / "Response:" labels.
 	out = out.replace(/^(answer|response)[:.\-]\s*/i, '');
 	// Strip leading "Name: " labels the model sometimes adds despite
@@ -442,13 +450,15 @@ Replying to ${s.parentAuthorName}'s ${parentKind}: "${s.parentText.replace(/"/g,
 
 Constraints applied to EVERY slot:
 - 4 to 38 words per comment. In argument slots, 18 to 45 words is allowed if the person is making a real point.
-- Plain prose. No quotation marks around your reply, no name labels, no markdown, no narration ("X said"), no emoji, no hashtags.
-- React to what was said. Agree, disagree, joke, ask, share a tiny related thought, or @-reply ("@name same"). Be conversational, not summarizing.
+- Plain prose. No quotation marks around your reply, no name labels, no markdown, no asterisks for emphasis, no narration ("X said"), no emoji, no hashtags.
+- React to what was said. Agree, disagree, joke, ask, or share a tiny related thought. Be conversational, not summarizing.
+- Do not use @ handles. Do not address the other person by name unless it is absolutely necessary; most replies should just answer the idea.
+- Most replies should not be arguments. People can agree, add a related memory, ask something, or make a small joke without taking the opposite side.
 - Match the messy register of a forum: occasional missing apostrophes ok, lowercase fine, fragments fine.
 - DO NOT close on a profound flourish, metaphor, or "X not Y" construction. Keep it grounded.
 - Never use em dashes, en dashes, the ellipsis character, or three periods. Never say or hint that the writer is artificial intelligence, a bot, a model, or generated.
 - If a voice's personality is anecdote-heavy, ONE concrete tiny detail is fine; if deadpan/sardonic, stay short.
-- Drama is good when it is about an idea, motive, taste, class signal, hypocrisy, or a specific phrase someone used. Do not make it abusive. No slurs, threats, harassment, or cruelty about protected traits.
+- Occasional friction is good when it is about an idea, motive, taste, class signal, hypocrisy, or a specific phrase someone used. Do not make it abusive. No slurs, threats, harassment, or cruelty about protected traits.
 - If a SLOT includes "Speaker side", stay consistent with that side. You may soften, escalate, or concede a tiny detail, but do not suddenly switch positions.
 - If a SLOT includes "Conversation so far", answer the latest point and reuse one concrete phrase from the thread so the reply feels related.
 
@@ -458,9 +468,9 @@ You are writing ALL slots in one pass. You will SEE the comments you write for e
 
 - NEVER repeat the SAME OPENING across slots ("same here", "got X too", "same thing happened", "happened to me", "honestly", "i mean"). If you've used an opening in an earlier slot, pick something different for the next.
 - NEVER repeat the SAME ANECDOTE TRIGGER ("my grandma", "got lost in the woods", "had bad street food"). One memory hook is fine; a SECOND slot riffing on the same one is forbidden.
-- Mix reply STRATEGIES across the batch: agreement, pushback, tangent, dry one-liner, @-reply, asking a follow-up question. Don't write 4 agreements in a row.
+- Mix reply STRATEGIES across the batch: agreement, addition, tangent, dry one-liner, asking a follow-up question, and occasional pushback. Don't write 4 agreements in a row, and don't write 4 disagreements in a row.
 - Mix LENGTHS: short (4-7 words), medium (8-18 words), occasional longer (20-45 words). Don't write all mediums.
-- At least one slot should contain productive friction: a clear "i disagree" or "that feels dishonest" or "youre dodging..." style pushback. Keep it ordinary, not theatrical.
+- If there are 4 or more slots, at most one should contain productive friction: a clear "i disagree" or "that feels dishonest" or "youre dodging..." style pushback. If there are fewer slots, only push back when it is obviously natural from the parent text. Keep it ordinary, not theatrical.
 
 Output exactly ${slots.length} lines, one per slot, in order. No numbering, no labels, no quotes around the lines, no blank lines between them.`;
 
@@ -700,15 +710,23 @@ async function runMultiPassComments(
 		}
 	}
 
-	const dramaInserted = await runDramaChains(d1, ai, prompt, seedPosts, authors, authorById, model);
+	const chainInserted = await runConversationChains(
+		d1,
+		ai,
+		prompt,
+		seedPosts,
+		authors,
+		authorById,
+		model
+	);
 
-	return { pass2: pass2Inserted.length, pass3: pass3Inserted.length + dramaInserted };
+	return { pass2: pass2Inserted.length, pass3: pass3Inserted.length + chainInserted };
 }
 
-async function runDramaChains(
+async function runConversationChains(
 	d1: D1Database,
 	ai: Ai,
-	prompt: { id: string; prompt_text: string },
+	prompt: { prompt_text: string },
 	seedPosts: Array<{ id: string; user_id: string; content: string }>,
 	authors: SeedAuthor[],
 	authorById: Map<string, SeedAuthor>,
@@ -717,64 +735,57 @@ async function runDramaChains(
 	const db = drizzle(d1);
 	const anchors = shuffle(seedPosts).slice(
 		0,
-		Math.min(INTERBOT_DRAMA_CHAIN_COUNT, seedPosts.length)
+		Math.min(INTERBOT_ARGUMENT_CHAIN_COUNT + INTERBOT_SUPPORT_CHAIN_COUNT, seedPosts.length)
 	);
 	const chains = anchors
-		.map((post) => {
+		.map((post, index) => {
 			const defender = authorById.get(post.user_id);
-			const challenger = pick(authors.filter((a) => a.user_id !== post.user_id));
-			if (!defender || !challenger) return null;
-			const threadBrief = `Argument under "${prompt.prompt_text}". Original answer by ${defender.name}: "${post.content
-				.replace(/"/g, "'")
-				.slice(0, 260)}"`;
+			const partner = pick(authors.filter((a) => a.user_id !== post.user_id));
+			if (!defender || !partner) return null;
 			return {
+				kind: index < INTERBOT_ARGUMENT_CHAIN_COUNT ? ('argument' as const) : ('support' as const),
 				postId: post.id,
 				currentParentCommentId: null as string | null,
-				currentParentAuthorName: defender.name,
 				currentParentText: post.content,
-				defender,
-				challenger,
-				threadBrief,
-				conversation: [
-					{ authorName: defender.name, text: post.content.slice(0, 260), side: 'original answer' }
-				] as Array<{ authorName: string; text: string; side?: string }>
+				originalAuthor: defender,
+				partner
 			};
 		})
 		.filter((chain): chain is NonNullable<typeof chain> => !!chain);
 
 	let inserted = 0;
-	for (let depth = 0; depth < INTERBOT_DRAMA_CHAIN_LENGTH; depth++) {
-		if (chains.length === 0) break;
-		const slots = chains.map((chain) => {
-			const speaker = depth % 2 === 0 ? chain.challenger : chain.defender;
-			const side =
-				speaker.user_id === chain.challenger.user_id
-					? `pushes back on ${chain.defender.name}'s original answer. skeptical, direct, thinks something is being dodged.`
-					: `defends the original answer. answers the criticism without switching sides, and makes it more personal.`;
-			return {
-				commenter: speaker,
-				parentAuthorName: chain.currentParentAuthorName,
-				parentText: chain.currentParentText,
-				isNested: chain.currentParentCommentId !== null,
-				threadBrief: chain.threadBrief,
-				speakerSide: side,
-				conversationSoFar: chain.conversation.slice(-6)
-			} satisfies CommentContext;
-		});
+	const chainTexts = await Promise.all(
+		chains.map((chain) =>
+			generateConversationChain(
+				ai,
+				{
+					kind: chain.kind,
+					promptText: prompt.prompt_text,
+					originalAuthor: chain.originalAuthor,
+					originalText: chain.currentParentText,
+					partner: chain.partner
+				},
+				model
+			)
+		)
+	);
 
-		const texts = await generateBatchedComments(ai, slots, model);
-		for (let i = 0; i < chains.length; i++) {
-			const chain = chains[i];
-			const slot = slots[i];
-			const text = texts[i];
-			if (!chain || !slot || !text) continue;
+	for (let chainIndex = 0; chainIndex < chains.length; chainIndex++) {
+		const chain = chains[chainIndex];
+		const texts = chainTexts[chainIndex] ?? [];
+		if (!chain) continue;
+
+		for (let depth = 0; depth < Math.min(texts.length, INTERBOT_CHAIN_LENGTH); depth++) {
+			const speaker = depth % 2 === 0 ? chain.partner : chain.originalAuthor;
+			const text = texts[depth];
+			if (!text) continue;
 			const commentId = crypto.randomUUID();
 			try {
 				if (chain.currentParentCommentId) {
 					await db.insert(comments).values({
 						id: commentId,
 						post_id: chain.postId,
-						user_id: slot.commenter.user_id,
+						user_id: speaker.user_id,
 						content: text,
 						parent_comment_id: chain.currentParentCommentId
 					});
@@ -782,27 +793,151 @@ async function runDramaChains(
 					await db.insert(comments).values({
 						id: commentId,
 						post_id: chain.postId,
-						user_id: slot.commenter.user_id,
+						user_id: speaker.user_id,
 						content: text
 					});
 				}
 			} catch (err) {
-				console.error('drama chain insert failed', err);
+				console.error('conversation chain insert failed', err);
 				continue;
 			}
 			inserted++;
 			chain.currentParentCommentId = commentId;
-			chain.currentParentAuthorName = slot.commenter.name;
 			chain.currentParentText = text;
-			chain.conversation.push({
-				authorName: slot.commenter.name,
-				text,
-				side: slot.speakerSide
-			});
 		}
 	}
 
 	return inserted;
+}
+
+async function generateConversationChain(
+	ai: Ai,
+	args: {
+		kind: 'argument' | 'support';
+		promptText: string;
+		originalAuthor: SeedAuthor;
+		originalText: string;
+		partner: SeedAuthor;
+	},
+	model: string
+): Promise<string[]> {
+	const turns = Array.from({ length: INTERBOT_CHAIN_LENGTH }, (_, i) =>
+		i % 2 === 0 ? args.partner : args.originalAuthor
+	);
+	const turnList = turns
+		.map((speaker, i) => {
+			const role =
+				args.kind === 'argument'
+					? speaker.user_id === args.partner.user_id
+						? `pushes back on one part of ${args.originalAuthor.name}'s answer without being contrarian for sport`
+						: `responds to the criticism while staying open and specific`
+					: speaker.user_id === args.partner.user_id
+						? `builds on ${args.originalAuthor.name}'s answer with agreement, a related detail, or a gentle question`
+						: `continues the warmer thread, adds nuance, or lightly qualifies the point`;
+			return `${i + 1}. ${speaker.name}: ${role}`;
+		})
+		.join('\n');
+	const chainMode =
+		args.kind === 'argument'
+			? 'This chain has friction, but the disagreement should feel earned from the original answer. No disagreeing just to disagree.'
+			: 'This chain is mostly agreement, curiosity, riffing, and adding texture. It can include one tiny caveat, but no argument posture.';
+
+	const system = `You are writing one nested comment chain on a daily-question forum.
+
+Output exactly ${INTERBOT_CHAIN_LENGTH} lines, one per turn, in order.
+Each line should begin with that speaker's name and a colon. The app strips labels before display.
+
+Rules:
+- This is one conversation, not separate comments. Every line must respond to the previous line.
+- ${chainMode}
+- A healthy forum has agreement, additions, small questions, jokes, and occasional disagreement. Do not make every turn oppositional.
+- 10 to 42 words per line. The middle turns should be substantive enough to be worth reading.
+- Mention one concrete phrase from the previous line in the next line when it feels natural.
+- Do not address the other person by name. No @ handles.
+- No repeated sentences or copied clauses.
+- Plain prose. No markdown, no asterisks for emphasis, no emoji, no hashtags, no narration.
+- Never use em dashes, en dashes, the ellipsis character, or three periods.
+- Never say or hint that the writer is artificial intelligence, a bot, a model, or generated.`;
+
+	const userContent = `Question:
+${args.promptText}
+
+Original answer by ${args.originalAuthor.name}:
+${args.originalText}
+
+Turn order and sides:
+${turnList}
+
+Write the ${INTERBOT_CHAIN_LENGTH} replies now.`;
+
+	try {
+		const res = await runTextModel(ai, model, {
+			messages: [
+				{ role: 'system', content: system },
+				{ role: 'user', content: userContent }
+			],
+			temperature: 0.95,
+			max_tokens: 1000
+		});
+		const rawLines = extractModelText(res)
+			.split(/\r?\n/)
+			.map((line) => cleanLine(line))
+			.filter((line) => line.length > 0 && line.length <= 500);
+
+		const out: string[] = [];
+		for (let i = 0; i < INTERBOT_CHAIN_LENGTH; i++) {
+			const speaker = turns[i] ?? args.partner;
+			const other = speaker.user_id === args.partner.user_id ? args.originalAuthor : args.partner;
+			let line = rawLines[i] ?? '';
+			if (!line || out.some((prior) => normalizedComment(prior) === normalizedComment(line))) {
+				line = fallbackConversationLine(args.kind, i, speaker, other);
+			}
+			out.push(line);
+		}
+		return out;
+	} catch (err) {
+		console.error('generateConversationChain failed:', err);
+		return turns.map((speaker, i) => {
+			const other = speaker.user_id === args.partner.user_id ? args.originalAuthor : args.partner;
+			return fallbackConversationLine(args.kind, i, speaker, other);
+		});
+	}
+}
+
+function normalizedComment(value: string): string {
+	return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function fallbackConversationLine(
+	kind: 'argument' | 'support',
+	turnIndex: number,
+	_speaker: SeedAuthor,
+	_other: SeedAuthor
+): string {
+	if (kind === 'support') {
+		const lines = [
+			`yeah, that makes sense. the part about noticing what still works is underrated.`,
+			`i like that framing. it makes the skill feel less flashy and more like attention.`,
+			`the attention part is what gets me too. some people just see the fix before the rest of us do.`,
+			`and it is nice when competence is quiet like that. not everything needs to become a personality.`,
+			`quiet competence is exactly it. i always notice it more than big talent, honestly.`
+		];
+		return lines[turnIndex % lines.length] ?? lines[0];
+	}
+	if (turnIndex % 2 === 0) {
+		const lines = [
+			`youre making that sound cleaner than it is. i think thats exactly the dodge here.`,
+			`the part youre calling practical is also the part people use to avoid admitting what they actually want.`,
+			`i still think youre smoothing over the messy bit because it makes the answer easier to like.`
+		];
+		return lines[Math.floor(turnIndex / 2) % lines.length] ?? lines[0];
+	}
+	const lines = [
+		`no, that is not a dodge. im saying the practical part is the point, not a loophole.`,
+		`you keep calling it cleaner like thats automatically fake. sometimes people are just trying to be honest.`,
+		`i get the suspicion, but youre arguing with a version of this i didnt actually say.`
+	];
+	return lines[Math.floor(turnIndex / 2) % lines.length] ?? lines[0];
 }
 
 /**

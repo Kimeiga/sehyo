@@ -83,7 +83,7 @@ async function runLiveBotStep(opts: {
 	const [posts, commentTargets, recentContentCount] = await Promise.all([
 		loadPromptPosts(opts.db, prompt.id),
 		loadPromptComments(opts.db, prompt.id),
-		countRecentBotContent(opts.db, prompt.id)
+		countRecentBotContent(opts.db, prompt.id, prompt.created_at)
 	]);
 
 	const answeredUserIds = new Set(posts.map((post) => post.user_id));
@@ -94,71 +94,105 @@ async function runLiveBotStep(opts: {
 	const commentableComments = commentTargets.filter((comment) =>
 		authors.some((author) => author.user_id !== comment.user_id)
 	);
+	const canWrite = !!opts.ai && recentContentCount < MAX_RECENT_BOT_CONTENT;
 
 	if (opts.initial) {
-		await showInitialTypingPreview(opts, authors, commentablePosts, commentableComments);
+		if (canWrite) {
+			const wrote = await createLiveCommentOrAnswer(
+				opts,
+				authors,
+				commentablePosts,
+				commentableComments,
+				answerCandidates,
+				{ id: prompt.id, text: prompt.prompt_text },
+				posts
+			);
+			if (wrote) return;
+		}
+		await showAmbientCursor(opts, authors);
 		return;
 	}
 
-	const canWrite = !!opts.ai && recentContentCount < MAX_RECENT_BOT_CONTENT;
 	const roll = Math.random();
 
-	if (!canWrite || roll < 0.25) {
-		const author = pick(authors);
-		if (!author) return;
-		const action = roll < 0.2 ? 'answer' : 'reply';
-		await moveCursor(opts, author, action, action === 'answer' ? 'prompt' : undefined);
+	if (!canWrite || roll < 0.3) {
+		await showAmbientCursor(opts, authors);
 		return;
 	}
 
-	if (roll < 0.6) {
-		const target = pick(commentablePosts) ?? pick(commentableComments);
-		const author = pickAuthorForTarget(authors, target?.user_id);
-		if (!target || !author) return;
-		const threadId = 'post_id' in target ? `reply-${target.id}` : `post-${target.id}`;
-		await moveCursor(opts, author, 'reply', threadId);
-		await inject(opts, typingMessage(author, threadId));
-		await sleep(rand(4500, 8200));
-		await inject(opts, { type: 'leave', userId: author.user_id });
-		return;
-	}
-
-	if (roll < 0.9 && (commentablePosts.length > 0 || commentableComments.length > 0)) {
-		const target = pick(commentableComments) ?? pick(commentablePosts);
-		const author = pickAuthorForTarget(authors, target?.user_id);
-		if (!opts.ai || !target || !author) return;
-		await createLiveComment(opts, author, target);
+	if (roll < 0.88) {
+		const wrote = await createLiveCommentOrAnswer(
+			opts,
+			authors,
+			commentablePosts,
+			commentableComments,
+			answerCandidates,
+			{ id: prompt.id, text: prompt.prompt_text },
+			posts
+		);
+		if (wrote) return;
+		await showAmbientCursor(opts, authors);
 		return;
 	}
 
 	const author = pick(answerCandidates);
-	if (!opts.ai || !author) return;
-	await createLiveAnswer(opts, author, { id: prompt.id, text: prompt.prompt_text }, posts);
-}
-
-async function showInitialTypingPreview(
-	opts: { injectUrl: string; injectSecret: string; room: string },
-	authors: SeedAuthor[],
-	commentablePosts: PostTarget[],
-	commentableComments: CommentTarget[]
-) {
-	const target = pick(commentablePosts) ?? pick(commentableComments);
-	const author = pickAuthorForTarget(authors, target?.user_id);
-	if (!author) return;
-
-	if (!target) {
-		await moveCursor(opts, author, 'answer', 'prompt');
-		await inject(opts, typingMessage(author, 'prompt'));
-		await sleep(rand(6000, 8500));
-		await inject(opts, { type: 'leave', userId: author.user_id });
-		return;
+	if (opts.ai && author) {
+		const wrote = await createLiveAnswer(
+			opts,
+			author,
+			{ id: prompt.id, text: prompt.prompt_text },
+			posts
+		);
+		if (wrote) return;
 	}
 
-	const threadId = 'post_id' in target ? `reply-${target.id}` : `post-${target.id}`;
-	await moveCursor(opts, author, 'reply', threadId);
-	await inject(opts, typingMessage(author, threadId));
-	await sleep(rand(6000, 8500));
-	await inject(opts, { type: 'leave', userId: author.user_id });
+	const wrote = await createLiveCommentOrAnswer(
+		opts,
+		authors,
+		commentablePosts,
+		commentableComments,
+		answerCandidates,
+		{ id: prompt.id, text: prompt.prompt_text },
+		posts
+	);
+	if (!wrote) await showAmbientCursor(opts, authors);
+}
+
+async function showAmbientCursor(
+	opts: { injectUrl: string; injectSecret: string; room: string },
+	authors: SeedAuthor[]
+) {
+	const author = pick(authors);
+	if (!author) return;
+	await moveCursor(opts, author, 'idle');
+}
+
+async function createLiveCommentOrAnswer(
+	opts: {
+		db: D1Database;
+		ai?: Ai;
+		injectUrl: string;
+		injectSecret: string;
+		room: string;
+		model?: string;
+	},
+	authors: SeedAuthor[],
+	commentablePosts: PostTarget[],
+	commentableComments: CommentTarget[],
+	answerCandidates: SeedAuthor[],
+	prompt: { id: string; text: string },
+	existingPosts: PostTarget[]
+): Promise<boolean> {
+	if (!opts.ai) return false;
+	const target = pick(commentableComments) ?? pick(commentablePosts);
+	const author = pickAuthorForTarget(authors, target?.user_id);
+	if (target && author) {
+		return createLiveComment(opts, author, target);
+	}
+
+	const answerAuthor = pick(answerCandidates);
+	if (!answerAuthor) return false;
+	return createLiveAnswer(opts, answerAuthor, prompt, existingPosts);
 }
 
 async function createLiveAnswer(
@@ -173,25 +207,16 @@ async function createLiveAnswer(
 	author: SeedAuthor,
 	prompt: { id: string; text: string },
 	existingPosts: PostTarget[]
-) {
-	if (!opts.ai) return;
-	await moveCursor(opts, author, 'answer', 'prompt');
-	await inject(opts, typingMessage(author, 'prompt'));
-	const textPromise = generateLiveBotAnswer(
+): Promise<boolean> {
+	if (!opts.ai) return false;
+	const text = await generateLiveBotAnswer(
 		opts.ai,
 		prompt.text,
 		author,
 		existingPosts.map((post) => post.content),
 		opts.model
 	);
-	await sleep(rand(1400, 2800));
-	const text = await textPromise;
-	if (!text) {
-		await inject(opts, { type: 'leave', userId: author.user_id });
-		return;
-	}
-	await inject(opts, typingMessage(author, 'prompt'));
-	await sleep(Math.min(3000, Math.max(900, text.length * 18)));
+	if (!text) return false;
 
 	const postId = crypto.randomUUID();
 	const createdAt = Math.floor(Date.now() / 1000);
@@ -205,12 +230,15 @@ async function createLiveAnswer(
 			.run();
 	} catch (err) {
 		console.error('live answer insert failed:', err);
-		await inject(opts, { type: 'leave', userId: author.user_id });
-		return;
+		return false;
 	}
 
 	const profile = await loadUserProfile(opts.db, author.user_id);
-	await inject(opts, {
+
+	await moveCursor(opts, author, 'answer', 'prompt');
+	await inject(opts, typingMessage(author, 'prompt'));
+	await sleep(Math.min(3000, Math.max(900, text.length * 18)));
+	const delivered = await injectWithRetry(opts, {
 		type: 'post',
 		post: {
 			id: postId,
@@ -225,6 +253,7 @@ async function createLiveAnswer(
 		}
 	});
 	await inject(opts, { type: 'leave', userId: author.user_id });
+	return delivered;
 }
 
 async function createLiveComment(
@@ -238,16 +267,14 @@ async function createLiveComment(
 	},
 	author: SeedAuthor,
 	target: PostTarget | CommentTarget
-) {
-	if (!opts.ai) return;
+): Promise<boolean> {
+	if (!opts.ai) return false;
 	const isCommentTarget = 'post_id' in target;
 	const postId = isCommentTarget ? target.post_id : target.id;
 	const parentCommentId = isCommentTarget ? target.id : null;
 	const threadId = parentCommentId ? `reply-${parentCommentId}` : `post-${postId}`;
 
-	await moveCursor(opts, author, 'reply', threadId);
-	await inject(opts, typingMessage(author, threadId));
-	const textPromise = generateLiveBotComment(
+	const text = await generateLiveBotComment(
 		opts.ai,
 		{
 			commenter: author,
@@ -257,14 +284,7 @@ async function createLiveComment(
 		},
 		opts.model
 	);
-	await sleep(rand(1200, 2600));
-	const text = await textPromise;
-	if (!text) {
-		await inject(opts, { type: 'leave', userId: author.user_id });
-		return;
-	}
-	await inject(opts, typingMessage(author, threadId));
-	await sleep(Math.min(2600, Math.max(800, text.length * 22)));
+	if (!text) return false;
 
 	const commentId = crypto.randomUUID();
 	const createdAt = Math.floor(Date.now() / 1000);
@@ -279,8 +299,7 @@ async function createLiveComment(
 			.run();
 	} catch (err) {
 		console.error('live comment insert failed:', err);
-		await inject(opts, { type: 'leave', userId: author.user_id });
-		return;
+		return false;
 	}
 
 	const [profile, sortRow] = await Promise.all([
@@ -291,7 +310,10 @@ async function createLiveComment(
 			.first<{ sort_order: number | null }>()
 	]);
 
-	await inject(opts, {
+	await moveCursor(opts, author, 'reply', threadId);
+	await inject(opts, typingMessage(author, threadId));
+	await sleep(Math.min(2600, Math.max(800, text.length * 22)));
+	const delivered = await injectWithRetry(opts, {
 		type: 'comment',
 		postId,
 		comment: {
@@ -312,6 +334,7 @@ async function createLiveComment(
 		}
 	});
 	await inject(opts, { type: 'leave', userId: author.user_id });
+	return delivered;
 }
 
 async function loadPromptPosts(db: D1Database, promptId: string): Promise<PostTarget[]> {
@@ -345,8 +368,18 @@ async function loadPromptComments(db: D1Database, promptId: string): Promise<Com
 	return res.results ?? [];
 }
 
-async function countRecentBotContent(db: D1Database, promptId: string): Promise<number> {
-	const since = Math.floor(Date.now() / 1000) - RECENT_CONTENT_WINDOW_SECONDS;
+async function countRecentBotContent(
+	db: D1Database,
+	promptId: string,
+	promptCreatedAt: number
+): Promise<number> {
+	// Seed generation writes a full bot discussion immediately after
+	// the prompt row. Do not let that initial batch exhaust the live
+	// activity budget; only count bot content after the seed window.
+	const since = Math.max(
+		Math.floor(Date.now() / 1000) - RECENT_CONTENT_WINDOW_SECONDS,
+		promptCreatedAt + 180
+	);
 	const [postsRow, commentsRow] = await Promise.all([
 		db
 			.prepare(
@@ -437,17 +470,31 @@ function cursorPoint(action: CursorAction, progress: number): { x: number; y: nu
 async function inject(
 	opts: { injectUrl: string; injectSecret: string; room: string },
 	message: unknown
-) {
+): Promise<boolean> {
 	try {
 		const res = await fetch(opts.injectUrl, {
 			method: 'POST',
 			headers: { 'content-type': 'application/json', 'x-inject-secret': opts.injectSecret },
 			body: JSON.stringify({ room: opts.room, message })
 		});
-		if (!res.ok) console.error('live inject failed:', res.status);
+		if (!res.ok) {
+			console.error('live inject failed:', res.status);
+			return false;
+		}
+		return true;
 	} catch (err) {
 		console.error('live inject threw:', err);
+		return false;
 	}
+}
+
+async function injectWithRetry(
+	opts: { injectUrl: string; injectSecret: string; room: string },
+	message: unknown
+): Promise<boolean> {
+	if (await inject(opts, message)) return true;
+	await sleep(350);
+	return inject(opts, message);
 }
 
 function pick<T>(items: T[]): T | null {
