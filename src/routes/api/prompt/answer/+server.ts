@@ -37,9 +37,13 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 	}
 
 	const postId = crypto.randomUUID();
+	const createdAt = Math.floor(Date.now() / 1000);
 	await db
-		.prepare(`INSERT INTO posts (id, user_id, prompt_id, content) VALUES (?, ?, ?, ?)`)
-		.bind(postId, locals.user.id, prompt.id, content)
+		.prepare(
+			`INSERT INTO posts (id, user_id, prompt_id, content, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?)`
+		)
+		.bind(postId, locals.user.id, prompt.id, content, createdAt, createdAt)
 		.run();
 
 	// Bots reply AFTER the post is saved, conversationally: the
@@ -63,5 +67,22 @@ export const POST: RequestHandler = async ({ request, platform, locals }) => {
 		if (platform?.context?.waitUntil) platform.context.waitUntil(work);
 	}
 
-	return json({ id: postId, prompt_id: prompt.id }, { status: 201 });
+	return json(
+		{
+			id: postId,
+			prompt_id: prompt.id,
+			post: {
+				id: postId,
+				user_id: locals.user.id,
+				content,
+				created_at: createdAt,
+				display_name: locals.user.name ?? 'Anonymous',
+				username: locals.user.username ?? null,
+				bot_id: locals.user.bot_id ?? null,
+				comment_count: 0,
+				image: locals.user.image ?? null
+			}
+		},
+		{ status: 201 }
+	);
 };

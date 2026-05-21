@@ -171,12 +171,16 @@
 	// server-loaded comments below so they appear without a reload.
 	let liveComments = $state<Record<string, CommentRow[]>>({});
 	let liveAnswers = $state<Record<string, AnswerPostRow>>({});
+	let optimisticMyAnswer = $state<AnswerPostRow | null>(null);
+	const myAnswer = $derived((data.myAnswer as AnswerPostRow | null) ?? optimisticMyAnswer);
+	const hasAnswered = $derived(!!myAnswer);
+	const canReadOwnReplies = $derived(!!data.user || !!optimisticMyAnswer);
 
 	const visibleAnswers = $derived.by<AnswerPostRow[]>(() => {
 		const byId = new Map<string, AnswerPostRow>();
 		for (const answer of data.answers ?? []) byId.set(answer.id, answer as AnswerPostRow);
 		for (const answer of Object.values(liveAnswers)) byId.set(answer.id, answer);
-		if (data.myAnswer) byId.delete(data.myAnswer.id);
+		if (myAnswer) byId.delete(myAnswer.id);
 		return Array.from(byId.values()).sort(
 			(a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id)
 		);
@@ -305,7 +309,7 @@
 		tdbg('$effect fire', {
 			isDev: isDevTyping,
 			isFullySignedIn,
-			hasMyAnswer: !!data.myAnswer,
+			hasMyAnswer: hasAnswered,
 			namesBlurred: data.namesBlurred,
 			userId: data.user?.id ?? null,
 			typingIdentity: typingConnectionIdentity,
@@ -409,7 +413,7 @@
 	}
 
 	function upsertLivePost(post: AnswerPostRow) {
-		if (data.myAnswer?.id === post.id) return;
+		if (myAnswer?.id === post.id) return;
 		liveAnswers = { ...liveAnswers, [post.id]: post };
 	}
 
@@ -533,7 +537,6 @@
 		if (data.user) return true;
 		try {
 			await authClient.signIn.anonymous();
-			await invalidateAll();
 			return true;
 		} catch (err) {
 			console.error('Anon sign-in failed:', err);
@@ -557,8 +560,26 @@
 				body: JSON.stringify({ content })
 			});
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			const payload = (await res.json().catch(() => null)) as {
+				id?: string;
+				post?: AnswerPostRow;
+			} | null;
+			if (payload?.post) {
+				optimisticMyAnswer = payload.post;
+			} else if (payload?.id) {
+				optimisticMyAnswer = {
+					id: payload.id,
+					user_id: data.user?.id ?? 'anonymous',
+					content,
+					created_at: Math.floor(Date.now() / 1000),
+					display_name: data.user?.name ?? 'You',
+					username: data.user?.username ?? null,
+					bot_id: null,
+					comment_count: 0,
+					image: data.user?.image ?? null
+				};
+			}
 			composerValue = '';
-			await invalidateAll();
 		} catch (err) {
 			console.error('Answer post failed:', err);
 			alert('Could not post. Try again.');
@@ -582,8 +603,8 @@
 	}
 
 	function startEdit() {
-		if (!data.myAnswer) return;
-		editValue = data.myAnswer.content;
+		if (!myAnswer) return;
+		editValue = myAnswer.content;
 		editing = true;
 	}
 
@@ -594,18 +615,21 @@
 	}
 
 	async function saveEdit() {
-		if (!data.myAnswer) return;
+		if (!myAnswer) return;
 		const content = editValue.trim();
 		if (!content || savingEdit) return;
 		savingEdit = true;
 		try {
-			const res = await fetch(`/api/posts/${data.myAnswer.id}`, {
+			const res = await fetch(`/api/posts/${myAnswer.id}`, {
 				method: 'PATCH',
 				headers: { 'Content-Type': 'application/json' },
 				credentials: 'include',
 				body: JSON.stringify({ content })
 			});
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			if (optimisticMyAnswer?.id === myAnswer.id) {
+				optimisticMyAnswer = { ...optimisticMyAnswer, content };
+			}
 			editing = false;
 			editValue = '';
 			await invalidateAll();
@@ -618,10 +642,10 @@
 	}
 
 	async function deleteAnswer() {
-		if (!data.myAnswer || deleting) return;
+		if (!myAnswer || deleting) return;
 		deleting = true;
 		try {
-			const res = await fetch(`/api/posts/${data.myAnswer.id}`, {
+			const res = await fetch(`/api/posts/${myAnswer.id}`, {
 				method: 'DELETE',
 				credentials: 'include'
 			});
@@ -629,6 +653,7 @@
 			editing = false;
 			editValue = '';
 			composerValue = '';
+			if (optimisticMyAnswer?.id === myAnswer.id) optimisticMyAnswer = null;
 			await invalidateAll();
 		} catch (err) {
 			console.error('Delete failed:', err);
@@ -799,7 +824,7 @@
 		<section class="today">
 			<p class="section-label">Question</p>
 			<h1 class="prompt-today">{data.prompt.text}</h1>
-			{#if !data.myAnswer}
+			{#if !hasAnswered}
 				<form class="composer" onsubmit={onComposerSubmit}>
 					<textarea
 						bind:value={composerValue}
@@ -834,16 +859,16 @@
 		{/each}
 
 		<section class="answers">
-			{#if data.myAnswer}
+			{#if myAnswer}
 				{@render postArticle(
 					{
-						id: data.myAnswer.id,
-						user_id: data.myAnswer.user_id,
-						content: data.myAnswer.content,
-						display_name: data.user?.name ?? 'You',
-						username: data.user?.username ?? null,
+						id: myAnswer.id,
+						user_id: myAnswer.user_id,
+						content: myAnswer.content,
+						display_name: myAnswer.display_name ?? data.user?.name ?? 'You',
+						username: myAnswer.username ?? data.user?.username ?? null,
 						bot_id: null,
-						comment_count: data.myAnswer.comment_count
+						comment_count: myAnswer.comment_count
 					},
 					{ isMine: true }
 				)}
@@ -853,13 +878,13 @@
 			{/each}
 		</section>
 
-		{#if !data.myAnswer}
+		{#if !hasAnswered}
 			<p class="locked-cta">Answer today's question to explore the world of sehyo.</p>
 		{/if}
 
-		{#if data.myAnswer || isDevTyping}
+		{#if hasAnswered || isDevTyping}
 			<p class="nudge">
-				{#if isDevTyping && !data.myAnswer}
+				{#if isDevTyping && !hasAnswered}
 					<span style="color:#f78166;font-family:monospace;"
 						>[dev mode — typing as {devTabIdentity?.displayName}]</span
 					>
@@ -953,11 +978,11 @@
 			</section>
 		{/if}
 
-		{#if !isFullySignedIn && data.myAnswer && data.myAnswer.comment_count > 0}
+		{#if !canReadOwnReplies && myAnswer && myAnswer.comment_count > 0}
 			<div class="signin-toast" role="status">
 				<span
-					>{data.myAnswer.comment_count}
-					{data.myAnswer.comment_count === 1 ? 'person' : 'people'} responded to your answer.</span
+					>{myAnswer.comment_count}
+					{myAnswer.comment_count === 1 ? 'person' : 'people'} responded to your answer.</span
 				>
 				<button
 					type="button"
@@ -968,7 +993,7 @@
 			</div>
 		{/if}
 
-		{#if data.myAnswer && data.timeline?.length}
+		{#if hasAnswered && data.timeline?.length}
 			<div class="past">
 				{#each data.timeline as item (item.kind === 'prompt' ? `q-${item.data.id}` : `p-${item.data.id}`)}
 					{#if item.kind === 'prompt'}
@@ -1287,7 +1312,7 @@
 	{@const all = commentsByPost[a.id] ?? []}
 	{@const tops = topLevelOf(all)}
 	{@const hasTops = tops.length > 0}
-	{@const guestLocked = isMine && hasTops && !isFullySignedIn}
+	{@const guestLocked = isMine && hasTops && !canReadOwnReplies}
 	{@const inEditMode = isMine && editing}
 	{@const isActive = isActiveReply(a.id, null)}
 	{#snippet postComposerSlot()}

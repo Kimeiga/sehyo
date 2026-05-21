@@ -1035,6 +1035,23 @@ export async function orchestrateBotRepliesWithTyping(
 		}
 	};
 	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+	const moveCursorToReply = async (author: SeedAuthor) => {
+		const steps = 3;
+		for (let i = 0; i < steps; i += 1) {
+			const progress = i / Math.max(1, steps - 1);
+			await inject({
+				type: 'cursor',
+				userId: author.user_id,
+				displayName: author.name,
+				x: Math.max(0.08, Math.min(0.92, 0.28 + progress * 0.16 + (Math.random() - 0.5) * 0.06)),
+				y: Math.max(0.16, Math.min(0.9, 0.52 + progress * 0.18 + (Math.random() - 0.5) * 0.06)),
+				action: i === steps - 1 ? 'click' : 'reply',
+				threadId,
+				expiresAt: Date.now() + 4200
+			});
+			await sleep(650 + Math.floor(Math.random() * 650));
+		}
+	};
 
 	const authors = await getSeedAuthors(d1);
 	if (authors.length === 0) return;
@@ -1070,7 +1087,9 @@ export async function orchestrateBotRepliesWithTyping(
 		const text = texts[i];
 		if (!commenter || !text) continue;
 
-		// 1. Bot starts "typing" in the user's thread.
+		// 1. Bot moves to the freshly rendered reply affordance, then
+		//    starts typing in the user's thread.
+		await moveCursorToReply(commenter);
 		await inject({
 			type: 'typing',
 			userId: commenter.user_id,
@@ -1097,6 +1116,18 @@ export async function orchestrateBotRepliesWithTyping(
 			console.error('orchestrated reply insert failed', err);
 			await inject({ type: 'leave', userId: commenter.user_id });
 			continue;
+		}
+		try {
+			await d1
+				.prepare(
+					`UPDATE bot_profiles
+					 SET last_post_at = datetime('now'), updated_at = datetime('now')
+					 WHERE user_id = ?`
+				)
+				.bind(commenter.user_id)
+				.run();
+		} catch (err) {
+			console.error('orchestrated reply activity mark failed', err);
 		}
 
 		// 4. Push it live + clear the typing indicator. Shape matches
