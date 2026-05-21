@@ -80,10 +80,10 @@ async function runLiveBotStep(opts: {
 	const authors = await getSeedAuthors(opts.db);
 	if (authors.length === 0) return;
 
-	const [posts, commentTargets, recentContentCount] = await Promise.all([
+	const [posts, commentTargets, recentLiveActivityCount] = await Promise.all([
 		loadPromptPosts(opts.db, prompt.id),
 		loadPromptComments(opts.db, prompt.id),
-		countRecentBotContent(opts.db, prompt.id, prompt.created_at)
+		countRecentLiveBotActivity(opts.db)
 	]);
 
 	const answeredUserIds = new Set(posts.map((post) => post.user_id));
@@ -94,7 +94,7 @@ async function runLiveBotStep(opts: {
 	const commentableComments = commentTargets.filter((comment) =>
 		authors.some((author) => author.user_id !== comment.user_id)
 	);
-	const canWrite = !!opts.ai && recentContentCount < MAX_RECENT_BOT_CONTENT;
+	const canWrite = !!opts.ai && recentLiveActivityCount < MAX_RECENT_BOT_CONTENT;
 
 	if (opts.initial) {
 		if (canWrite) {
@@ -232,6 +232,7 @@ async function createLiveAnswer(
 		console.error('live answer insert failed:', err);
 		return false;
 	}
+	await markLiveBotActive(opts.db, author.user_id);
 
 	const profile = await loadUserProfile(opts.db, author.user_id);
 
@@ -301,6 +302,7 @@ async function createLiveComment(
 		console.error('live comment insert failed:', err);
 		return false;
 	}
+	await markLiveBotActive(opts.db, author.user_id);
 
 	const [profile, sortRow] = await Promise.all([
 		loadUserProfile(opts.db, author.user_id),
@@ -368,40 +370,33 @@ async function loadPromptComments(db: D1Database, promptId: string): Promise<Com
 	return res.results ?? [];
 }
 
-async function countRecentBotContent(
-	db: D1Database,
-	promptId: string,
-	promptCreatedAt: number
-): Promise<number> {
-	// Seed generation writes a full bot discussion immediately after
-	// the prompt row. Do not let that initial batch exhaust the live
-	// activity budget; only count bot content after the seed window.
-	const since = Math.max(
-		Math.floor(Date.now() / 1000) - RECENT_CONTENT_WINDOW_SECONDS,
-		promptCreatedAt + 180
-	);
-	const [postsRow, commentsRow] = await Promise.all([
-		db
+async function countRecentLiveBotActivity(db: D1Database): Promise<number> {
+	const row = await db
+		.prepare(
+			`SELECT COUNT(*) as n
+			 FROM bot_profiles
+			 WHERE is_active = 1
+			   AND last_post_at IS NOT NULL
+			   AND datetime(last_post_at) >= datetime('now', ?)`
+		)
+		.bind(`-${RECENT_CONTENT_WINDOW_SECONDS} seconds`)
+		.first<{ n: number }>();
+	return row?.n ?? 0;
+}
+
+async function markLiveBotActive(db: D1Database, userId: string): Promise<void> {
+	try {
+		await db
 			.prepare(
-				`SELECT COUNT(*) as n
-				 FROM posts p
-				 JOIN user u ON u.id = p.user_id
-				 WHERE p.prompt_id = ? AND p.created_at >= ? AND u.bot_id LIKE 'seed_%'`
+				`UPDATE bot_profiles
+				 SET last_post_at = datetime('now'), updated_at = datetime('now')
+				 WHERE user_id = ?`
 			)
-			.bind(promptId, since)
-			.first<{ n: number }>(),
-		db
-			.prepare(
-				`SELECT COUNT(*) as n
-				 FROM comments c
-				 JOIN posts p ON p.id = c.post_id
-				 JOIN user u ON u.id = c.user_id
-				 WHERE p.prompt_id = ? AND c.created_at >= ? AND u.bot_id LIKE 'seed_%'`
-			)
-			.bind(promptId, since)
-			.first<{ n: number }>()
-	]);
-	return (postsRow?.n ?? 0) + (commentsRow?.n ?? 0);
+			.bind(userId)
+			.run();
+	} catch (err) {
+		console.error('live bot activity mark failed:', err);
+	}
 }
 
 async function loadUserProfile(
