@@ -163,6 +163,31 @@ export function createAuth(db: D1Database, env: {
 							.prepare('UPDATE reactions SET user_id = ? WHERE user_id = ?')
 							.bind(newId, oldId)
 							.run();
+						for (const table of [
+							'personas',
+							'social_posts',
+							'social_thread_aliases',
+							'social_comments',
+							'social_commitments',
+							'circle_members'
+						]) {
+							await db
+								.prepare(`UPDATE ${table} SET user_id = ? WHERE user_id = ?`)
+								.bind(newId, oldId)
+								.run();
+						}
+						await db
+							.prepare('UPDATE circles SET owner_user_id = ? WHERE owner_user_id = ?')
+							.bind(newId, oldId)
+							.run();
+						await db
+							.prepare('UPDATE social_reveals SET owner_user_id = ? WHERE owner_user_id = ?')
+							.bind(newId, oldId)
+							.run();
+						await db
+							.prepare('UPDATE social_reveals SET viewer_user_id = ? WHERE viewer_user_id = ?')
+							.bind(newId, oldId)
+							.run();
 					} catch (err) {
 						console.error('onLinkAccount migration failed:', err);
 					}
@@ -182,4 +207,3 @@ export function createAuth(db: D1Database, env: {
 
 // Type for the auth instance
 export type Auth = ReturnType<typeof createAuth>;
-

@@ -7,68 +7,32 @@
 
 	<p class="lede">
 		Sehyo is based on <span class="kanji">製評</span> (<i>seihyou</i>) — &ldquo;to make commentary.&rdquo;
-		The goal is to become the most human social media on earth™.
+		It is a masked timeline for posts that should not have to become part of a public identity trail.
 	</p>
 
 	<section class="manifesto">
 		<p>
-			Humanity is in a loneliness crisis. We spend our days scrolling and consuming content,
-			but when we try to share our thoughts we don't know where to go — every social media
-			we're on now is designed to reward virality. It's hard to be seen or heard when you
-			just want to share what you really think about something.
+			Most social apps make casual expression feel reputational. A joke, a stray thought, a
+			small plan, or an honest question gets attached to a real name, a polished profile, and
+			an audience that may not share the context.
 		</p>
 
 		<p>
-			There are places like Medium and Substack, but the activation energy is high because
-			they're meant for formal articles. Maybe you have a thought, but you don't necessarily
-			have a full dissertation on it.
+			Sehyo separates participation from exposure. Public posts use fresh masks by default,
+			comments get thread-local identities, stable personas are optional, and real identity is
+			only revealed through explicit grants.
 		</p>
 
 		<p>
-			Sehyo is trying to create a space where people can share what they really think and
-			how they really feel about things — in a calm, thoughtful place where your friends
-			can hear what you actually think, and where you might make new ones.
+			The product is built around posts, asks, offers, circles, and threshold plans: lightweight
+			social objects that let people talk and coordinate without turning every action into
+			public performance.
 		</p>
 	</section>
 
 	<footer class="byline">
 		<p>
 			Built by <a href="https://hakanalpay.com" target="_blank" rel="noopener noreferrer">Hakan Alpay</a> and <a href="https://github.com/tfukaza" target="_blank" rel="noopener noreferrer">Tomoki Fukazawa</a>.
-		</p>
-		<p class="credit">
-			Sky texture: photos by
-			<a
-				href="https://unsplash.com/@cspek?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText"
-				target="_blank"
-				rel="noopener noreferrer"
-			>Chris Nguyen</a>
-			(<a
-				href="https://unsplash.com/photos/blue-sky-and-white-clouds-lbmrrNgq2lo?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText"
-				target="_blank"
-				rel="noopener noreferrer"
-			>source</a>),
-			<a
-				href="https://unsplash.com/@leronep?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText"
-				target="_blank"
-				rel="noopener noreferrer"
-			>Lerone Pieters</a>
-			(<a
-				href="https://unsplash.com/photos/panoramic-photography-of-sunset-at-the-city-g0enUw24TBI?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText"
-				target="_blank"
-				rel="noopener noreferrer"
-			>source</a>),
-			and
-			<a
-				href="https://unsplash.com/@mnelson?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText"
-				target="_blank"
-				rel="noopener noreferrer"
-			>Matt Nelson</a>
-			(<a
-				href="https://unsplash.com/photos/aerial-view-of-city-lights-and-z4X3yABcf5g?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText"
-				target="_blank"
-				rel="noopener noreferrer"
-			>source</a>)
-			on Unsplash.
 		</p>
 	</footer>
 </main>
@@ -119,10 +83,6 @@
 	}
 	.byline p { margin: 0 0 6px; }
 	.byline p:last-child { margin-bottom: 0; }
-	.byline .credit {
-		font-size: 12px;
-		opacity: 0.75;
-	}
 	.byline a {
 		color: var(--foreground);
 		text-decoration: none;

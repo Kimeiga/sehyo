@@ -13,27 +13,12 @@
 
 	const SITE = 'https://sehyo.com';
 	const DEFAULT_DESC =
-		'Sehyo (製評, "to make commentary") is the most human social media on earth™. A calm, thoughtful place to share what you really think.';
+		'Sehyo is a masked global timeline for low-stakes posts, plans, asks, offers, and honest conversation without a real-name performance layer.';
 
 	const ogUrl = $derived(`${SITE}${page.url.pathname}`);
-	const ogTitle = $derived('Sehyo — the most human social media on earth™');
-	// OG description (Twitter / Facebook share previews) leans into the
-	// daily prompt when one exists — that's the most enticing thing to
-	// show in a share card.
-	const ogDescription = $derived(
-		data.prompt
-			? `Today on Sehyo: ${data.prompt.text} A calm, thoughtful place to share what you really think.`
-			: DEFAULT_DESC
-	);
-	// Standard <meta description> — surfaced in search results, summary
-	// snippets, and "View page source" tooling. Always lead with the
-	// tagline so the home page reads as Sehyo first, today's question
-	// second.
-	const metaDescription = $derived(
-		data.prompt
-			? `Sehyo — the most human social media on earth™. Today's question: ${data.prompt.text}`
-			: DEFAULT_DESC
-	);
+	const ogTitle = $derived('Sehyo — post without making it your public identity');
+	const ogDescription = $derived(DEFAULT_DESC);
+	const metaDescription = $derived(DEFAULT_DESC);
 	const showLoginModal = $derived(
 		(data as LayoutProps['data'] & { showLoginModal?: boolean }).showLoginModal ?? false
 	);
@@ -83,10 +68,6 @@
 	<meta name="twitter:description" content={ogDescription} />
 	<meta name="twitter:image" content={ogImage} />
 
-	<!-- Per-page description. Not OG, just standard. Lead with the
-	     "the most human social media on earth™" tagline — the home
-	     page used to lose it because the OG copy was overriding it
-	     here too. -->
 	<meta name="description" content={metaDescription} />
 </svelte:head>
 
@@ -108,9 +89,6 @@
 		background: var(--background);
 		color: var(--foreground);
 	}
-
-	/* Author names are masked until the viewer commits to engaging.
-	   Applied at the layout level so every page picks it up. */
 	.app.names-blurred :global(.author-mask) {
 		filter: none;
 		user-select: auto;

@@ -149,3 +149,156 @@ export const botProfiles = sqliteTable('bot_profiles', {
 	created_at: text('created_at'),
 	updated_at: text('updated_at')
 });
+
+export const personas = sqliteTable('personas', {
+	id: text('id').primaryKey(),
+	user_id: text('user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	label: text('label').notNull(),
+	accent: text('accent').notNull(),
+	kind: text('kind', { enum: ['stable', 'ephemeral'] }).notNull().default('stable'),
+	created_at: integer('created_at')
+		.notNull()
+		.default(sql`(unixepoch())`),
+	updated_at: integer('updated_at')
+		.notNull()
+		.default(sql`(unixepoch())`),
+	archived: integer('archived', { mode: 'boolean' }).notNull().default(false)
+});
+
+export const circles = sqliteTable('circles', {
+	id: text('id').primaryKey(),
+	owner_user_id: text('owner_user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	name: text('name').notNull(),
+	description: text('description'),
+	created_at: integer('created_at')
+		.notNull()
+		.default(sql`(unixepoch())`),
+	updated_at: integer('updated_at')
+		.notNull()
+		.default(sql`(unixepoch())`)
+});
+
+export const circleMembers = sqliteTable('circle_members', {
+	id: text('id').primaryKey(),
+	circle_id: text('circle_id')
+		.notNull()
+		.references(() => circles.id, { onDelete: 'cascade' }),
+	user_id: text('user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	role: text('role', { enum: ['owner', 'member'] }).notNull().default('member'),
+	status: text('status', { enum: ['active', 'invited', 'removed'] }).notNull().default('active'),
+	created_at: integer('created_at')
+		.notNull()
+		.default(sql`(unixepoch())`)
+});
+
+export const socialPosts = sqliteTable('social_posts', {
+	id: text('id').primaryKey(),
+	user_id: text('user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	persona_id: text('persona_id').references(() => personas.id, { onDelete: 'set null' }),
+	circle_id: text('circle_id').references(() => circles.id, { onDelete: 'set null' }),
+	kind: text('kind', { enum: ['post', 'ask', 'offer', 'plan'] }).notNull().default('post'),
+	identity_mode: text('identity_mode', {
+		enum: ['masked', 'persona', 'anonymous', 'named']
+	})
+		.notNull()
+		.default('masked'),
+	alias_label: text('alias_label').notNull(),
+	alias_accent: text('alias_accent').notNull(),
+	title: text('title'),
+	body: text('body').notNull(),
+	place: text('place'),
+	happens_at: integer('happens_at'),
+	threshold: integer('threshold'),
+	status: text('status', { enum: ['open', 'met', 'closed', 'cancelled'] }).notNull().default('open'),
+	created_at: integer('created_at')
+		.notNull()
+		.default(sql`(unixepoch())`),
+	updated_at: integer('updated_at')
+		.notNull()
+		.default(sql`(unixepoch())`)
+});
+
+export const socialThreadAliases = sqliteTable('social_thread_aliases', {
+	id: text('id').primaryKey(),
+	post_id: text('post_id')
+		.notNull()
+		.references(() => socialPosts.id, { onDelete: 'cascade' }),
+	user_id: text('user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	label: text('label').notNull(),
+	accent: text('accent').notNull(),
+	created_at: integer('created_at')
+		.notNull()
+		.default(sql`(unixepoch())`)
+});
+
+export const socialComments = sqliteTable('social_comments', {
+	id: text('id').primaryKey(),
+	post_id: text('post_id')
+		.notNull()
+		.references(() => socialPosts.id, { onDelete: 'cascade' }),
+	user_id: text('user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	persona_id: text('persona_id').references(() => personas.id, { onDelete: 'set null' }),
+	thread_alias_id: text('thread_alias_id').references(() => socialThreadAliases.id, {
+		onDelete: 'set null'
+	}),
+	identity_mode: text('identity_mode', {
+		enum: ['thread', 'persona', 'anonymous', 'named']
+	})
+		.notNull()
+		.default('thread'),
+	alias_label: text('alias_label').notNull(),
+	alias_accent: text('alias_accent').notNull(),
+	body: text('body').notNull(),
+	created_at: integer('created_at')
+		.notNull()
+		.default(sql`(unixepoch())`),
+	updated_at: integer('updated_at')
+		.notNull()
+		.default(sql`(unixepoch())`)
+});
+
+export const socialCommitments = sqliteTable('social_commitments', {
+	id: text('id').primaryKey(),
+	post_id: text('post_id')
+		.notNull()
+		.references(() => socialPosts.id, { onDelete: 'cascade' }),
+	user_id: text('user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	status: text('status', { enum: ['committed', 'done', 'cancelled'] }).notNull().default('committed'),
+	created_at: integer('created_at')
+		.notNull()
+		.default(sql`(unixepoch())`),
+	updated_at: integer('updated_at')
+		.notNull()
+		.default(sql`(unixepoch())`)
+});
+
+export const socialReveals = sqliteTable('social_reveals', {
+	id: text('id').primaryKey(),
+	owner_user_id: text('owner_user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	viewer_user_id: text('viewer_user_id')
+		.notNull()
+		.references(() => user.id, { onDelete: 'cascade' }),
+	persona_id: text('persona_id').references(() => personas.id, { onDelete: 'cascade' }),
+	post_id: text('post_id').references(() => socialPosts.id, { onDelete: 'cascade' }),
+	comment_id: text('comment_id').references(() => socialComments.id, { onDelete: 'cascade' }),
+	scope: text('scope', { enum: ['persona', 'post', 'comment'] }).notNull(),
+	created_at: integer('created_at')
+		.notNull()
+		.default(sql`(unixepoch())`)
+});

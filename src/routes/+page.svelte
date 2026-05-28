@@ -1,537 +1,140 @@
 <script lang="ts">
 	import type { PageProps } from './$types';
 	import { invalidateAll } from '$app/navigation';
-	import { tick, untrack, type Snippet } from 'svelte';
 	import { authClient } from '$lib/auth-client';
-	import { promptSignIn } from '$lib/stores/sign-in-modal';
-	import { Pencil, MoreHorizontal, Check, ArrowUp } from 'lucide-svelte';
-	import { writable } from 'svelte/store';
 	import {
-		connectForumTyping,
-		type ForumTypingHandle,
-		type LiveCursor,
-		type TypingUser
-	} from '$lib/stores/forum-typing';
+		CalendarDays,
+		CheckCircle2,
+		Eye,
+		Globe2,
+		HandHeart,
+		HelpCircle,
+		LockKeyhole,
+		MessageCircle,
+		Plus,
+		Send,
+		Users
+	} from 'lucide-svelte';
 
 	let { data }: PageProps = $props();
 
-	interface CommentRow {
-		id: string;
-		content: string;
-		created_at: number;
-		updated_at?: number | null;
-		fromTyping?: boolean;
-		user_id: string;
-		parent_comment_id: string | null;
-		user: {
-			id: string;
-			display_name: string | null;
-			username: string | null;
-		};
-		sort_order?: number | null;
-	}
+	type Kind = 'post' | 'ask' | 'offer' | 'plan';
+	type PostIdentity = 'masked' | 'persona' | 'anonymous' | 'named';
+	type CommentIdentity = 'thread' | 'persona' | 'anonymous' | 'named';
 
-	interface AnswerPostRow {
+	type Persona = {
 		id: string;
-		user_id: string;
-		content: string;
+		label: string;
+		accent: string;
+		kind: 'stable' | 'ephemeral';
+	};
+
+	type Circle = {
+		id: string;
+		name: string;
+		description: string | null;
+		role: 'owner' | 'member';
+		member_count: number;
+	};
+
+	type Author = {
+		label: string;
+		accent: string;
+		sublabel: string | null;
+		mine: boolean;
+		revealed: boolean;
+		mode: string;
+	};
+
+	type SocialComment = {
+		id: string;
+		post_id: string;
+		body: string;
 		created_at: number;
-		display_name: string | null;
-		username?: string | null;
-		bot_id: string | null;
+		updated_at: number;
+		can_reveal: boolean;
+		author: Author;
+	};
+
+	type SocialPost = {
+		id: string;
+		kind: Kind;
+		title: string | null;
+		body: string;
+		place: string | null;
+		happens_at: number | null;
+		threshold: number | null;
+		status: string;
+		created_at: number;
+		updated_at: number;
+		circle: { id: string; name: string } | null;
 		comment_count: number;
-		is_question?: number;
-		image?: string | null;
-	}
-
-	interface CommentEditRow {
-		id: string;
-		comment_id: string;
-		content: string;
-		edited_at: number;
-	}
-
-	type CommentHistoryState = {
-		loading: boolean;
-		error: string | null;
-		edits: CommentEditRow[];
+		commitment_count: number;
+		my_commitment_status: string | null;
+		can_commit: boolean;
+		can_reveal: boolean;
+		author: Author;
+		comments: SocialComment[];
 	};
 
-	type VisualTypingUser = TypingUser & {
-		key: string;
-		closing: boolean;
-		removeAt: number | null;
-	};
+	const posts = $derived((data.feed ?? []) as SocialPost[]);
+	const personas = $derived((data.personas ?? []) as Persona[]);
+	const circles = $derived((data.circles ?? []) as Circle[]);
+	const isRealAccount = $derived(!!data.user && !data.user.isAnonymous);
 
-	const MAX_NEST_DEPTH = 3;
-	const TYPING_CLOSE_MS = 260;
-
-	function newestCommentFirst(a: CommentRow, b: CommentRow): number {
-		return b.created_at - a.created_at || (b.sort_order ?? 0) - (a.sort_order ?? 0);
-	}
-
-	function childrenOf(commentsForPost: CommentRow[], commentId: string): CommentRow[] {
-		return commentsForPost
-			.filter((c) => c.parent_comment_id === commentId)
-			.sort(newestCommentFirst);
-	}
-
-	function topLevelOf(commentsForPost: CommentRow[]): CommentRow[] {
-		return commentsForPost.filter((c) => c.parent_comment_id === null).sort(newestCommentFirst);
-	}
-
-	let composerValue = $state('');
+	let kind = $state<Kind>('post');
+	let body = $state('');
+	let title = $state('');
+	let place = $state('');
+	let happensLocal = $state('');
+	let threshold = $state(3);
+	let identityMode = $state<PostIdentity>('masked');
+	let personaLabel = $state('');
+	let circleId = $state('');
 	let posting = $state(false);
 
-	/* Send-button label is picked server-side in +page.server.ts and
-	   delivered via `data.sendLabel`. Doing it there guarantees the
-	   SSR HTML already carries the chosen variant — no flicker from
-	   "Send" → random on hydration. */
-	const sendLabel = $derived(data.sendLabel ?? 'Send');
-	const sendLabelMono = $derived(!!data.sendLabelMono);
+	let circleName = $state('');
+	let circleDescription = $state('');
+	let circleUsernames = $state('');
+	let creatingCircle = $state(false);
 
-	let editing = $state(false);
-	let editValue = $state('');
-	let savingEdit = $state(false);
-	let deleting = $state(false);
-	let kebabOpen = $state(false);
+	let commentDrafts = $state<Record<string, string>>({});
+	let commentModes = $state<Record<string, CommentIdentity>>({});
+	let commentPersonaLabels = $state<Record<string, string>>({});
+	let commenting = $state<Record<string, boolean>>({});
+	let committing = $state<Record<string, boolean>>({});
+	let revealInputs = $state<Record<string, string>>({});
+	let revealing = $state<Record<string, boolean>>({});
 
-	function toggleKebab(e: MouseEvent) {
-		e.stopPropagation();
-		kebabOpen = !kebabOpen;
-	}
-
-	$effect(() => {
-		if (!kebabOpen) return;
-		function onClickOutside() {
-			kebabOpen = false;
+	const kindConfig: Record<
+		Kind,
+		{ label: string; action: string; icon: typeof MessageCircle; placeholder: string }
+	> = {
+		post: {
+			label: 'Post',
+			action: 'Post',
+			icon: MessageCircle,
+			placeholder: "what's funny, interesting, cursed, or worth saying?"
+		},
+		ask: {
+			label: 'Ask',
+			action: 'Ask',
+			icon: HelpCircle,
+			placeholder: 'what do you need advice or perspective on?'
+		},
+		offer: {
+			label: 'Offer',
+			action: 'Offer',
+			icon: HandHeart,
+			placeholder: 'what can you help with?'
+		},
+		plan: {
+			label: 'Plan',
+			action: 'Start plan',
+			icon: CalendarDays,
+			placeholder: "what happens if enough people commit?"
 		}
-		const t = setTimeout(() => document.addEventListener('click', onClickOutside), 0);
-		return () => {
-			clearTimeout(t);
-			document.removeEventListener('click', onClickOutside);
-		};
-	});
-
-	let worldTab = $state<'post' | 'ask'>('post');
-	let worldValue = $state('');
-	let postingWorld = $state(false);
-
-	type NotifyState = NotificationPermission | 'unsupported' | 'ios-pwa-required' | null;
-	let notificationPermission = $state<NotifyState>(null);
-	$effect(() => {
-		if (typeof window === 'undefined') return;
-		const ua = window.navigator.userAgent;
-		const isIos = /iPad|iPhone|iPod/.test(ua) && !('MSStream' in window);
-		const isStandalone =
-			(window.navigator as { standalone?: boolean }).standalone === true ||
-			window.matchMedia('(display-mode: standalone)').matches;
-
-		if ('Notification' in window) {
-			notificationPermission = Notification.permission;
-			return;
-		}
-		if (isIos && !isStandalone) {
-			notificationPermission = 'ios-pwa-required';
-			return;
-		}
-		notificationPermission = 'unsupported';
-	});
-
-	async function enableNotifications() {
-		if (typeof window === 'undefined') return;
-		if (!('Notification' in window)) {
-			alert('Your browser does not support notifications.');
-			return;
-		}
-		try {
-			const result = await Notification.requestPermission();
-			notificationPermission = result;
-			if (result === 'granted') {
-				new Notification('Sehyo notifications enabled', {
-					body: 'You’ll be told when a new question is posited.',
-					icon: '/pwa-192x192.png'
-				});
-			}
-		} catch (err) {
-			console.error('Permission request failed:', err);
-		}
-	}
-
-	/* Unified reply state — covers both top-level "add a comment" on a
-	   post AND nested replies to a comment. Exactly ONE composer is
-	   ever open at a time: switching targets clears the previous
-	   composer's text, so the user can't get into a state where a
-	   forgotten composer is dangling open somewhere above. */
-	type ReplyTarget = { postId: string; parentCommentId: string | null };
-	let activeReplyTarget = $state<ReplyTarget | null>(null);
-
-	// Bot replies pushed live over the WS after the user answers
-	// (server choreography). Keyed by postId, appended to the
-	// server-loaded comments below so they appear without a reload.
-	let liveComments = $state<Record<string, CommentRow[]>>({});
-	let liveAnswers = $state<Record<string, AnswerPostRow>>({});
-	let optimisticMyAnswer = $state<AnswerPostRow | null>(null);
-	const myAnswer = $derived((data.myAnswer as AnswerPostRow | null) ?? optimisticMyAnswer);
-	const hasAnswered = $derived(!!myAnswer);
-	const canReadOwnReplies = $derived(!!data.user || !!optimisticMyAnswer);
-
-	const visibleAnswers = $derived.by<AnswerPostRow[]>(() => {
-		const byId = new Map<string, AnswerPostRow>();
-		for (const answer of data.answers ?? []) byId.set(answer.id, answer as AnswerPostRow);
-		for (const answer of Object.values(liveAnswers)) byId.set(answer.id, answer);
-		if (myAnswer) byId.delete(myAnswer.id);
-		return Array.from(byId.values()).sort(
-			(a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id)
-		);
-	});
-
-	const commentsByPost = $derived.by<Record<string, CommentRow[]>>(() => {
-		const base: Record<string, CommentRow[]> = {
-			...((data as { todayCommentsByPost?: Record<string, CommentRow[]> }).todayCommentsByPost ??
-				{}),
-			...((data as { commentsByPost?: Record<string, CommentRow[]> }).commentsByPost ?? {})
-		};
-		for (const [postId, extra] of Object.entries(liveComments)) {
-			const existing = base[postId] ?? [];
-			const byId = new Map(existing.map((c) => [c.id, c]));
-			for (const comment of extra) byId.set(comment.id, comment);
-			base[postId] = Array.from(byId.values());
-		}
-		return base;
-	});
-
-	let replyContent = $state('');
-	let submittingReply = $state(false);
-	let editingCommentId = $state<string | null>(null);
-	let commentEditValue = $state('');
-	let savingCommentEdit = $state(false);
-	let historyOpenCommentId = $state<string | null>(null);
-	let commentHistories = $state<Record<string, CommentHistoryState>>({});
-
-	function isActiveReply(postId: string, parentCommentId: string | null): boolean {
-		return (
-			!!activeReplyTarget &&
-			activeReplyTarget.postId === postId &&
-			activeReplyTarget.parentCommentId === parentCommentId
-		);
-	}
-
-	function closeReply() {
-		activeReplyTarget = null;
-		replyContent = '';
-	}
-
-	async function openReply(target: ReplyTarget) {
-		activeReplyTarget = target;
-		replyContent = '';
-		// Focus the textarea on next tick so typing can start
-		// immediately. No scrollIntoView — the composer just appears
-		// where the user clicked.
-		await tick();
-		if (typeof document === 'undefined') return;
-		const selector = target.parentCommentId
-			? `form.reply-composer[data-reply-target="reply-${target.parentCommentId}"]`
-			: `form.reply-composer[data-reply-target="post-${target.postId}"]`;
-		const ta = document.querySelector<HTMLTextAreaElement>(`${selector} textarea`);
-		ta?.focus({ preventScroll: true });
-	}
-
-	function toggleReplyTarget(target: ReplyTarget) {
-		if (isActiveReply(target.postId, target.parentCommentId)) {
-			closeReply();
-		} else {
-			openReply(target);
-		}
-	}
-
-	const isAnon = $derived(!!data.user && !!data.user.isAnonymous);
-	const isFullySignedIn = $derived(!!data.user && !data.user.isAnonymous);
-
-	/* Forum typing indicator.
-
-	   Dev gate: Vite dev only (import.meta.env.DEV). Skips session checks
-	   and gives each browser tab its own pseudo-identity so a single
-	   developer can test the typing flow across tabs without a second
-	   real sign-in. The Worker mirrors this — when it sees a localhost
-	   host it skips cookie validation and trusts the URL params.
-
-	   Production signed-out viewers connect as watch-only sockets so
-	   the room can still feel alive before they answer. The Worker
-	   refuses to broadcast client frames from watch-only sockets.
-
-	   The writable keeps the raw Worker payload separate from the
-	   visual typing rows, which need a short closing state after the
-	   Worker stops reporting someone as active. */
-	const TYPING_TAG = '[typing/page]';
-	const tdbg = (...args: unknown[]) => console.debug(TYPING_TAG, ...args);
-
-	const isDevTyping = import.meta.env.DEV;
-
-	const devTabIdentity = (() => {
-		if (!isDevTyping || typeof window === 'undefined') return null;
-		let id = sessionStorage.getItem('dev-typing-tab-id');
-		const wasExisting = !!id;
-		if (!id) {
-			id = 'dev-' + Math.random().toString(36).slice(2, 10);
-			sessionStorage.setItem('dev-typing-tab-id', id);
-		}
-		tdbg('devTabIdentity resolved', { id, wasExisting });
-		return { userId: id, displayName: `Tab ${id.slice(-4)}` };
-	})();
-
-	const guestWatchIdentity = (() => {
-		const shouldUseWatchOnly = !data.user || data.user.isAnonymous;
-		if (isDevTyping || typeof window === 'undefined' || !shouldUseWatchOnly) return null;
-		let id = sessionStorage.getItem('watch-typing-tab-id');
-		const wasExisting = !!id;
-		if (!id) {
-			id = 'viewer_' + Math.random().toString(36).slice(2, 12);
-			sessionStorage.setItem('watch-typing-tab-id', id);
-		}
-		tdbg('guestWatchIdentity resolved', { id, wasExisting });
-		return { userId: id, displayName: 'Viewer', watchOnly: true };
-	})();
-
-	const typingConnectionIdentity = devTabIdentity ?? guestWatchIdentity;
-
-	let worldTypingHandle: ForumTypingHandle | null = null;
-	const worldTypingUsers = writable<TypingUser[]>([]);
-	let visualTypingUsers = $state<VisualTypingUser[]>([]);
-	let liveCursors = $state<LiveCursor[]>([]);
-	let visualTypingCloseTimer: ReturnType<typeof setTimeout> | null = null;
-
-	$effect(() => {
-		// Connect for every browser viewer. Signed-out viewers use a
-		// watch-only identity so they can receive bot presence without
-		// being allowed to publish typing frames.
-		const gatePassed = isDevTyping || !!data.user || !!guestWatchIdentity;
-		tdbg('$effect fire', {
-			isDev: isDevTyping,
-			isFullySignedIn,
-			hasMyAnswer: hasAnswered,
-			namesBlurred: data.namesBlurred,
-			userId: data.user?.id ?? null,
-			typingIdentity: typingConnectionIdentity,
-			gatePassed
-		});
-		if (!gatePassed) {
-			tdbg('$effect gate BLOCKED — bailing');
-			return;
-		}
-		tdbg('$effect gate PASSED — calling connectForumTyping');
-		const handle = connectForumTyping('forum', typingConnectionIdentity);
-		worldTypingHandle = handle;
-		const unsub = handle.typingUsers.subscribe((v) => {
-			tdbg('typingUsers subscriber fired', { len: v.length, users: v });
-			worldTypingUsers.set(v);
-		});
-		const unsubLive = handle.liveComment.subscribe((lc) => {
-			if (!lc) return;
-			const c = lc.comment as CommentRow;
-			if (!c || typeof c.id !== 'string') return;
-			tdbg('liveComment received', { postId: lc.postId, commentId: c.id });
-			upsertLiveComment(lc.postId, prepareIncomingComment(lc.postId, c));
-		});
-		const unsubPost = handle.livePost.subscribe((lp) => {
-			if (!lp) return;
-			const post = lp.post as AnswerPostRow;
-			if (!post || typeof post.id !== 'string') return;
-			tdbg('livePost received', { postId: post.id });
-			upsertLivePost(post);
-		});
-		const unsubCursors = handle.liveCursors.subscribe((v) => {
-			liveCursors = v;
-		});
-		return () => {
-			tdbg('$effect cleanup — unsubscribing + disconnecting');
-			unsub();
-			unsubLive();
-			unsubPost();
-			unsubCursors();
-			handle.disconnect();
-			worldTypingHandle = null;
-			worldTypingUsers.set([]);
-			visualTypingUsers = [];
-			liveCursors = [];
-		};
-	});
-
-	$effect(() => {
-		const selfId = typingSelfId;
-		const unsubscribe = worldTypingUsers.subscribe((users) => {
-			untrack(() => syncVisualTypingUsers(users.filter((u) => u.userId !== selfId)));
-		});
-		return unsubscribe;
-	});
-
-	$effect(() => {
-		return () => {
-			if (visualTypingCloseTimer) clearTimeout(visualTypingCloseTimer);
-		};
-	});
-
-	/* Sender-side highlight: which threadId most-recently fired a real
-	   send. The composer matching that id gets the green halo. Cleared
-	   after 5s (matches receiver TTL). Single string is fine because
-	   the user can only physically type in one composer at a time. */
-	let sendingActiveThreadId = $state<string | null>(null);
-	let sendingTimer: ReturnType<typeof setTimeout> | null = null;
-	const SENDING_VISIBLE_MS = 5000;
-
-	function notifyForThread(threadId: string) {
-		tdbg('notifyForThread fired', { threadId });
-		const sent = worldTypingHandle?.notifyTyping(threadId) ?? false;
-		tdbg('notifyForThread result', { threadId, sent });
-		if (sent) {
-			sendingActiveThreadId = threadId;
-			if (sendingTimer) clearTimeout(sendingTimer);
-			sendingTimer = setTimeout(() => {
-				tdbg('sendingActive cleared (timer expired)', { threadId });
-				sendingActiveThreadId = null;
-				sendingTimer = null;
-			}, SENDING_VISIBLE_MS);
-		}
-	}
-
-	function onWorldInput() {
-		notifyForThread('world');
-	}
-	function onCommentInput(postId: string) {
-		notifyForThread('post-' + postId);
-	}
-	function onReplyInput(commentId: string) {
-		notifyForThread('reply-' + commentId);
-	}
-
-	function upsertLiveComment(postId: string, comment: CommentRow) {
-		const cur = liveComments[postId] ?? [];
-		liveComments = {
-			...liveComments,
-			[postId]: [comment, ...cur.filter((c) => c.id !== comment.id)]
-		};
-	}
-
-	function upsertLivePost(post: AnswerPostRow) {
-		if (myAnswer?.id === post.id) return;
-		liveAnswers = { ...liveAnswers, [post.id]: post };
-	}
-
-	const typingSelfId = $derived(typingConnectionIdentity?.userId ?? data.user?.id);
-
-	function typingKey(user: Pick<TypingUser, 'threadId' | 'userId'>): string {
-		return `${user.threadId}:${user.userId}`;
-	}
-
-	function syncVisualTypingUsers(activeUsers: TypingUser[]) {
-		const now = Date.now();
-		const activeKeys = new Set(activeUsers.map(typingKey));
-		const previous = new Map(visualTypingUsers.map((u) => [u.key, u]));
-		const next: VisualTypingUser[] = activeUsers.map((user) => ({
-			...(previous.get(typingKey(user)) ?? {}),
-			...user,
-			key: typingKey(user),
-			closing: false,
-			removeAt: null
-		}));
-
-		for (const user of visualTypingUsers) {
-			if (activeKeys.has(user.key)) continue;
-			if (user.closing) {
-				if ((user.removeAt ?? 0) > now) next.push(user);
-				continue;
-			}
-			next.push({ ...user, closing: true, removeAt: now + TYPING_CLOSE_MS });
-		}
-
-		visualTypingUsers = next;
-		scheduleVisualTypingPrune();
-	}
-
-	function scheduleVisualTypingPrune() {
-		if (visualTypingCloseTimer) {
-			clearTimeout(visualTypingCloseTimer);
-			visualTypingCloseTimer = null;
-		}
-		const now = Date.now();
-		const nextRemoveAt = Math.min(
-			...visualTypingUsers.filter((u) => u.closing && u.removeAt).map((u) => u.removeAt as number)
-		);
-		if (!Number.isFinite(nextRemoveAt)) return;
-		visualTypingCloseTimer = setTimeout(
-			() => {
-				const pruneAt = Date.now();
-				visualTypingUsers = visualTypingUsers.filter(
-					(u) => !u.closing || (u.removeAt ?? 0) > pruneAt
-				);
-				scheduleVisualTypingPrune();
-			},
-			Math.max(0, nextRemoveAt - now)
-		);
-	}
-
-	function visualTypingForThread(threadId: string | null | undefined): VisualTypingUser[] {
-		if (!threadId) return [];
-		return visualTypingUsers.filter((u) => u.threadId === threadId);
-	}
-
-	function commentThreadId(postId: string, comment: CommentRow): string {
-		return comment.parent_comment_id ? `reply-${comment.parent_comment_id}` : `post-${postId}`;
-	}
-
-	function prepareIncomingComment(postId: string, comment: CommentRow): CommentRow {
-		const threadId = commentThreadId(postId, comment);
-		const key = typingKey({ threadId, userId: comment.user_id });
-		const fromTyping = visualTypingUsers.some((u) => u.key === key);
-		if (fromTyping) {
-			visualTypingUsers = visualTypingUsers.filter((u) => u.key !== key);
-			scheduleVisualTypingPrune();
-		}
-		return { ...comment, fromTyping };
-	}
-
-	// Typing rows use the same branch geometry as replies so a posted
-	// comment can replace the indicator with minimal layout change.
-
-	function firstName(name: string | null | undefined): string {
-		const trimmed = name?.trim();
-		if (!trimmed) return 'Anonymous';
-		return trimmed.split(/\s+/)[0] ?? trimmed;
-	}
-
-	function hashString(value: string): number {
-		let hash = 2166136261;
-		for (let i = 0; i < value.length; i += 1) {
-			hash ^= value.charCodeAt(i);
-			hash = Math.imul(hash, 16777619);
-		}
-		return hash >>> 0;
-	}
-
-	function personColor(
-		userId: string | null | undefined,
-		displayName?: string | null,
-		username?: string | null
-	): string {
-		const seed = userId?.trim() || username?.trim() || displayName?.trim() || 'anonymous';
-		const hash = hashString(seed);
-		const hueBands: Array<[number, number]> = [
-			[8, 28],
-			[38, 66],
-			[142, 172],
-			[190, 220],
-			[238, 270],
-			[292, 330]
-		];
-		const [start, end] = hueBands[hash % hueBands.length];
-		const hue = start + ((hash >>> 8) % (end - start + 1));
-		const chroma = 0.135 + ((hash >>> 16) % 28) / 1000;
-		return `oklch(82% ${chroma.toFixed(3)} ${hue}deg)`;
-	}
-
-	function changeMyName() {
-		promptSignIn('Sign in to change your name.');
-	}
+	};
 
 	async function ensureSession() {
 		if (data.user) return true;
@@ -539,266 +142,188 @@
 			await authClient.signIn.anonymous();
 			return true;
 		} catch (err) {
-			console.error('Anon sign-in failed:', err);
+			console.error('Anonymous session failed:', err);
+			alert('Could not start an anonymous session.');
 			return false;
 		}
 	}
 
-	async function submitAnswer() {
-		const content = composerValue.trim();
-		if (!content || posting) return;
+	async function signInGoogle() {
+		await authClient.signIn.social({ provider: 'google', callbackURL: '/' });
+	}
+
+	async function submitPost(e: SubmitEvent) {
+		e.preventDefault();
+		const cleanBody = body.trim();
+		if (!cleanBody || posting) return;
+		if (!(await ensureSession())) return;
+
 		posting = true;
 		try {
-			if (!(await ensureSession())) {
-				alert('Could not start a session. Try again.');
-				return;
-			}
-			const res = await fetch('/api/prompt/answer', {
+			const res = await fetch('/api/social/posts', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				credentials: 'include',
-				body: JSON.stringify({ content })
+				body: JSON.stringify({
+					kind,
+					title: title.trim(),
+					body: cleanBody,
+					place: place.trim(),
+					happens_at: happensLocal ? Math.floor(Date.parse(happensLocal) / 1000) : null,
+					threshold,
+					identity_mode: identityMode,
+					persona_label: personaLabel.trim(),
+					circle_id: circleId || null
+				})
 			});
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			const payload = (await res.json().catch(() => null)) as {
-				id?: string;
-				post?: AnswerPostRow;
-			} | null;
-			if (payload?.post) {
-				optimisticMyAnswer = payload.post;
-			} else if (payload?.id) {
-				optimisticMyAnswer = {
-					id: payload.id,
-					user_id: data.user?.id ?? 'anonymous',
-					content,
-					created_at: Math.floor(Date.now() / 1000),
-					display_name: data.user?.name ?? 'You',
-					username: data.user?.username ?? null,
-					bot_id: null,
-					comment_count: 0,
-					image: data.user?.image ?? null
-				};
-			}
-			composerValue = '';
+			if (!res.ok) throw new Error(await responseMessage(res));
+			body = '';
+			title = '';
+			place = '';
+			happensLocal = '';
+			threshold = 3;
+			await invalidateAll();
 		} catch (err) {
-			console.error('Answer post failed:', err);
-			alert('Could not post. Try again.');
+			alert(err instanceof Error ? err.message : 'Could not post.');
 		} finally {
 			posting = false;
 		}
 	}
 
-	function onComposerSubmit(e: SubmitEvent) {
+	async function createCircle(e: SubmitEvent) {
 		e.preventDefault();
-		submitAnswer();
-	}
-
-	function onComposerKeydown(e: KeyboardEvent) {
-		// Plain Enter submits; Shift+Enter (or Cmd/Ctrl+Enter on a
-		// platform that prefers that combo) keeps inserting a newline.
-		if (e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
-			e.preventDefault();
-			submitAnswer();
-		}
-	}
-
-	function startEdit() {
-		if (!myAnswer) return;
-		editValue = myAnswer.content;
-		editing = true;
-	}
-
-	function cancelEdit() {
-		editing = false;
-		editValue = '';
-		kebabOpen = false;
-	}
-
-	async function saveEdit() {
-		if (!myAnswer) return;
-		const content = editValue.trim();
-		if (!content || savingEdit) return;
-		savingEdit = true;
+		if (!circleName.trim() || creatingCircle) return;
+		if (!(await ensureSession())) return;
+		creatingCircle = true;
 		try {
-			const res = await fetch(`/api/posts/${myAnswer.id}`, {
-				method: 'PATCH',
+			const usernames = circleUsernames
+				.split(',')
+				.map((u) => u.trim())
+				.filter(Boolean);
+			const res = await fetch('/api/social/circles', {
+				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				credentials: 'include',
-				body: JSON.stringify({ content })
+				body: JSON.stringify({
+					name: circleName,
+					description: circleDescription,
+					usernames
+				})
 			});
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			if (optimisticMyAnswer?.id === myAnswer.id) {
-				optimisticMyAnswer = { ...optimisticMyAnswer, content };
-			}
-			editing = false;
-			editValue = '';
+			if (!res.ok) throw new Error(await responseMessage(res));
+			circleName = '';
+			circleDescription = '';
+			circleUsernames = '';
 			await invalidateAll();
 		} catch (err) {
-			console.error('Edit failed:', err);
-			alert('Could not save. Try again.');
+			alert(err instanceof Error ? err.message : 'Could not create circle.');
 		} finally {
-			savingEdit = false;
+			creatingCircle = false;
 		}
 	}
 
-	async function deleteAnswer() {
-		if (!myAnswer || deleting) return;
-		deleting = true;
+	async function submitComment(e: SubmitEvent, postId: string) {
+		e.preventDefault();
+		const draft = (commentDrafts[postId] ?? '').trim();
+		if (!draft || commenting[postId]) return;
+		if (!(await ensureSession())) return;
+		commenting = { ...commenting, [postId]: true };
 		try {
-			const res = await fetch(`/api/posts/${myAnswer.id}`, {
-				method: 'DELETE',
+			const res = await fetch(`/api/social/posts/${postId}/comments`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'include',
+				body: JSON.stringify({
+					body: draft,
+					identity_mode: commentModes[postId] ?? 'thread',
+					persona_label: commentPersonaLabels[postId] ?? ''
+				})
+			});
+			if (!res.ok) throw new Error(await responseMessage(res));
+			commentDrafts = { ...commentDrafts, [postId]: '' };
+			await invalidateAll();
+		} catch (err) {
+			alert(err instanceof Error ? err.message : 'Could not comment.');
+		} finally {
+			commenting = { ...commenting, [postId]: false };
+		}
+	}
+
+	async function toggleCommit(postId: string) {
+		if (committing[postId]) return;
+		if (!(await ensureSession())) return;
+		committing = { ...committing, [postId]: true };
+		try {
+			const res = await fetch(`/api/social/posts/${postId}/commit`, {
+				method: 'POST',
 				credentials: 'include'
 			});
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			editing = false;
-			editValue = '';
-			composerValue = '';
-			if (optimisticMyAnswer?.id === myAnswer.id) optimisticMyAnswer = null;
+			if (!res.ok) throw new Error(await responseMessage(res));
 			await invalidateAll();
 		} catch (err) {
-			console.error('Delete failed:', err);
-			alert('Could not delete. Try again.');
+			alert(err instanceof Error ? err.message : 'Could not update commitment.');
 		} finally {
-			deleting = false;
+			committing = { ...committing, [postId]: false };
 		}
 	}
 
-	async function submitWorld(e: SubmitEvent) {
-		e.preventDefault();
-		const content = worldValue.trim();
-		if (!content || postingWorld) return;
-		const endpoint = worldTab === 'ask' ? '/api/posts/question' : '/api/posts/free';
-		postingWorld = true;
+	async function reveal(targetType: 'post' | 'comment' | 'persona', targetId: string) {
+		const key = `${targetType}:${targetId}`;
+		const username = (revealInputs[key] ?? '').trim();
+		if (!username || revealing[key]) return;
+		if (!(await ensureSession())) return;
+		revealing = { ...revealing, [key]: true };
 		try {
-			const res = await fetch(endpoint, {
+			const res = await fetch('/api/social/reveals', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				credentials: 'include',
-				body: JSON.stringify({ content })
+				body: JSON.stringify({
+					target_type: targetType,
+					target_id: targetId,
+					viewer_username: username
+				})
 			});
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			worldValue = '';
+			if (!res.ok) throw new Error(await responseMessage(res));
+			revealInputs = { ...revealInputs, [key]: '' };
 			await invalidateAll();
 		} catch (err) {
-			console.error('World post failed:', err);
-			alert('Could not post. Try again.');
+			alert(err instanceof Error ? err.message : 'Could not reveal.');
 		} finally {
-			postingWorld = false;
+			revealing = { ...revealing, [key]: false };
 		}
 	}
 
-	async function submitActiveReply(e: SubmitEvent) {
-		e.preventDefault();
-		if (!activeReplyTarget || submittingReply) return;
-		const content = replyContent.trim();
-		if (!content) return;
-		const target = activeReplyTarget;
-		submittingReply = true;
-		try {
-			if (!(await ensureSession())) return;
-			const body: { content: string; parent_comment_id?: string } = { content };
-			if (target.parentCommentId) body.parent_comment_id = target.parentCommentId;
-			const res = await fetch(`/api/posts/${target.postId}/comments`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				credentials: 'include',
-				body: JSON.stringify(body)
-			});
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			const payload = (await res.json().catch(() => null)) as { comment?: CommentRow } | null;
-			if (payload?.comment) {
-				upsertLiveComment(target.postId, prepareIncomingComment(target.postId, payload.comment));
-			}
-			closeReply();
-			void invalidateAll().catch((err) => console.error('Reply sync failed:', err));
-		} catch (err) {
-			console.error('Reply failed:', err);
-			alert('Could not post reply. Try again.');
-		} finally {
-			submittingReply = false;
-		}
+	function setCommentDraft(postId: string, value: string) {
+		commentDrafts = { ...commentDrafts, [postId]: value };
 	}
 
-	function isCommentEdited(comment: CommentRow): boolean {
-		return (comment.updated_at ?? comment.created_at) > comment.created_at;
+	function setCommentMode(postId: string, value: CommentIdentity) {
+		commentModes = { ...commentModes, [postId]: value };
 	}
 
-	function startCommentEdit(comment: CommentRow) {
-		closeReply();
-		historyOpenCommentId = null;
-		editingCommentId = comment.id;
-		commentEditValue = comment.content;
+	function setCommentPersona(postId: string, value: string) {
+		commentPersonaLabels = { ...commentPersonaLabels, [postId]: value };
 	}
 
-	function cancelCommentEdit() {
-		editingCommentId = null;
-		commentEditValue = '';
+	function setRevealInput(key: string, value: string) {
+		revealInputs = { ...revealInputs, [key]: value };
 	}
 
-	function clearCommentHistory(commentId: string) {
-		const { [commentId]: _removed, ...rest } = commentHistories;
-		commentHistories = rest;
+	function formatTime(seconds: number) {
+		const diff = Math.floor(Date.now() / 1000 - seconds);
+		if (diff < 60) return 'now';
+		if (diff < 3600) return `${Math.floor(diff / 60)}m`;
+		if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+		if (diff < 604800) return `${Math.floor(diff / 86400)}d`;
+		return new Date(seconds * 1000).toLocaleDateString(undefined, {
+			month: 'short',
+			day: 'numeric'
+		});
 	}
 
-	async function saveCommentEdit(e: SubmitEvent, postId: string, comment: CommentRow) {
-		e.preventDefault();
-		const content = commentEditValue.trim();
-		if (!content || savingCommentEdit) return;
-		if (content === comment.content.trim()) {
-			cancelCommentEdit();
-			return;
-		}
-		savingCommentEdit = true;
-		try {
-			const res = await fetch(`/api/comments/${comment.id}`, {
-				method: 'PATCH',
-				headers: { 'Content-Type': 'application/json' },
-				credentials: 'include',
-				body: JSON.stringify({ content })
-			});
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			const payload = (await res.json().catch(() => null)) as { comment?: CommentRow } | null;
-			if (payload?.comment) upsertLiveComment(postId, payload.comment);
-			clearCommentHistory(comment.id);
-			cancelCommentEdit();
-			void invalidateAll().catch((err) => console.error('Comment edit sync failed:', err));
-		} catch (err) {
-			console.error('Comment edit failed:', err);
-			alert('Could not edit comment. Try again.');
-		} finally {
-			savingCommentEdit = false;
-		}
-	}
-
-	async function toggleCommentHistory(commentId: string) {
-		if (historyOpenCommentId === commentId) {
-			historyOpenCommentId = null;
-			return;
-		}
-		historyOpenCommentId = commentId;
-		if (commentHistories[commentId]?.edits.length || commentHistories[commentId]?.loading) return;
-		commentHistories = {
-			...commentHistories,
-			[commentId]: { loading: true, error: null, edits: [] }
-		};
-		try {
-			const res = await fetch(`/api/comments/${commentId}?history=1`, { credentials: 'include' });
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			const payload = (await res.json()) as { edits?: CommentEditRow[] };
-			commentHistories = {
-				...commentHistories,
-				[commentId]: { loading: false, error: null, edits: payload.edits ?? [] }
-			};
-		} catch (err) {
-			console.error('Comment history failed:', err);
-			commentHistories = {
-				...commentHistories,
-				[commentId]: { loading: false, error: 'Could not load edit history.', edits: [] }
-			};
-		}
-	}
-
-	function formatCommentEditTime(seconds: number): string {
+	function formatPlanTime(seconds: number | null) {
+		if (!seconds) return null;
 		return new Date(seconds * 1000).toLocaleString(undefined, {
 			month: 'short',
 			day: 'numeric',
@@ -807,1334 +332,812 @@
 		});
 	}
 
-	function formatDate(iso: string) {
-		const d = new Date(iso + 'T00:00:00Z');
-		return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+	async function responseMessage(res: Response) {
+		const body = await res.json().catch(() => null);
+		return body?.message ?? body?.error ?? `HTTP ${res.status}`;
 	}
 </script>
 
 <svelte:head>
-	<title>Sehyo — share your thoughts</title>
+	<title>Sehyo · masked timeline</title>
 </svelte:head>
 
 <main class="page">
-	{#if !data.prompt}
-		<p class="empty">No prompt today yet. Check back shortly.</p>
-	{:else}
-		<section class="today">
-			<p class="section-label">Question</p>
-			<h1 class="prompt-today">{data.prompt.text}</h1>
-			{#if !hasAnswered}
-				<form class="composer" onsubmit={onComposerSubmit}>
-					<textarea
-						bind:value={composerValue}
-						data-cursor-target="prompt"
-						placeholder="Your answer…"
-						rows="3"
-						maxlength="2000"
-						disabled={posting}
-						onkeydown={onComposerKeydown}
-					></textarea>
-					<div class="send-row">
-						<button
-							type="submit"
-							class="send-button"
-							aria-label={posting ? 'Posting…' : 'Send (Enter)'}
-							title="Send (Enter)"
-							disabled={posting || composerValue.trim().length === 0}
-						>
-							<span class="send-label" class:mono={sendLabelMono}>{sendLabel}</span>
-							<ArrowUp size="16" strokeWidth="2.4" />
-						</button>
-					</div>
-				</form>
-			{/if}
-		</section>
-
-		{@const promptTypers = visualTypingForThread('prompt')}
-		{#each promptTypers as typer (typer.key)}
-			<p class="world-typing prompt-typing" class:closing={typer.closing} aria-live="polite">
-				{@render typingText(typer)}
-			</p>
-		{/each}
-
-		<section class="answers">
-			{#if myAnswer}
-				{@render postArticle(
-					{
-						id: myAnswer.id,
-						user_id: myAnswer.user_id,
-						content: myAnswer.content,
-						display_name: myAnswer.display_name ?? data.user?.name ?? 'You',
-						username: myAnswer.username ?? data.user?.username ?? null,
-						bot_id: null,
-						comment_count: myAnswer.comment_count
-					},
-					{ isMine: true }
-				)}
-			{/if}
-			{#each visibleAnswers as a (a.id)}
-				{@render postArticle(a, { isMine: false })}
-			{/each}
-		</section>
-
-		{#if !hasAnswered}
-			<p class="locked-cta">Answer today's question to explore the world of sehyo.</p>
-		{/if}
-
-		{#if hasAnswered || isDevTyping}
-			<p class="nudge">
-				{#if isDevTyping && !hasAnswered}
-					<span style="color:#f78166;font-family:monospace;"
-						>[dev mode — typing as {devTabIdentity?.displayName}]</span
-					>
-				{:else}
-					A new question will be posited tomorrow.
-				{/if}
-				{#if notificationPermission === 'granted'}
-					<span class="nudge-state">Notifications on.</span>
-				{:else if notificationPermission === 'ios-pwa-required'}
-					<span class="nudge-state"
-						>To enable notifications: tap Share → Add to Home Screen, then open Sehyo from the icon.</span
-					>
-				{:else if notificationPermission === 'denied' || notificationPermission === 'unsupported'}
-					<span class="nudge-state">Notifications unavailable.</span>
-				{:else}
-					<button type="button" class="nudge-cta" onclick={enableNotifications}
-						>Enable notifications</button
-					>
-					to be notified when it's posited.
-				{/if}
-			</p>
-
-			<hr class="world-divider" />
-			<h2 class="world-label">World</h2>
-
-			{@const worldTypers = visualTypingForThread('world')}
-			{#each worldTypers as typer (typer.key)}
-				<p class="world-typing" class:closing={typer.closing} aria-live="polite">
-					{@render typingText(typer)}
-				</p>
-			{/each}
-
-			<section class="free-section">
-				<div class="world-tabs" role="tablist" aria-label="World composer">
-					<button
-						type="button"
-						role="tab"
-						aria-selected={worldTab === 'post'}
-						class="world-tab"
-						class:active={worldTab === 'post'}
-						onclick={() => (worldTab = 'post')}>Post</button
-					>
-					<button
-						type="button"
-						role="tab"
-						aria-selected={worldTab === 'ask'}
-						class="world-tab"
-						class:active={worldTab === 'ask'}
-						onclick={() => (worldTab = 'ask')}>Ask</button
-					>
-				</div>
-
-				<form class="composer" onsubmit={submitWorld}>
-					<textarea
-						bind:value={worldValue}
-						data-cursor-target="world"
-						oninput={onWorldInput}
-						class:typing-sending={sendingActiveThreadId === 'world'}
-						placeholder={worldTab === 'ask' ? 'Ask a question…' : "What's on your mind?"}
-						rows={worldTab === 'ask' ? 2 : 3}
-						maxlength={worldTab === 'ask' ? 280 : 2000}
-						disabled={postingWorld}
-					></textarea>
-					<div class="composer-bar">
-						<button
-							type="submit"
-							class="post-button"
-							disabled={postingWorld || worldValue.trim().length === 0}
-							>{postingWorld
-								? worldTab === 'ask'
-									? 'Asking…'
-									: 'Posting…'
-								: worldTab === 'ask'
-									? 'Ask'
-									: 'Post'}</button
-						>
-					</div>
-				</form>
-
-				{#if data.todayFreePosts.length > 0}
-					<div class="world-feed">
-						{#each data.todayFreePosts as p (p.id)}
-							{#if p.is_question}
-								{@render userQuestionCard(p)}
-							{:else}
-								{@render postArticle(p, { isMine: false })}
-							{/if}
-						{/each}
-					</div>
-				{/if}
-			</section>
-		{/if}
-
-		{#if !canReadOwnReplies && myAnswer && myAnswer.comment_count > 0}
-			<div class="signin-toast" role="status">
-				<span
-					>{myAnswer.comment_count}
-					{myAnswer.comment_count === 1 ? 'person' : 'people'} responded to your answer.</span
-				>
-				<button
-					type="button"
-					class="toast-link"
-					onclick={() => promptSignIn('Sign in to read what they said.')}>Sign in</button
-				>
-				<span>to read what they said.</span>
+	<section class="topline">
+		<div>
+			<p class="eyebrow">Masked timeline</p>
+			<h1>Post without making it your public identity.</h1>
+		</div>
+		{#if data.user}
+			<div class="account-pill" class:guest={data.user.isAnonymous}>
+				<LockKeyhole size="14" />
+				<span>{data.user.isAnonymous ? 'anonymous session' : data.user.username ? `@${data.user.username}` : 'signed in'}</span>
 			</div>
-		{/if}
-
-		{#if hasAnswered && data.timeline?.length}
-			<div class="past">
-				{#each data.timeline as item (item.kind === 'prompt' ? `q-${item.data.id}` : `p-${item.data.id}`)}
-					{#if item.kind === 'prompt'}
-						<section class="past-day">
-							<p class="past-date">{formatDate(item.data.active_date)}</p>
-							<h2 class="prompt prompt-past">{item.data.text}</h2>
-							{#if item.data.answers.length > 0}
-								<div class="answers">
-									{#each item.data.answers as a (a.id)}
-										{@render postArticle(a, { isMine: false })}
-									{/each}
-								</div>
-							{:else}
-								<p class="empty small">No answers.</p>
-							{/if}
-						</section>
-					{:else if item.data.is_question}
-						{@render userQuestionCard(item.data)}
-					{:else}
-						{@render postArticle(item.data, { isMine: false })}
-					{/if}
-				{/each}
-			</div>
-		{/if}
-	{/if}
-</main>
-
-{#if liveCursors.length > 0}
-	<div class="live-cursor-layer" aria-hidden="true">
-		{#each liveCursors as cursor (cursor.userId)}
-			<div
-				class="live-cursor"
-				style={`--cursor-x:${cursor.x.toFixed(1)}px; --cursor-y:${cursor.y.toFixed(1)}px; --cursor-color:${personColor(cursor.userId, cursor.displayName)};`}
-			>
-				<span class="cursor-pointer"></span>
-				<span class="cursor-name">{firstName(cursor.displayName)}</span>
-			</div>
-		{/each}
-	</div>
-{/if}
-
-<!-- Text-only thread row. Every node renders author, body, actions,
-     and an optional branch containing replies/composer. -->
-{#snippet typingText(user: VisualTypingUser)}
-	<span class="typing-name" style:color={personColor(user.userId, user.displayName)}
-		>{firstName(user.displayName)}</span
-	>
-	<span>is typing</span>
-{/snippet}
-
-{#snippet threadTypingItems(threadId: string)}
-	{@const typers = visualTypingForThread(threadId)}
-	{#if typers.length > 0}
-		<ul class="tw-children tw-typing-list">
-			{#each typers as typer (typer.key)}
-				<li class="tw-item is-typing" class:closing={typer.closing}>
-					<div class="tw-typing-shell">
-						<div class="tw-row">
-							<div class="tw-main">
-								<p class="thread-typing" aria-live="polite">
-									{@render typingText(typer)}
-								</p>
-							</div>
-						</div>
-					</div>
-				</li>
-			{/each}
-		</ul>
-	{/if}
-{/snippet}
-
-{#snippet authorMeta(
-	userId: string | null | undefined,
-	displayName: string | null | undefined,
-	username: string | null | undefined,
-	isOwn: boolean
-)}
-	<header class="tw-meta">
-		{#if username}
-			<a class="tw-name" style:color={personColor(userId, displayName, username)} href="/{username}"
-				>{firstName(displayName)}</a
-			>
 		{:else}
-			<span class="tw-name" style:color={personColor(userId, displayName, username)}
-				>{firstName(displayName)}</span
-			>
-		{/if}
-		{#if isOwn && isAnon}
-			<button type="button" class="edit-name" aria-label="Change your name" onclick={changeMyName}>
-				<Pencil size="13" strokeWidth="1.8" />
+			<button class="account-pill guest" type="button" onclick={ensureSession}>
+				<LockKeyhole size="14" />
+				<span>post anonymously</span>
 			</button>
 		{/if}
-	</header>
-{/snippet}
+	</section>
 
-<!-- Shared shell for any thread node: top-level post, question, or
-     nested comment. The only thread geometry is the optional .tw-branch
-     below the body. -->
-{#snippet treeShell(args: {
-	userId: string;
-	username?: string | null;
-	displayName?: string | null;
-	isOwn: boolean;
-	body: Snippet;
-	composer?: Snippet | null;
-	hasKids: boolean;
-	children?: Snippet | null;
-	onPlus: () => void;
-	plusActive?: boolean;
-	showPlus?: boolean;
-	typingThreadId?: string | null;
-	postedReveal?: boolean;
-})}
-	{@const replyVisible = args.showPlus !== false}
-	{@const hasTypers = visualTypingForThread(args.typingThreadId).length > 0}
-	<div class="tw-row">
-		<div class="tw-main">
-			{@render authorMeta(args.userId, args.displayName, args.username, args.isOwn)}
-			{#if args.postedReveal}
-				<div class="tw-posted-content">
-					<div class="tw-posted-content-inner">
-						{@render args.body()}
-						{#if replyVisible}
-							<div class="tw-actions">
-								<button
-									class="tw-reply-button"
-									class:active={args.plusActive}
-									type="button"
-									data-cursor-target={args.typingThreadId ?? undefined}
-									onclick={args.onPlus}>{args.plusActive ? 'Cancel' : 'Reply'}</button
-								>
-							</div>
-						{/if}
-					</div>
-				</div>
-			{:else}
-				{@render args.body()}
-				{#if replyVisible}
-					<div class="tw-actions">
-						<button
-							class="tw-reply-button"
-							class:active={args.plusActive}
-							type="button"
-							data-cursor-target={args.typingThreadId ?? undefined}
-							onclick={args.onPlus}>{args.plusActive ? 'Cancel' : 'Reply'}</button
-						>
-					</div>
-				{/if}
-			{/if}
-		</div>
-	</div>
-
-	{#if args.children || args.composer || hasTypers}
-		<div class="tw-branch">
-			{#if args.composer}{@render args.composer()}{/if}
-			{#if args.typingThreadId}{@render threadTypingItems(args.typingThreadId)}{/if}
-			{#if args.children}{@render args.children()}{/if}
-		</div>
-	{/if}
-{/snippet}
-
-<!-- Active reply composer, shaped like a text thread node with a
-     textarea in place of the body. `data-reply-target` is how openReply() finds this form to
-     scroll-into-view + auto-focus the textarea. -->
-{#snippet replyComposer(postId: string, parentCommentId: string | null)}
-	{@const threadKey = parentCommentId ? 'reply-' + parentCommentId : 'post-' + postId}
-	{@const meDisplayName = (data.user as { name?: string | null } | null)?.name ?? 'You'}
-	{@const meUserId = data.user?.id ?? 'anonymous-viewer'}
-	<div class="tw-item is-composer">
-		<div class="tw-row">
-			<div class="tw-main">
-				<header class="tw-meta">
-					<span
-						class="tw-name"
-						style:color={personColor(meUserId, meDisplayName, data.user?.username)}
-						>{firstName(meDisplayName)}</span
-					>
-				</header>
-				<form class="reply-composer" data-reply-target={threadKey} onsubmit={submitActiveReply}>
-					<textarea
-						bind:value={replyContent}
-						oninput={() => notifyForThread(threadKey)}
-						class:typing-sending={sendingActiveThreadId === threadKey}
-						placeholder={parentCommentId ? 'Reply…' : 'Add a comment…'}
-						rows="2"
-						maxlength="1000"
-						disabled={submittingReply}
-					></textarea>
-					<button
-						type="submit"
-						class="post-button small"
-						disabled={submittingReply || replyContent.trim().length === 0}
-						>{submittingReply ? '…' : parentCommentId ? 'Reply' : 'Post'}</button
-					>
-				</form>
-			</div>
-		</div>
-	</div>
-{/snippet}
-
-{#snippet commentNode(c: CommentRow, postId: string, depth: number)}
-	{@const all = commentsByPost[postId] ?? []}
-	{@const kids = childrenOf(all, c.id)}
-	{@const hasKids = kids.length > 0}
-	{@const ownComment = !!data.user && c.user_id === data.user.id}
-	{@const isActive = isActiveReply(postId, c.id)}
-	{#snippet commentBody()}
-		{#if editingCommentId === c.id}
-			<form class="comment-edit-form" onsubmit={(e) => saveCommentEdit(e, postId, c)}>
-				<textarea
-					bind:value={commentEditValue}
-					rows="2"
-					maxlength="2000"
-					disabled={savingCommentEdit}
-				></textarea>
-				<div class="edit-bar">
-					<button
-						type="submit"
-						class="post-button small"
-						disabled={savingCommentEdit || commentEditValue.trim().length === 0}
-						>{savingCommentEdit ? 'Saving…' : 'Save'}</button
-					>
-					<button type="button" class="inline-action" onclick={cancelCommentEdit}>Cancel</button>
-				</div>
-			</form>
-		{:else}
-			<p class="tw-body">
-				{c.content}
-				{#if isCommentEdited(c)}
-					<button
-						type="button"
-						class="edited-label"
-						aria-expanded={historyOpenCommentId === c.id}
-						onclick={() => toggleCommentHistory(c.id)}>(edited)</button
-					>
-				{/if}
-				{#if ownComment}
-					<button
-						type="button"
-						class="reply-label edit-label"
-						onclick={() => startCommentEdit(c)}
-						aria-label="Edit comment">EDIT</button
-					>
-				{/if}
-			</p>
-			{#if historyOpenCommentId === c.id}
-				{@const history = commentHistories[c.id]}
-				<div class="edit-history">
-					{#if history?.loading}
-						<p>Loading previous versions…</p>
-					{:else if history?.error}
-						<p>{history.error}</p>
-					{:else if history?.edits.length}
-						<ol>
-							{#each history.edits as edit (edit.id)}
-								<li>
-									<p>{edit.content}</p>
-									<time datetime={new Date(edit.edited_at * 1000).toISOString()}
-										>{formatCommentEditTime(edit.edited_at)}</time
-									>
-								</li>
-							{/each}
-						</ol>
-					{:else}
-						<p>No previous versions.</p>
-					{/if}
-				</div>
-			{/if}
-		{/if}
-	{/snippet}
-	{#snippet commentComposerSlot()}
-		{@render replyComposer(postId, c.id)}
-	{/snippet}
-	{#snippet commentChildren()}
-		<ul class="tw-children" class:capped={depth + 1 >= MAX_NEST_DEPTH}>
-			{#each kids as child (child.id)}
-				{#if depth + 1 < MAX_NEST_DEPTH}
-					{@render commentNode(child, postId, depth + 1)}
-				{:else}
-					{@render commentNode(child, postId, depth)}
-				{/if}
-			{/each}
-		</ul>
-	{/snippet}
-	<li class="tw-item is-reply">
-		{@render treeShell({
-			userId: c.user_id,
-			username: c.user?.username,
-			displayName: c.user?.display_name,
-			isOwn: ownComment,
-			body: commentBody,
-			composer: isActive ? commentComposerSlot : null,
-			hasKids,
-			children: hasKids ? commentChildren : null,
-			onPlus: () => toggleReplyTarget({ postId, parentCommentId: c.id }),
-			plusActive: isActive,
-			typingThreadId: 'reply-' + c.id,
-			postedReveal: !!c.fromTyping
-		})}
-	</li>
-{/snippet}
-
-{#snippet postArticle(
-	a: {
-		id: string;
-		user_id: string;
-		content: string;
-		display_name: string | null;
-		username?: string | null;
-		bot_id: string | null;
-		comment_count: number;
-	},
-	opts: { isMine?: boolean }
-)}
-	{@const isMine = !!opts?.isMine}
-	{@const all = commentsByPost[a.id] ?? []}
-	{@const tops = topLevelOf(all)}
-	{@const hasTops = tops.length > 0}
-	{@const guestLocked = isMine && hasTops && !canReadOwnReplies}
-	{@const inEditMode = isMine && editing}
-	{@const isActive = isActiveReply(a.id, null)}
-	{#snippet postComposerSlot()}
-		{@render replyComposer(a.id, null)}
-	{/snippet}
-	{#snippet postBody()}
-		{#if inEditMode}
-			<textarea
-				bind:value={editValue}
-				rows="3"
-				maxlength="2000"
-				disabled={savingEdit || deleting}
-				class="edit-textarea"
-			></textarea>
-			<div class="edit-bar">
+	<section class="composer-shell" aria-label="Create post">
+		<div class="kind-tabs" role="tablist" aria-label="Post type">
+			{#each Object.entries(kindConfig) as [k, cfg]}
+				{@const Icon = cfg.icon}
 				<button
 					type="button"
-					class="post-button small"
-					onclick={saveEdit}
-					disabled={savingEdit || deleting || editValue.trim().length === 0}
+					class="kind-tab"
+					class:active={kind === k}
+					onclick={() => (kind = k as Kind)}
 				>
-					<Check size="16" strokeWidth="2.2" />
-					{savingEdit ? 'Saving…' : 'Save'}
+					<Icon size="15" />
+					<span>{cfg.label}</span>
 				</button>
-				<div class="popover-container">
-					<button
-						type="button"
-						class="kebab"
-						aria-label="More actions"
-						aria-expanded={kebabOpen}
-						onclick={toggleKebab}
-						disabled={savingEdit || deleting}
-					>
-						<MoreHorizontal size="18" strokeWidth="2" />
-					</button>
-					{#if kebabOpen}
-						<div class="popover" role="menu">
-							<button type="button" class="popover-item" onclick={cancelEdit} role="menuitem">
-								Cancel
-							</button>
-							<button
-								type="button"
-								class="popover-item destructive"
-								onclick={deleteAnswer}
-								role="menuitem"
-								disabled={deleting}
-							>
-								{deleting ? 'Deleting…' : 'Delete'}
-							</button>
-						</div>
-					{/if}
+			{/each}
+		</div>
+
+		<form class="composer" onsubmit={submitPost}>
+			{#if kind === 'plan'}
+				<div class="field-grid">
+					<input name="title" bind:value={title} maxlength="90" placeholder="Plan title" />
+					<input name="place" bind:value={place} maxlength="120" placeholder="Place" />
+					<input name="happens_at" bind:value={happensLocal} type="datetime-local" />
+					<label class="threshold">
+						<span>If</span>
+						<input name="threshold" bind:value={threshold} type="number" min="2" max="100" />
+						<span>people join</span>
+					</label>
 				</div>
+			{/if}
+			<textarea
+				bind:value={body}
+				name="body"
+				rows="4"
+				maxlength="2400"
+				placeholder={kindConfig[kind].placeholder}
+				disabled={posting}
+			></textarea>
+			<div class="composer-controls">
+				<select name="identity_mode" bind:value={identityMode} aria-label="Identity mode">
+					<option value="masked">Fresh mask</option>
+					<option value="persona">Stable persona</option>
+					<option value="anonymous">Anonymous</option>
+					<option value="named">Named</option>
+				</select>
+				{#if identityMode === 'persona'}
+					<input
+						bind:value={personaLabel}
+						class="persona-input"
+						list="personas"
+						name="persona_label"
+						maxlength="28"
+						placeholder="persona name"
+					/>
+					<datalist id="personas">
+						{#each personas as persona}
+							<option value={persona.label}></option>
+						{/each}
+					</datalist>
+				{/if}
+				<select name="circle_id" bind:value={circleId} aria-label="Audience">
+					<option value="">Global</option>
+					{#each circles as circle}
+						<option value={circle.id}>{circle.name}</option>
+					{/each}
+				</select>
+				<button class="send-button" type="submit" disabled={posting || body.trim().length === 0}>
+					<span>{posting ? 'Posting…' : kindConfig[kind].action}</span>
+					<Send size="15" />
+				</button>
+			</div>
+		</form>
+	</section>
+
+	<section class="utility-row">
+		<form class="circle-box" onsubmit={createCircle}>
+			<div class="utility-head">
+				<Users size="16" />
+				<strong>Circle</strong>
+			</div>
+			<div class="circle-fields">
+				<input name="circle_name" bind:value={circleName} maxlength="60" placeholder="name" />
+				<input name="circle_usernames" bind:value={circleUsernames} placeholder="@usernames, comma-separated" />
+			</div>
+			<input name="circle_description" bind:value={circleDescription} maxlength="240" placeholder="description" />
+			<button type="submit" disabled={creatingCircle || !circleName.trim()}>
+				<Plus size="14" />
+				<span>{creatingCircle ? 'Creating…' : 'Create circle'}</span>
+			</button>
+		</form>
+
+		<div class="circle-box identity-box">
+			<div class="utility-head">
+				<Eye size="16" />
+				<strong>Reveal</strong>
+			</div>
+			<p>
+				Identity stays masked unless you reveal a specific post, comment, or persona to a
+				specific username.
+			</p>
+			{#if personas.length > 0}
+				<div class="persona-list">
+					{#each personas as persona}
+						{@const personaRevealKey = `persona:${persona.id}`}
+						<form
+							class="persona-reveal"
+							onsubmit={(e) => {
+								e.preventDefault();
+								reveal('persona', persona.id);
+							}}
+						>
+							<span class="persona-chip" style={`--persona-color:${persona.accent}`}>
+								{persona.label}
+							</span>
+							<input
+								value={revealInputs[personaRevealKey] ?? ''}
+								name="persona_reveal_username"
+								oninput={(e) => setRevealInput(personaRevealKey, e.currentTarget.value)}
+								placeholder="@username"
+							/>
+							<button type="submit" disabled={revealing[personaRevealKey]}>Reveal</button>
+						</form>
+					{/each}
+				</div>
+			{/if}
+			{#if data.user?.isAnonymous}
+				<button type="button" onclick={signInGoogle}>Attach this session to Google</button>
+			{:else if !data.user}
+				<button type="button" onclick={signInGoogle}>Sign in with Google</button>
+			{/if}
+		</div>
+	</section>
+
+	<section class="feed" aria-label="Timeline">
+		{#if posts.length === 0}
+			<div class="empty-feed">
+				<Globe2 size="28" />
+				<p>No masked posts yet.</p>
 			</div>
 		{:else}
-			<p class="tw-body">
-				{a.content}{#if isMine}
-					<button
-						type="button"
-						class="reply-label edit-label"
-						onclick={startEdit}
-						aria-label="Edit answer">EDIT</button
-					>{/if}
-			</p>
-		{/if}
-	{/snippet}
-	{#snippet postChildren()}
-		<ul class="tw-children" class:guest-locked={guestLocked}>
-			{#each tops as c (c.id)}
-				{@render commentNode(c, a.id, 0)}
-			{/each}
-		</ul>
-	{/snippet}
-	<article class="tw-post">
-		<div class="tw-item is-post">
-			{@render treeShell({
-				userId: a.user_id,
-				username: a.username,
-				displayName: a.display_name,
-				isOwn: isMine,
-				body: postBody,
-				composer: isActive && !guestLocked ? postComposerSlot : null,
-				hasKids: hasTops,
-				children: hasTops ? postChildren : null,
-				onPlus: () => toggleReplyTarget({ postId: a.id, parentCommentId: null }),
-				plusActive: isActive,
-				showPlus: !guestLocked,
-				typingThreadId: 'post-' + a.id
-			})}
-		</div>
+			{#each posts as post (post.id)}
+				<article class="post" class:plan-met={post.kind === 'plan' && post.status === 'met'}>
+					<header class="post-head">
+						<div class="author-dot" style={`--author-color:${post.author.accent}`}></div>
+						<div class="author-block">
+							<div class="author-row">
+								<strong style:color={post.author.accent}>{post.author.label}</strong>
+								<span>{formatTime(post.created_at)}</span>
+								{#if post.circle}<span class="scope">circle · {post.circle.name}</span>{/if}
+							</div>
+							{#if post.author.sublabel}
+								<p>{post.author.sublabel}</p>
+							{/if}
+						</div>
+						<span class="kind-badge {post.kind}">{kindConfig[post.kind].label}</span>
+					</header>
 
-		{#if hasTops && guestLocked}
-			<div class="guest-locked-cta">
-				<span class="guest-locked-text">
-					<button
-						type="button"
-						class="guest-locked-link"
-						onclick={() => promptSignIn('Sign in to read the comments on your response.')}
-						>Sign in</button
-					>
-					to read the comments on your response.
-				</span>
-			</div>
-		{/if}
-	</article>
-{/snippet}
+					{#if post.title}<h2>{post.title}</h2>{/if}
+					<p class="post-body">{post.body}</p>
 
-{#snippet userQuestionCard(q: {
-	id: string;
-	user_id: string;
-	content: string;
-	display_name: string | null;
-	username?: string | null;
-	bot_id: string | null;
-	comment_count: number;
-})}
-	{@const all = commentsByPost[q.id] ?? []}
-	{@const tops = topLevelOf(all)}
-	{@const hasTops = tops.length > 0}
-	{@const isActive = isActiveReply(q.id, null)}
-	{#snippet questionBody()}
-		<h3 class="user-question-text">{q.content}</h3>
-	{/snippet}
-	{#snippet questionChildren()}
-		<ul class="tw-children">
-			{#each tops as c (c.id)}
-				{@render commentNode(c, q.id, 0)}
+					{#if post.kind === 'plan'}
+						<div class="plan-strip">
+							<div>
+								<strong>{post.commitment_count}/{post.threshold}</strong>
+								<span>{post.status === 'met' ? 'threshold met' : 'committed'}</span>
+							</div>
+							{#if formatPlanTime(post.happens_at)}
+								<div>
+									<strong>{formatPlanTime(post.happens_at)}</strong>
+									<span>{post.place ?? 'time set'}</span>
+								</div>
+							{:else if post.place}
+								<div>
+									<strong>{post.place}</strong>
+									<span>place</span>
+								</div>
+							{/if}
+							{#if post.can_commit}
+								<button
+									type="button"
+									class:active={post.my_commitment_status === 'committed'}
+									disabled={committing[post.id]}
+									onclick={() => toggleCommit(post.id)}
+								>
+									<CheckCircle2 size="15" />
+									<span>{post.my_commitment_status === 'committed' ? 'Committed' : 'Commit'}</span>
+								</button>
+							{/if}
+						</div>
+					{/if}
+
+					{#if post.can_reveal}
+						{@const revealKey = `post:${post.id}`}
+						<form class="reveal-row" onsubmit={(e) => { e.preventDefault(); reveal('post', post.id); }}>
+							<input
+								value={revealInputs[revealKey] ?? ''}
+								name="reveal_username"
+								oninput={(e) => setRevealInput(revealKey, e.currentTarget.value)}
+								placeholder="@username to reveal this post"
+							/>
+							<button type="submit" disabled={revealing[revealKey]}>Reveal</button>
+						</form>
+					{/if}
+
+					<div class="comments">
+						{#each post.comments as comment (comment.id)}
+							<div class="comment">
+								<div class="comment-meta">
+									<strong style:color={comment.author.accent}>{comment.author.label}</strong>
+									<span>{formatTime(comment.created_at)}</span>
+									{#if comment.author.sublabel}<span>{comment.author.sublabel}</span>{/if}
+								</div>
+								<p>{comment.body}</p>
+								{#if comment.can_reveal}
+									{@const commentRevealKey = `comment:${comment.id}`}
+									<form
+										class="reveal-row compact"
+										onsubmit={(e) => {
+											e.preventDefault();
+											reveal('comment', comment.id);
+										}}
+									>
+										<input
+											value={revealInputs[commentRevealKey] ?? ''}
+											name="comment_reveal_username"
+											oninput={(e) => setRevealInput(commentRevealKey, e.currentTarget.value)}
+											placeholder="@username"
+										/>
+										<button type="submit" disabled={revealing[commentRevealKey]}>Reveal</button>
+									</form>
+								{/if}
+							</div>
+						{/each}
+					</div>
+
+					<form class="comment-form" onsubmit={(e) => submitComment(e, post.id)}>
+						<input
+							value={commentDrafts[post.id] ?? ''}
+							name="comment_body"
+							oninput={(e) => setCommentDraft(post.id, e.currentTarget.value)}
+							placeholder="reply…"
+							maxlength="1400"
+						/>
+						<select
+							value={commentModes[post.id] ?? 'thread'}
+							name="comment_identity_mode"
+							onchange={(e) => setCommentMode(post.id, e.currentTarget.value as CommentIdentity)}
+							aria-label="Comment identity"
+						>
+							<option value="thread">Thread mask</option>
+							<option value="persona">Persona</option>
+							<option value="anonymous">Anonymous</option>
+							<option value="named">Named</option>
+						</select>
+						{#if (commentModes[post.id] ?? 'thread') === 'persona'}
+							<input
+								class="comment-persona"
+								value={commentPersonaLabels[post.id] ?? ''}
+								name="comment_persona_label"
+								oninput={(e) => setCommentPersona(post.id, e.currentTarget.value)}
+								placeholder="persona"
+								list="personas"
+								maxlength="28"
+							/>
+						{/if}
+						<button type="submit" disabled={commenting[post.id] || !(commentDrafts[post.id] ?? '').trim()}>
+							<MessageCircle size="15" />
+						</button>
+					</form>
+				</article>
 			{/each}
-		</ul>
-	{/snippet}
-	{#snippet questionComposerSlot()}
-		{@render replyComposer(q.id, null)}
-	{/snippet}
-	<article class="tw-post user-question">
-		<div class="tw-item is-post">
-			{@render treeShell({
-				userId: q.user_id,
-				username: q.username,
-				displayName: q.display_name,
-				isOwn: false,
-				body: questionBody,
-				composer: isActive ? questionComposerSlot : null,
-				hasKids: hasTops,
-				children: hasTops ? questionChildren : null,
-				onPlus: () => toggleReplyTarget({ postId: q.id, parentCommentId: null }),
-				plusActive: isActive,
-				typingThreadId: 'post-' + q.id
-			})}
-		</div>
-	</article>
-{/snippet}
+		{/if}
+	</section>
+</main>
 
 <style>
-	:global(::selection) {
-		background: #ffffff;
-		color: #000000;
-	}
-	:global(::-moz-selection) {
-		background: #ffffff;
-		color: #000000;
-	}
-
 	.page {
-		max-width: 640px;
+		width: min(100%, 760px);
 		margin: 0 auto;
-		padding: 24px 16px 64px;
-		overflow-x: clip;
-		font-size: 16px;
-		line-height: 1.4;
-	}
-	.page :where(h1, h2, h3, p, a, button, textarea, span) {
-		font-size: 16px;
-		letter-spacing: 0;
+		padding: 32px 16px 72px;
 	}
 
-	.today {
-		padding-bottom: 18px;
-		margin-bottom: 18px;
+	.topline {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 18px;
+		margin: 14px 0 18px;
 	}
-	.section-label,
-	.past-date {
-		margin: 0 0 6px;
-		color: var(--muted-foreground);
-		font-weight: 600;
+
+	.eyebrow {
+		margin: 0 0 8px;
+		color: var(--brand);
+		text-transform: uppercase;
+		letter-spacing: 0.14em;
+		font-weight: 800;
+		font-size: 11px;
 	}
-	.prompt-today,
-	.prompt-past,
-	.world-label,
-	.user-question-text {
-		font-family: var(--font-sans);
-		font-weight: 500;
-		line-height: 1.35;
+
+	h1 {
 		margin: 0;
-		text-align: left;
+		font-size: clamp(28px, 7vw, 54px);
+		line-height: 0.96;
+		letter-spacing: 0;
+		max-width: 11ch;
+	}
+
+	.account-pill {
+		border: 1px solid var(--border);
+		background: var(--secondary);
 		color: var(--foreground);
+		border-radius: 999px;
+		display: inline-flex;
+		align-items: center;
+		gap: 7px;
+		padding: 9px 12px;
+		font-size: 12px;
+		white-space: nowrap;
+		cursor: default;
+	}
+
+	button.account-pill {
+		cursor: pointer;
+	}
+
+	.account-pill.guest {
+		color: var(--muted-foreground);
+	}
+
+	.composer-shell,
+	.post,
+	.circle-box {
+		border: 1px solid var(--border);
+		background: color-mix(in oklab, var(--secondary) 72%, var(--background));
+		border-radius: 8px;
+	}
+
+	.composer-shell {
+		overflow: hidden;
+		margin-bottom: 14px;
+	}
+
+	.kind-tabs {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		border-bottom: 1px solid var(--border);
+	}
+
+	.kind-tab {
+		border: 0;
+		border-right: 1px solid var(--border);
+		background: transparent;
+		color: var(--muted-foreground);
+		height: 44px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 7px;
+		cursor: pointer;
+		font-weight: 700;
+	}
+
+	.kind-tab:last-child {
+		border-right: 0;
+	}
+
+	.kind-tab.active {
+		color: var(--foreground);
+		background: color-mix(in oklab, var(--brand) 12%, transparent);
 	}
 
 	.composer {
-		width: 100%;
-		margin: 12px 0 0;
+		padding: 12px;
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
 	}
-	.composer textarea,
-	.edit-textarea,
-	.reply-composer textarea,
-	.comment-edit-form textarea {
-		display: block;
-		width: 100%;
-		font-family: var(--font-sans);
-		font-size: 16px;
-		line-height: 1.4;
-		min-height: 92px;
-		padding: 10px 12px;
-		border-radius: 0;
+
+	textarea,
+	input,
+	select {
 		border: 1px solid var(--border);
 		background: var(--background);
 		color: var(--foreground);
-		box-shadow: none;
-		resize: vertical;
-	}
-	.reply-composer textarea {
-		min-height: 76px;
-	}
-	.composer textarea:focus,
-	.edit-textarea:focus,
-	.reply-composer textarea:focus,
-	.comment-edit-form textarea:focus {
-		outline: 1px solid var(--foreground);
-		outline-offset: 0;
-	}
-	textarea.typing-sending {
-		border-color: #7ee787;
-		box-shadow: 0 0 0 1px #7ee787;
+		border-radius: 6px;
+		font: inherit;
+		min-width: 0;
 	}
 
-	.send-row,
-	.composer-bar,
-	.edit-bar {
+	textarea {
+		width: 100%;
+		resize: vertical;
+		min-height: 112px;
+		padding: 13px;
+		line-height: 1.45;
+	}
+
+	input,
+	select {
+		height: 38px;
+		padding: 0 10px;
+	}
+
+	.field-grid {
+		display: grid;
+		grid-template-columns: 1.2fr 1fr;
+		gap: 8px;
+	}
+
+	.threshold {
+		display: grid;
+		grid-template-columns: auto 64px 1fr;
+		align-items: center;
+		gap: 8px;
+		color: var(--muted-foreground);
+		font-size: 13px;
+	}
+
+	.composer-controls {
 		display: flex;
 		align-items: center;
 		gap: 8px;
+		flex-wrap: wrap;
 	}
-	.send-row {
-		margin-top: 0;
+
+	.persona-input {
+		width: 150px;
 	}
-	.composer-bar,
-	.edit-bar {
-		margin-top: 8px;
-	}
-	.send-row,
-	.composer-bar {
-		justify-content: flex-end;
-	}
-	.edit-bar {
-		justify-content: flex-start;
-	}
+
 	.send-button,
-	.post-button {
-		appearance: none;
-		border: 1px solid var(--foreground);
-		border-radius: 0;
-		background: var(--foreground);
-		color: var(--background);
-		font-family: var(--font-sans);
-		font-size: 16px;
-		font-weight: 600;
-		line-height: 1;
-		min-height: 40px;
-		padding: 9px 12px;
-		cursor: pointer;
-		box-shadow: none;
+	.circle-box button,
+	.plan-strip button,
+	.comment-form button,
+	.reveal-row button {
+		border: 1px solid transparent;
+		background: var(--brand);
+		color: #031016;
+		border-radius: 6px;
+		height: 38px;
+		padding: 0 12px;
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		gap: 8px;
+		gap: 7px;
+		font-weight: 800;
+		cursor: pointer;
+		margin-left: auto;
 	}
-	.send-button {
-		width: 100%;
-		position: relative;
-		border-top: 0;
-	}
-	.send-button > :global(svg) {
-		position: absolute;
-		right: 12px;
-		top: 50%;
-		transform: translateY(-50%);
-	}
-	.send-button:hover,
-	.post-button:hover {
-		background: var(--background);
-		color: var(--foreground);
-	}
-	.send-button:disabled,
-	.post-button:disabled {
-		opacity: 0.42;
+
+	button:disabled {
+		opacity: 0.5;
 		cursor: not-allowed;
 	}
-	.send-label,
-	.send-label.mono {
-		font-family: var(--font-sans);
-		font-size: 16px;
-		line-height: 1;
-	}
-	.post-button.small {
-		min-height: 36px;
-		padding: 8px 10px;
+
+	.utility-row {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 12px;
+		margin: 0 0 18px;
 	}
 
-	.answers,
-	.world-feed {
+	.circle-box {
+		padding: 12px;
 		display: flex;
 		flex-direction: column;
-		gap: 22px;
-		width: 100%;
+		gap: 8px;
 	}
-	.tw-post {
-		--branch-gutter: 20px;
-		--reply-stem-x: 0.35em;
-		--line-strong: color-mix(in oklab, var(--foreground), var(--background) 58%);
-		--line-cover: var(--background);
-		width: 100%;
-		padding-top: 18px;
-	}
-	.answers > .tw-post:first-child,
-	.world-feed > .tw-post:first-child {
-		padding-top: 0;
-	}
-	.tw-item {
-		display: block;
-		width: 100%;
-	}
-	.tw-item.is-reply,
-	.tw-item.is-composer,
-	.tw-item.is-typing {
-		position: relative;
-		list-style: none;
-	}
-	.tw-item.is-reply::before,
-	.tw-item.is-composer::before,
-	.tw-item.is-typing::before {
-		content: '';
-		position: absolute;
-		left: calc(-1 * var(--branch-gutter));
-		top: 0.72em;
-		width: var(--branch-gutter);
-		border-top: 1px solid var(--line-strong);
-		pointer-events: none;
-	}
-	.tw-branch > .tw-children:last-child > .tw-item:last-child::after,
-	.tw-branch > .tw-item.is-composer:last-child::after {
-		content: '';
-		position: absolute;
-		left: calc(-1 * var(--branch-gutter) - 1px);
-		top: calc(0.72em + 1px);
-		bottom: 0;
-		width: 3px;
-		background: var(--line-cover);
-		pointer-events: none;
-	}
-	.tw-row,
-	.tw-main {
-		display: block;
-		min-width: 0;
-		width: 100%;
-	}
-	.tw-meta {
+
+	.utility-head {
 		display: flex;
-		align-items: baseline;
-		gap: 7px;
-		flex-wrap: wrap;
-		margin: 0 0 3px;
-	}
-	.tw-name {
-		color: var(--muted-foreground);
-		font-size: 16px;
-		font-weight: 500;
-		line-height: 1.35;
-		text-decoration: none;
-	}
-	.tw-name:hover {
-		text-decoration: underline;
-		text-underline-offset: 3px;
-	}
-	.tw-body {
-		font-family: var(--font-sans);
-		font-size: 16px;
-		font-weight: 400;
-		line-height: 1.4;
+		align-items: center;
+		gap: 8px;
 		color: var(--foreground);
-		margin: 0;
-		white-space: pre-wrap;
-		word-wrap: break-word;
 	}
-	.tw-posted-content {
+
+	.circle-fields {
 		display: grid;
-		grid-template-rows: 1fr;
-		overflow: hidden;
-		animation: tw-posted-content-reveal 320ms cubic-bezier(0.22, 1, 0.36, 1);
+		grid-template-columns: 0.8fr 1.2fr;
+		gap: 8px;
 	}
-	.tw-posted-content-inner {
-		min-height: 0;
-		overflow: hidden;
-	}
-	.tw-actions {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		margin-top: 5px;
-	}
-	.tw-reply-button,
-	.reply-label,
-	.edited-label,
-	.inline-action,
-	.edit-name,
-	.nudge-cta,
-	.guest-locked-link,
-	.toast-link {
-		appearance: none;
-		border: 0;
-		background: transparent;
-		color: var(--muted-foreground);
-		font: inherit;
-		font-size: 16px;
-		font-weight: 500;
-		line-height: 1.2;
-		letter-spacing: 0;
-		text-transform: none;
-		padding: 0;
-		cursor: pointer;
-	}
-	.tw-reply-button::before {
-		content: '+';
-		display: inline-block;
-		width: calc(var(--reply-stem-x) * 2);
-		margin-right: 5px;
-		color: var(--foreground);
-		text-align: center;
-	}
-	.tw-reply-button.active::before {
-		content: '-';
-	}
-	.tw-reply-button:hover,
-	.reply-label:hover,
-	.edited-label:hover,
-	.inline-action:hover,
-	.nudge-cta:hover,
-	.guest-locked-link:hover,
-	.toast-link:hover {
-		color: var(--foreground);
-		text-decoration: underline;
-		text-underline-offset: 3px;
-	}
-	.edit-label {
-		margin-left: 6px;
-		vertical-align: baseline;
-	}
-	.edited-label {
-		margin-left: 6px;
-		vertical-align: baseline;
-	}
-	.edit-name {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-	}
-	.tw-branch {
-		margin: 7px 0 0 var(--reply-stem-x);
-		padding: 8px 0 0 var(--branch-gutter);
-		border-left: 1px solid var(--line-strong);
-	}
-	.tw-children {
-		list-style: none;
+
+	.identity-box p {
 		margin: 0;
-		padding: 0;
+		color: var(--muted-foreground);
+		font-size: 13px;
+		line-height: 1.45;
+	}
+
+	.persona-list {
+		display: flex;
+		flex-direction: column;
+		gap: 7px;
+	}
+
+	.persona-reveal {
+		display: grid;
+		grid-template-columns: minmax(82px, auto) minmax(0, 1fr) auto;
+		gap: 7px;
+		align-items: center;
+	}
+
+	.persona-chip {
+		min-width: 0;
+		border: 1px solid color-mix(in oklab, var(--persona-color) 55%, var(--border));
+		background: color-mix(in oklab, var(--persona-color) 14%, transparent);
+		color: var(--foreground);
+		border-radius: 999px;
+		padding: 6px 9px;
+		font-size: 12px;
+		font-weight: 800;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.persona-reveal input {
+		height: 34px;
+	}
+
+	.persona-reveal button {
+		height: 34px;
+		background: transparent;
+		color: var(--brand);
+		border-color: var(--border);
+		margin-left: 0;
+	}
+
+	.feed {
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
 	}
-	.tw-children + .tw-item.is-composer {
-		margin-top: 12px;
-	}
-	.tw-children + .tw-children {
-		margin-top: 12px;
-	}
-	.tw-item.is-composer + .tw-children {
-		margin-top: 12px;
-	}
-	.tw-item.is-typing {
-		overflow: visible;
-	}
-	.tw-item.is-typing.closing {
-		pointer-events: none;
-	}
-	.tw-item.is-typing.closing .tw-typing-shell {
-		animation: tw-typing-node-close 260ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
-	}
-	.tw-typing-shell {
-		display: grid;
-		grid-template-rows: 1fr;
-		min-height: 0;
-		overflow: hidden;
-		animation: tw-posted-content-reveal 260ms cubic-bezier(0.22, 1, 0.36, 1);
-	}
-	.tw-typing-shell > .tw-row {
-		min-height: 0;
-		overflow: hidden;
-	}
-	.reply-composer {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto;
-		gap: 0;
-		align-items: stretch;
-		margin-top: 0;
-	}
-	.reply-composer .post-button {
-		min-height: 76px;
-		border-left: 0;
-		padding-left: 14px;
-		padding-right: 14px;
-	}
-	.comment-edit-form {
-		margin-top: 3px;
-	}
-	.comment-edit-form textarea {
-		min-height: 76px;
-	}
-	.edit-history {
-		margin-top: 8px;
-		padding-left: 10px;
-		border-left: 1px solid var(--line-strong);
-		color: var(--muted-foreground);
-		overflow: hidden;
-		animation: tw-posted-content-reveal 260ms cubic-bezier(0.22, 1, 0.36, 1);
-	}
-	.edit-history p {
-		margin: 0;
-		font-size: 16px;
-		line-height: 1.4;
-		white-space: pre-wrap;
-	}
-	.edit-history ol {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: grid;
-		gap: 8px;
-	}
-	.edit-history time {
-		display: block;
-		margin-top: 2px;
-		color: var(--muted-foreground);
-		font-size: 16px;
-		line-height: 1.4;
+
+	.post {
+		padding: 14px;
 	}
 
-	.popover-container {
-		position: relative;
-		display: inline-flex;
+	.post.plan-met {
+		border-color: color-mix(in oklab, #22c55e 50%, var(--border));
 	}
-	.kebab {
-		appearance: none;
-		border: 0;
-		background: transparent;
-		color: var(--muted-foreground);
-		display: inline-flex;
+
+	.post-head {
+		display: grid;
+		grid-template-columns: 10px minmax(0, 1fr) auto;
+		gap: 10px;
+		align-items: start;
+	}
+
+	.author-dot {
+		width: 10px;
+		height: 10px;
+		border-radius: 999px;
+		background: var(--author-color);
+		margin-top: 6px;
+	}
+
+	.author-block {
+		min-width: 0;
+	}
+
+	.author-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 7px;
 		align-items: center;
-		justify-content: center;
-		padding: 4px;
-		cursor: pointer;
+		font-size: 14px;
 	}
-	.kebab:hover {
-		color: var(--foreground);
+
+	.author-row span,
+	.author-block p,
+	.comment-meta span {
+		color: var(--muted-foreground);
 	}
-	.popover {
-		position: absolute;
-		top: calc(100% + 6px);
-		left: 0;
-		z-index: 20;
-		min-width: 140px;
-		padding: 4px;
-		background: var(--background);
+
+	.author-block p {
+		margin: 2px 0 0;
+		font-size: 12px;
+	}
+
+	.scope {
 		border: 1px solid var(--border);
+		border-radius: 999px;
+		padding: 2px 7px;
+	}
+
+	.kind-badge {
+		font-size: 11px;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		font-weight: 900;
+		border-radius: 999px;
+		padding: 5px 8px;
+		background: var(--muted);
+		color: var(--muted-foreground);
+	}
+
+	.kind-badge.ask {
+		color: #7dd3fc;
+	}
+
+	.kind-badge.offer {
+		color: #86efac;
+	}
+
+	.kind-badge.plan {
+		color: #facc15;
+	}
+
+	h2 {
+		font-size: 20px;
+		margin: 14px 0 4px;
+		letter-spacing: 0;
+	}
+
+	.post-body {
+		white-space: pre-wrap;
+		line-height: 1.55;
+		margin: 12px 0;
+		font-size: 16px;
+	}
+
+	.plan-strip {
+		display: flex;
+		align-items: stretch;
+		gap: 8px;
+		flex-wrap: wrap;
+		border: 1px solid var(--border);
+		background: var(--background);
+		border-radius: 6px;
+		padding: 8px;
+		margin: 12px 0;
+	}
+
+	.plan-strip > div {
+		min-width: 120px;
 		display: flex;
 		flex-direction: column;
-		gap: 2px;
-	}
-	.popover-item {
-		appearance: none;
-		border: 0;
-		background: transparent;
-		color: var(--foreground);
-		font: inherit;
-		font-size: 16px;
-		text-align: left;
-		padding: 8px 10px;
-		cursor: pointer;
-	}
-	.popover-item:hover {
-		background: var(--muted);
-	}
-	.popover-item.destructive {
-		color: var(--destructive);
-	}
-	.popover-item:disabled,
-	.kebab:disabled {
-		opacity: 0.45;
-		cursor: not-allowed;
+		justify-content: center;
 	}
 
-	.nudge,
-	.locked-cta {
-		width: 100%;
-		margin: 18px 0 0;
-		padding: 0;
-		text-align: left;
-		color: var(--muted-foreground);
-		font-size: 16px;
-		line-height: 1.4;
-	}
-	.nudge-state {
-		color: var(--foreground);
-		font-weight: 500;
-	}
-	.world-divider {
-		border: 0;
-		border-top: 1px solid var(--border);
-		margin: 24px 0 0;
-	}
-	.world-label {
-		margin: 14px 0 10px;
-	}
-	.world-typing,
-	.thread-typing {
-		display: flex;
-		align-items: baseline;
-		gap: 4px;
-		font-family: var(--font-sans);
-		font-size: 16px;
-		line-height: 1.4;
-		color: var(--muted-foreground);
-		text-align: left;
-	}
-	.world-typing {
-		margin: 0 0 8px;
-		overflow: hidden;
-	}
-	.world-typing.closing {
-		animation: tw-world-typing-close 260ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
-	}
-	.thread-typing {
-		margin: 0;
-	}
-	.typing-name {
-		font-weight: 500;
-	}
-	.world-tabs {
-		display: flex;
-		gap: 16px;
-		margin: 0 0 10px;
-		border-bottom: 1px solid var(--border);
-	}
-	.world-tab {
-		appearance: none;
-		border: 0;
-		border-bottom: 1px solid transparent;
-		background: transparent;
-		color: var(--muted-foreground);
-		font: inherit;
-		font-size: 16px;
-		padding: 6px 0;
-		margin-bottom: -1px;
-		cursor: pointer;
-	}
-	.world-tab:hover,
-	.world-tab.active {
-		color: var(--foreground);
-	}
-	.world-tab.active {
-		border-bottom-color: var(--foreground);
+	.plan-strip strong {
+		font-size: 14px;
 	}
 
-	.past {
-		margin-top: 24px;
-	}
-	.past-day {
-		width: 100%;
-		padding-top: 18px;
-		border-top: 1px solid var(--border);
-	}
-	.empty {
-		padding: 40px 0;
-		text-align: left;
+	.plan-strip span {
 		color: var(--muted-foreground);
+		font-size: 12px;
 	}
-	.empty.small {
-		padding: 16px 0;
+
+	.plan-strip button {
+		background: var(--secondary);
+		color: var(--foreground);
+		border-color: var(--border);
+		margin-left: auto;
 	}
-	.tw-children.guest-locked {
-		filter: blur(5px);
-		user-select: none;
-		pointer-events: none;
+
+	.plan-strip button.active {
+		background: #22c55e;
+		color: #031207;
 	}
-	.guest-locked-cta {
-		padding: 12px 0 0;
-		text-align: left;
+
+	.reveal-row {
+		display: flex;
+		gap: 8px;
+		margin: 10px 0;
 	}
-	.guest-locked-text {
-		font-size: 16px;
-		line-height: 1.4;
-		color: var(--muted-foreground);
+
+	.reveal-row input {
+		flex: 1;
+		height: 34px;
 	}
-	.signin-toast {
-		position: fixed;
-		left: 50%;
-		bottom: 20px;
-		transform: translateX(-50%);
-		z-index: 60;
-		max-width: calc(100vw - 32px);
-		display: inline-flex;
+
+	.reveal-row button {
+		height: 34px;
+		background: transparent;
+		color: var(--brand);
+		border-color: var(--border);
+		margin-left: 0;
+	}
+
+	.reveal-row.compact {
+		margin: 6px 0 0;
+	}
+
+	.comments {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		margin-top: 12px;
+	}
+
+	.comment {
+		border-left: 2px solid var(--border);
+		padding-left: 10px;
+	}
+
+	.comment-meta {
+		display: flex;
+		gap: 7px;
 		align-items: center;
-		gap: 6px;
-		padding: 10px 14px;
-		background: var(--background);
-		color: var(--foreground);
-		border: 1px solid var(--border);
-		border-radius: 0;
-		font-size: 16px;
-		line-height: 1.4;
-	}
-	.live-cursor-layer {
-		position: absolute;
-		left: 0;
-		top: 0;
-		width: 100%;
-		height: 0;
-		z-index: 70;
-		pointer-events: none;
-		overflow: visible;
-	}
-	.live-cursor {
-		position: absolute;
-		left: 0;
-		top: 0;
-		display: inline-flex;
-		align-items: flex-start;
-		gap: 6px;
-		transform: translate3d(var(--cursor-x), var(--cursor-y), 0);
-		transition: transform 1400ms cubic-bezier(0.16, 1, 0.3, 1);
-		will-change: transform;
-	}
-	.cursor-pointer {
-		width: 0;
-		height: 0;
-		margin-top: 2px;
-		border-top: 6px solid transparent;
-		border-bottom: 6px solid transparent;
-		border-left: 10px solid var(--cursor-color);
-		transform: rotate(-26deg);
-		transform-origin: 0 50%;
-	}
-	.cursor-name {
-		margin-top: 9px;
-		color: var(--cursor-color);
-		font-size: 16px;
-		font-weight: 500;
-		line-height: 1.2;
-		text-shadow:
-			0 1px 0 var(--background),
-			1px 0 0 var(--background);
+		flex-wrap: wrap;
+		font-size: 12px;
 	}
 
-	@keyframes tw-posted-content-reveal {
-		from {
-			grid-template-rows: 0fr;
-			opacity: 0;
-			transform: translateY(-2px);
-		}
-
-		to {
-			grid-template-rows: 1fr;
-			opacity: 1;
-			transform: translateY(0);
-		}
+	.comment p {
+		margin: 3px 0 0;
+		white-space: pre-wrap;
+		line-height: 1.45;
 	}
 
-	@keyframes tw-typing-node-close {
-		from {
-			grid-template-rows: 1fr;
-			opacity: 1;
-			transform: translateY(0);
-		}
-
-		to {
-			grid-template-rows: 0fr;
-			opacity: 0;
-			transform: translateY(-2px);
-		}
+	.comment-form {
+		display: flex;
+		gap: 8px;
+		margin-top: 14px;
+		align-items: center;
 	}
 
-	@keyframes tw-world-typing-close {
-		from {
-			max-height: 32px;
-			opacity: 1;
-			transform: translateY(0);
-		}
-
-		to {
-			max-height: 0;
-			opacity: 0;
-			transform: translateY(-2px);
-		}
+	.comment-form input:first-child {
+		flex: 1;
 	}
 
-	@media (max-width: 560px) {
-		.page {
-			padding: 18px 12px 56px;
+	.comment-persona {
+		width: 110px;
+	}
+
+	.comment-form button {
+		width: 38px;
+		padding: 0;
+		margin-left: 0;
+	}
+
+	.empty-feed {
+		border: 1px dashed var(--border);
+		border-radius: 8px;
+		min-height: 180px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 10px;
+		color: var(--muted-foreground);
+	}
+
+	@media (max-width: 720px) {
+		.topline {
+			flex-direction: column;
 		}
-		.reply-composer {
+
+		h1 {
+			max-width: 13ch;
+		}
+
+		.utility-row,
+		.field-grid,
+		.circle-fields,
+		.persona-reveal {
 			grid-template-columns: 1fr;
 		}
-		.reply-composer .post-button {
+
+		.kind-tab span {
+			display: none;
+		}
+
+		.composer-controls,
+		.comment-form {
+			align-items: stretch;
+		}
+
+		.comment-form {
+			flex-wrap: wrap;
+		}
+
+		.comment-form input:first-child {
+			flex-basis: 100%;
+		}
+
+		.send-button {
 			width: 100%;
-			border-top: 0;
-			border-left: 1px solid var(--foreground);
 		}
 	}
 </style>
