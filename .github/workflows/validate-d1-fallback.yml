@@ -1,0 +1,20 @@
+name: Validate D1 outage fallback
+
+on:
+  push:
+    branches: [fix/d1-outage-fallback]
+
+jobs:
+  check:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm install
+      - run: npm run check
+      - run: npm run build
+        env:
+          PUBLIC_APP_NAME: Sehyo
