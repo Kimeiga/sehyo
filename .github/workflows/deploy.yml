@@ -30,20 +30,6 @@ jobs:
         env:
           PUBLIC_APP_NAME: "Sehyo"
 
-      - name: Apply baseline schema
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: d1 execute sehyo-db --remote --file=./migrations/0001_baseline.sql
-
-      - name: Seed bot users
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: d1 execute sehyo-db --remote --file=./migrations/0002_seed_bots.sql
-
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
