@@ -1,0 +1,27 @@
+name: Test static root fallback
+
+on:
+  push:
+    branches: [test/static-root-fallback]
+
+jobs:
+  inspect:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: |
+          rm -rf node_modules package-lock.json
+          npm install
+      - run: npm run build
+        env:
+          PUBLIC_APP_NAME: Sehyo
+      - name: Inspect root asset and function routes
+        run: |
+          echo '--- root assets ---'
+          find .svelte-kit/cloudflare -maxdepth 2 -type f -name 'index.html' -o -name '_routes.json' | sort
+          echo '--- _routes.json ---'
+          cat .svelte-kit/cloudflare/_routes.json || true
