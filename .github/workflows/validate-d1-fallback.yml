@@ -13,7 +13,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: npm install
+      - run: |
+          rm -rf node_modules package-lock.json
+          npm install
       - run: npm run check
       - run: npm run build
         env:
