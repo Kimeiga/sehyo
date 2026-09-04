@@ -22,6 +22,15 @@ jobs:
       - name: Inspect root asset and function routes
         run: |
           echo '--- root assets ---'
-          find .svelte-kit/cloudflare -maxdepth 2 -type f -name 'index.html' -o -name '_routes.json' | sort
+          find .svelte-kit/cloudflare -maxdepth 2 -type f \( -name 'index.html' -o -name '_routes.json' \) | sort
           echo '--- _routes.json ---'
-          cat .svelte-kit/cloudflare/_routes.json || true
+          cat .svelte-kit/cloudflare/_routes.json
+      - name: Deploy preview
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy .svelte-kit/cloudflare --project-name=sehyo --branch=static-root-fallback
+      - name: Print preview URL
+        run: echo "${{ steps.deploy.outputs.deployment-url }}"
