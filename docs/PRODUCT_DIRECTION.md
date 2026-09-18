@@ -35,10 +35,13 @@ source of truth, not turned into claims that an assessment is already shipped.
 
 ## This PR
 
-The current homepage and all social data remain in place. Existing account and
-message APIs are unchanged. Navigation gets ordinary links, current-page states,
-a native modal menu and recoverable inline authentication errors. Signed-in users
-can reach the Messages destination associated with the unread indicator.
+The current homepage and all social data remain in place. Message APIs and
+authentication configuration are preserved. The auth cache now retains the
+configured anonymous-plugin type, and the anonymous sign-in wrapper requests an
+actual Response so status and session cookies are returned correctly. Navigation
+gets ordinary links, current-page states, a native modal menu and recoverable
+inline authentication errors. Signed-in users can reach the Messages destination
+associated with the unread indicator.
 
 `/prototype/personality` is a noindex concept preview in the existing application,
 not a replacement test. It demonstrates the proposed hierarchy and contextual
@@ -112,7 +115,12 @@ The PR-only `Product direction review` workflow installs using the existing depl
 fresh-resolution policy without deleting or rewriting the checked-in lockfile.
 It runs component compilation/contract checks, the production build, and local
 Chromium checks at 320, 375, 768 and 1440 CSS pixels. Screenshots and logs are
-uploaded as a review artifact. A separate job exposes the full repository typecheck
+uploaded as a review artifact. After the production build, the UI job temporarily
+uses a binding-free Wrangler configuration so it cannot access production D1 or
+Workers AI. This is a UI test, not a Cloudflare backend integration test. Five auth
+contract tests execute the real factory/wrapper with mocked library and database
+boundaries; they cover cache behavior, preserved options, response/cookie forwarding,
+and failure paths. A separate job exposes the full repository typecheck
 without suppressing its failures. No deployment secrets, production writes or
 migrations are used.
 
@@ -128,3 +136,4 @@ deploy remains restricted to `main` and manual dispatch.
 - [Personality Project: measurement](https://www.personality-project.org/readings-measurement.html)
 - [HTML dialog behavior](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/dialog)
 - [Better Auth client usage](https://better-auth.com/docs/basic-usage)
+- [Better Auth server API responses](https://better-auth.com/docs/concepts/api)

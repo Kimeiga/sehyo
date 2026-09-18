@@ -5,6 +5,7 @@ on:
     paths:
       - 'src/**'
       - 'tests/product-direction*'
+      - 'tests/auth-contract.test.mjs'
       - 'package*.json'
       - '*config*'
       - '.github/workflows/product-direction.yml'
@@ -31,24 +32,27 @@ jobs:
       # Matches the existing deploy's fresh dependency resolution, without
       # deleting or rewriting the repository's lockfile. No deployment secrets.
       - name: Install dependencies
-        run: npm install --package-lock=false
+        run: npm install --no-save --package-lock=false playwright@1.63.0
       - name: Compile changed components and check preview boundaries
-        run: node --test tests/product-direction.test.mjs
+        run: node --test tests/product-direction.test.mjs tests/auth-contract.test.mjs
       - name: Production build
         run: npm run build
-      - name: Install browser test runner
-        run: npm install --no-save --package-lock=false playwright@1.55.0
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Test the local application
         run: |
           mkdir -p .artifacts/product-direction
+          # The real config has a remote production D1 binding. These UI tests
+          # need no database or AI. Replace it only in this disposable checkout,
+          # after the production build, and restore it when the process exits.
+          cp wrangler.toml "$RUNNER_TEMP/sehyo-wrangler.toml"
+          printf '%s\n' 'name = "sehyo-ui-test"' 'compatibility_date = "2024-09-23"' 'compatibility_flags = ["nodejs_compat"]' 'pages_build_output_dir = ".svelte-kit/cloudflare"' > wrangler.toml
           npm run dev -- --host 127.0.0.1 --port 4173 > .artifacts/product-direction/server.log 2>&1 &
           SERVER_PID=$!
-          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; cp "$RUNNER_TEMP/sehyo-wrangler.toml" wrangler.toml' EXIT
           READY=0
           for i in $(seq 1 60); do
-            if curl --fail --silent http://127.0.0.1:4173/prototype/personality > /dev/null; then READY=1; break; fi
+            if curl --fail --silent --connect-timeout 2 --max-time 10 http://127.0.0.1:4173/prototype/personality > /dev/null; then READY=1; break; fi
             sleep 2
           done
           if [ "$READY" != 1 ]; then cat .artifacts/product-direction/server.log; exit 1; fi
