@@ -12,8 +12,8 @@
 	let error = $state('');
 	const isSignedIn = $derived(!!user && !user.isAnonymous);
 
-	// Native modal behavior supplies focus containment, background inertness,
-	// Escape handling and focus restoration to the menu trigger.
+	// Native modal behavior supplies background inertness, Escape handling and
+	// focus restoration. Explicit Tab wrapping keeps focus inside the menu.
 	$effect(() => {
 		if (!dialog) return;
 		if ($menuOpen && !dialog.open) dialog.showModal();
@@ -26,6 +26,22 @@
 		return () => { document.documentElement.style.overflow = previous; };
 	});
 	afterNavigate(closeMenu);
+
+	function containTab(event: KeyboardEvent) {
+		if (event.key !== 'Tab' || !dialog) return;
+		const controls = Array.from(dialog.querySelectorAll<HTMLElement>('a[href], button:not([disabled])'))
+			.filter((element) => element.tabIndex >= 0 && element.getClientRects().length > 0);
+		const first = controls[0];
+		const last = controls[controls.length - 1];
+		if (!first || !last) return;
+		if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) {
+			event.preventDefault();
+			last.focus();
+		} else if (!event.shiftKey && document.activeElement === last) {
+			event.preventDefault();
+			first.focus();
+		}
+	}
 
 	async function signInGoogle() {
 		if (pending) return;
@@ -57,6 +73,7 @@
 	id="sehyo-menu"
 	bind:this={dialog}
 	aria-labelledby="menu-title"
+	onkeydown={containTab}
 	oncancel={(event) => { event.preventDefault(); closeMenu(); }}
 	onclose={() => { if (!dialog?.open) closeMenu(); }}
 >

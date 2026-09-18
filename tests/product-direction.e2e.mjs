@@ -44,7 +44,11 @@ try {
     assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
     for (let i = 0; i < 8; i++) {
       await page.keyboard.press('Tab');
-      assert.ok(await dialog.evaluate(el => el.contains(document.activeElement)), 'Focus escaped modal');
+      assert.ok(await dialog.evaluate(el => el.contains(document.activeElement)), `Focus escaped modal on Tab ${i}: ${await page.evaluate(() => document.activeElement?.outerHTML)}`);
+    }
+    for (let i = 0; i < 8; i++) {
+      await page.keyboard.press('Shift+Tab');
+      assert.ok(await dialog.evaluate(el => el.contains(document.activeElement)), `Focus escaped modal on Shift+Tab ${i}`);
     }
     await page.screenshot({ path: `.artifacts/product-direction/${width}-menu.png` });
     await page.keyboard.press('Escape');
