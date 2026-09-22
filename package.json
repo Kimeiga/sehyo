@@ -56,5 +56,15 @@
 		"lucide-svelte": "^0.545.0",
 		"tailwind-merge": "^3.3.1",
 		"workers-og": "^0.0.27"
+	},
+	"allowScripts": {
+		"@tailwindcss/oxide@4.1.14": true,
+		"esbuild@0.18.20": true,
+		"esbuild@0.25.10": true,
+		"esbuild@0.25.4": true,
+		"esbuild@0.28.2": true,
+		"fsevents@2.3.3": true,
+		"sharp@0.33.5": true,
+		"workerd@1.20251008.0": true
 	}
 }
