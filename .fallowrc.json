@@ -16,5 +16,8 @@
   ],
   "audit": {
     "gate": "new-only"
-  }
+  },
+  "ignoreDependencies": [
+    "@internationalized/date"
+  ]
 }
