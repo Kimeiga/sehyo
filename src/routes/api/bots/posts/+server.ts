@@ -1,13 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getDB } from '$lib/server/db';
-
-interface BotSessionRow {
-	user_id: string;
-	username: string | null;
-	display_name: string | null;
-	bot_id: string | null;
-}
+import { requireBotSession, rethrowBotApiError } from '$lib/server/bot-api';
 
 interface CreatedPostRow {
 	id: string;
@@ -39,34 +33,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 		// Get database instance
 		const db = getDB(platform);
 
-		// Get session from Authorization header
-		const authHeader = request.headers.get('Authorization');
-		if (!authHeader || !authHeader.startsWith('Bearer ')) {
-			return error(401, 'Missing or invalid Authorization header');
-		}
-
-		const sessionId = authHeader.substring(7); // Remove 'Bearer ' prefix
-
-		// Validate session and get user
-		const session = await db
-			.prepare(
-				`SELECT s.user_id, u.username, u.name as display_name, bp.id as bot_id
-			 FROM sessions s
-			 JOIN user u ON s.user_id = u.id
-			 LEFT JOIN bot_profiles bp ON bp.user_id = u.id
-			 WHERE s.id = ? AND s.expires_at > datetime('now')`
-			)
-			.bind(sessionId)
-			.first<BotSessionRow>();
-
-		if (!session) {
-			return error(401, 'Invalid or expired session');
-		}
-
-		// Verify this is a bot account
-		if (!session.bot_id) {
-			return error(403, 'This endpoint is only for bot accounts');
-		}
+		const session = await requireBotSession(db, request);
 
 		// Get request body
 		const { content, image_url } = await request.json();
@@ -131,8 +98,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 			}
 		});
 	} catch (err) {
-		console.error('Bot post creation error:', err);
-		return error(500, 'Failed to create post');
+		rethrowBotApiError(err, 'Bot post creation error:', 'Failed to create post');
 	}
 };
 
