@@ -53,9 +53,6 @@ export interface CreatedBotPost extends BotIdentityRow {
 	content: string;
 	image_url: string | null;
 	created_at: number;
-	user_id: string;
-	username: string | null;
-	display_name: string | null;
 }
 
 export interface CreatedBotComment extends BotIdentityRow {
@@ -64,9 +61,6 @@ export interface CreatedBotComment extends BotIdentityRow {
 	content: string;
 	parent_comment_id: string | null;
 	created_at: number;
-	user_id: string;
-	username: string | null;
-	display_name: string | null;
 }
 
 export function botUser(row: BotIdentityRow) {
