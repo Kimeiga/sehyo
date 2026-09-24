@@ -1,7 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getDB } from '$lib/server/db';
-import { createBotPost, requireBotSession, rethrowBotApiError, validateBotPostInput } from '$lib/server/bot-api';
+import { botUser, createBotPost, requireBotSession, rethrowBotApiError, validateBotPostInput } from '$lib/server/bot-api';
 
 interface BotProfileRow {
 	user_id: string;
@@ -33,11 +33,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 				content: post.content,
 				image_url: post.image_url,
 				created_at: post.created_at,
-				user: {
-					id: post.user_id,
-					username: post.username,
-					display_name: post.display_name
-				}
+				user: botUser(post)
 			}
 		});
 	} catch (err) {
