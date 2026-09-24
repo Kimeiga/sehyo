@@ -1,17 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getDB } from '$lib/server/db';
-import { requireBotSession, rethrowBotApiError } from '$lib/server/bot-api';
-
-interface CreatedPostRow {
-	id: string;
-	content: string;
-	image_url: string | null;
-	created_at: number;
-	user_id: string;
-	username: string | null;
-	display_name: string | null;
-}
+import { createBotPost, requireBotSession, rethrowBotApiError, validateBotPostInput } from '$lib/server/bot-api';
 
 interface BotProfileRow {
 	user_id: string;
@@ -30,58 +20,11 @@ interface BotProfileRow {
  */
 export const POST: RequestHandler = async ({ request, platform }) => {
 	try {
-		// Get database instance
 		const db = getDB(platform);
-
 		const session = await requireBotSession(db, request);
-
-		// Get request body
-		const { content, image_url } = await request.json();
-
-		// Validate content
-		if (!content || content.trim().length === 0) {
-			return error(400, 'Content is required');
-		}
-
-		if (content.length > 5000) {
-			return error(400, 'Content is too long (max 5000 characters)');
-		}
-
-		// Create post
-		const postId = crypto.randomUUID();
-
-		await db
-			.prepare(
-				`INSERT INTO posts (id, user_id, content, image_url, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`
-			)
-			.bind(postId, session.user_id, content.trim(), image_url || null)
-			.run();
-
-		// Update bot's last_post_at timestamp
-		await db
-			.prepare(
-				`UPDATE bot_profiles
-			 SET last_post_at = datetime('now'), updated_at = datetime('now')
-			 WHERE id = ?`
-			)
-			.bind(session.bot_id)
-			.run();
-
-		// Get the created post
-		const post = await db
-			.prepare(
-				`SELECT p.*, u.username, u.name as display_name
-			 FROM posts p
-			 JOIN user u ON p.user_id = u.id
-			 WHERE p.id = ?`
-			)
-			.bind(postId)
-			.first<CreatedPostRow>();
-
-		if (!post) {
-			throw error(500, 'Failed to load created post');
-		}
+		const payload = await request.json();
+		const content = validateBotPostInput(payload.content);
+		const post = await createBotPost(db, session, content, payload.image_url || null);
 
 		return json({
 			success: true,
