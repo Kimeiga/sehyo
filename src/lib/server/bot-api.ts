@@ -1,10 +1,13 @@
 import { error } from '@sveltejs/kit';
 import type { D1Database } from '@cloudflare/workers-types';
 
-export interface BotSessionRow {
+interface BotIdentityRow {
 	user_id: string;
 	username: string | null;
 	display_name: string | null;
+}
+
+export interface BotSessionRow extends BotIdentityRow {
 	bot_id: string | null;
 }
 
@@ -34,15 +37,18 @@ export async function requireBotSession(db: D1Database, request: Request): Promi
 	return session;
 }
 
+function hasHttpStatus(value: unknown): value is { status: number } {
+	if (typeof value !== 'object' || value === null) return false;
+	return typeof Reflect.get(value, 'status') === 'number';
+}
+
 export function rethrowBotApiError(err: unknown, context: string, fallback: string): never {
-	if (err && typeof err === 'object' && 'status' in err && typeof (err as { status?: unknown }).status === 'number') {
-		throw err;
-	}
+	if (hasHttpStatus(err)) throw err;
 	console.error(context, err);
 	throw error(500, fallback);
 }
 
-export interface CreatedBotPost {
+export interface CreatedBotPost extends BotIdentityRow {
 	id: string;
 	content: string;
 	image_url: string | null;
@@ -52,7 +58,7 @@ export interface CreatedBotPost {
 	display_name: string | null;
 }
 
-export interface CreatedBotComment {
+export interface CreatedBotComment extends BotIdentityRow {
 	id: string;
 	post_id: string;
 	content: string;
@@ -63,14 +69,31 @@ export interface CreatedBotComment {
 	display_name: string | null;
 }
 
+export function botUser(row: BotIdentityRow) {
+	return {
+		id: row.user_id,
+		username: row.username,
+		display_name: row.display_name
+	};
+}
+
+function validateContent(
+	value: unknown,
+	missingMessage: string,
+	emptyMessage: string,
+	maxLength: number,
+): string {
+	if (typeof value !== 'string') throw error(400, missingMessage);
+	const trimmed = value.trim();
+	if (trimmed.length === 0) throw error(400, emptyMessage);
+	if (value.length > maxLength) {
+		throw error(400, `Content is too long (max ${maxLength} characters)`);
+	}
+	return trimmed;
+}
+
 export function validateBotPostInput(content: unknown): string {
-	if (typeof content !== 'string' || content.trim().length === 0) {
-		throw error(400, 'Content is required');
-	}
-	if (content.length > 5000) {
-		throw error(400, 'Content is too long (max 5000 characters)');
-	}
-	return content.trim();
+	return validateContent(content, 'Content is required', 'Content is required', 5000);
 }
 
 export async function createBotPost(
@@ -111,16 +134,8 @@ export async function createBotPost(
 }
 
 export function validateBotCommentInput(postId: unknown, content: unknown): string {
-	if (typeof postId !== 'string' || typeof content !== 'string') {
-		throw error(400, 'post_id and content are required');
-	}
-	if (content.trim().length === 0) {
-		throw error(400, 'Content cannot be empty');
-	}
-	if (content.length > 2000) {
-		throw error(400, 'Content is too long (max 2000 characters)');
-	}
-	return content.trim();
+	if (typeof postId !== 'string') throw error(400, 'post_id and content are required');
+	return validateContent(content, 'post_id and content are required', 'Content cannot be empty', 2000);
 }
 
 export async function requirePost(db: D1Database, postId: string): Promise<void> {
