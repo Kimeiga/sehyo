@@ -1,23 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getDB } from '$lib/server/db';
-
-interface BotSessionRow {
-	user_id: string;
-	username: string | null;
-	display_name: string | null;
-	bot_id: string | null;
-}
-
-interface CreatedPostRow {
-	id: string;
-	content: string;
-	image_url: string | null;
-	created_at: number;
-	user_id: string;
-	username: string | null;
-	display_name: string | null;
-}
+import { botUser, createBotPost, requireBotSession, rethrowBotApiError, validateBotPostInput } from '$lib/server/bot-api';
 
 interface BotProfileRow {
 	user_id: string;
@@ -36,85 +20,11 @@ interface BotProfileRow {
  */
 export const POST: RequestHandler = async ({ request, platform }) => {
 	try {
-		// Get database instance
 		const db = getDB(platform);
-
-		// Get session from Authorization header
-		const authHeader = request.headers.get('Authorization');
-		if (!authHeader || !authHeader.startsWith('Bearer ')) {
-			return error(401, 'Missing or invalid Authorization header');
-		}
-
-		const sessionId = authHeader.substring(7); // Remove 'Bearer ' prefix
-
-		// Validate session and get user
-		const session = await db
-			.prepare(
-				`SELECT s.user_id, u.username, u.name as display_name, bp.id as bot_id
-			 FROM sessions s
-			 JOIN user u ON s.user_id = u.id
-			 LEFT JOIN bot_profiles bp ON bp.user_id = u.id
-			 WHERE s.id = ? AND s.expires_at > datetime('now')`
-			)
-			.bind(sessionId)
-			.first<BotSessionRow>();
-
-		if (!session) {
-			return error(401, 'Invalid or expired session');
-		}
-
-		// Verify this is a bot account
-		if (!session.bot_id) {
-			return error(403, 'This endpoint is only for bot accounts');
-		}
-
-		// Get request body
-		const { content, image_url } = await request.json();
-
-		// Validate content
-		if (!content || content.trim().length === 0) {
-			return error(400, 'Content is required');
-		}
-
-		if (content.length > 5000) {
-			return error(400, 'Content is too long (max 5000 characters)');
-		}
-
-		// Create post
-		const postId = crypto.randomUUID();
-
-		await db
-			.prepare(
-				`INSERT INTO posts (id, user_id, content, image_url, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`
-			)
-			.bind(postId, session.user_id, content.trim(), image_url || null)
-			.run();
-
-		// Update bot's last_post_at timestamp
-		await db
-			.prepare(
-				`UPDATE bot_profiles
-			 SET last_post_at = datetime('now'), updated_at = datetime('now')
-			 WHERE id = ?`
-			)
-			.bind(session.bot_id)
-			.run();
-
-		// Get the created post
-		const post = await db
-			.prepare(
-				`SELECT p.*, u.username, u.name as display_name
-			 FROM posts p
-			 JOIN user u ON p.user_id = u.id
-			 WHERE p.id = ?`
-			)
-			.bind(postId)
-			.first<CreatedPostRow>();
-
-		if (!post) {
-			throw error(500, 'Failed to load created post');
-		}
+		const session = await requireBotSession(db, request);
+		const payload = await request.json();
+		const content = validateBotPostInput(payload.content);
+		const post = await createBotPost(db, session, content, payload.image_url || null);
 
 		return json({
 			success: true,
@@ -123,16 +33,11 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 				content: post.content,
 				image_url: post.image_url,
 				created_at: post.created_at,
-				user: {
-					id: post.user_id,
-					username: post.username,
-					display_name: post.display_name
-				}
+				user: botUser(post)
 			}
 		});
 	} catch (err) {
-		console.error('Bot post creation error:', err);
-		return error(500, 'Failed to create post');
+		rethrowBotApiError(err, 'Bot post creation error:', 'Failed to create post');
 	}
 };
 
