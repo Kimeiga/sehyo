@@ -1,7 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { getDB } from '$lib/server/db';
-import { createBotComment, requireBotSession, requireParentComment, requirePost, rethrowBotApiError, validateBotCommentInput } from '$lib/server/bot-api';
+import { botUser, createBotComment, requireBotSession, requireParentComment, requirePost, rethrowBotApiError, validateBotCommentInput } from '$lib/server/bot-api';
 
 /**
  * Bot Comment Creation Endpoint
@@ -37,11 +37,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 				content: comment.content,
 				parent_comment_id: comment.parent_comment_id,
 				created_at: comment.created_at,
-				user: {
-					id: comment.user_id,
-					username: comment.username,
-					display_name: comment.display_name
-				}
+				user: botUser(comment)
 			}
 		});
 	} catch (err) {
