@@ -6,24 +6,27 @@ import type { D1Database } from '@cloudflare/workers-types';
 import * as schema from './db/schema';
 import { generateRandomName } from './random-name';
 
-// Cache for auth instances - use a Map with baseURL as key
-const authCache = new Map<string, ReturnType<typeof betterAuth>>();
-
-export function createAuth(db: D1Database, env: {
+type AuthEnvironment = {
 	GOOGLE_CLIENT_ID: string;
 	GOOGLE_CLIENT_SECRET: string;
 	GOOGLE_REDIRECT_URI?: string;
 	BETTER_AUTH_SECRET?: string;
-}, baseURL?: string) {
-	// Determine the base URL
+};
+
+// Preserve the configured plugin API in cached instances. ReturnType<typeof
+// betterAuth> erases the anonymous plugin and its signInAnonymous endpoint.
+const authCache = new Map<string, ReturnType<typeof createAuthInstance>>();
+
+export function createAuth(db: D1Database, env: AuthEnvironment, baseURL?: string) {
 	const effectiveBaseURL = baseURL || env.GOOGLE_REDIRECT_URI?.replace('/api/auth/callback/google', '') || 'https://sehyo.com';
-
-	// Return cached instance if it exists for this baseURL
 	const cached = authCache.get(effectiveBaseURL);
-	if (cached) {
-		return cached;
-	}
+	if (cached) return cached;
+	const auth = createAuthInstance(db, env, effectiveBaseURL);
+	authCache.set(effectiveBaseURL, auth);
+	return auth;
+}
 
+function createAuthInstance(db: D1Database, env: AuthEnvironment, effectiveBaseURL: string) {
 	// Construct redirect URI
 	const redirectURI = env.GOOGLE_REDIRECT_URI || `${effectiveBaseURL}/api/auth/callback/google`;
 
@@ -196,8 +199,6 @@ export function createAuth(db: D1Database, env: {
 		]
 	});
 
-		// Cache the instance by baseURL
-		authCache.set(effectiveBaseURL, auth);
 		return auth;
 	} catch (error) {
 		console.error('Error creating Better Auth instance:', error);
